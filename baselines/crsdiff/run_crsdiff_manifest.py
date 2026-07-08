@@ -123,6 +123,28 @@ def _make_patched_config(config_path: Path, clip_version: str) -> Path:
         return Path(f.name)
 
 
+def _load_trusted_crsdiff_state_dict(ckpt: Path, location: str) -> dict[str, Any]:
+    from models.util import get_state_dict
+
+    if ckpt.suffix.lower() == ".safetensors":
+        import safetensors.torch
+
+        state_dict = safetensors.torch.load_file(str(ckpt), device=location)
+    else:
+        try:
+            checkpoint = torch.load(
+                str(ckpt),
+                map_location=torch.device(location),
+                weights_only=False,
+            )
+        except TypeError:
+            checkpoint = torch.load(str(ckpt), map_location=torch.device(location))
+        state_dict = get_state_dict(checkpoint)
+    state_dict = get_state_dict(state_dict)
+    print(f"[run_crsdiff_manifest] Loaded trusted CRS-Diff state_dict from [{ckpt}]")
+    return state_dict
+
+
 def _load_crsdiff(
     crsdiff_root: Path,
     ckpt: Path,
@@ -134,7 +156,7 @@ def _load_crsdiff(
     os.chdir(crsdiff_root)
     _install_crsdiff_lightning_compat()
     from models.ddim_hacked import DDIMSampler
-    from models.util import create_model, load_state_dict
+    from models.util import create_model
 
     patched_config_path = _make_patched_config(config_path, clip_version)
     print(f"[run_crsdiff_manifest] clip_version={clip_version}")
@@ -142,7 +164,7 @@ def _load_crsdiff(
         model = create_model(str(patched_config_path)).cpu()
     finally:
         patched_config_path.unlink(missing_ok=True)
-    state = load_state_dict(str(ckpt), location=str(device))
+    state = _load_trusted_crsdiff_state_dict(ckpt, location=str(device))
     model.load_state_dict(state)
     model = model.to(device).eval()
     sampler = DDIMSampler(model)
