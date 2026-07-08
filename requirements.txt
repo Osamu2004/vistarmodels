@@ -1,0 +1,8 @@
+einops
+numpy
+opencv-python
+pillow
+pytorch-lightning
+pyyaml
+tqdm
+
