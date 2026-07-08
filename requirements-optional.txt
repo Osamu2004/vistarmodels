@@ -1,0 +1,11 @@
+# Optional dependencies used by the official CRS-Diff annotators/demo UI.
+# They are not required by run_bash/crsdiff_loveda_gen.bash.
+albumentations
+ttach
+gradio
+datasets
+
+# Install basicsr only after torch is available. If normal installation fails
+# because setup.py cannot import torch, use:
+#   pip install --no-build-isolation basicsr
+basicsr

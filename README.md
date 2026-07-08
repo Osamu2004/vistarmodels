@@ -15,5 +15,8 @@ Run CRS-Diff on LoveDA generation using the same `cond_mask` and `gt_rgb`
 folders saved by Vistar LoveDA gen eval:
 
 ```bash
+bash scripts/bootstrap_crsdiff.sh
+pip install -r requirements.txt
+python tools/check_crsdiff_deps.py
 bash run_bash/crsdiff_loveda_gen.bash
 ```

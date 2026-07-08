@@ -36,6 +36,8 @@ conditioning is also made comparable.
 
 ```bash
 cd /root/code/vistarmodels
+pip install -r requirements.txt
+python tools/check_crsdiff_deps.py
 bash scripts/bootstrap_crsdiff.sh
 ```
 

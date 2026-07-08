@@ -69,9 +69,17 @@ def main() -> int:
         if torch_missing:
             print("Install torch/torchvision from your CUDA-matched PyTorch channel, or clone an existing CUDA env.")
     if missing_optional:
-        install = " ".join(dep.pip_name for dep in missing_optional if dep.pip_name != "xformers")
+        regular_optional = [
+            dep
+            for dep in missing_optional
+            if dep.pip_name not in {"xformers", "basicsr"}
+        ]
         print("\nOptional packages missing. For official CRS-Diff annotators/UI, install:")
-        print(f"pip install {install}")
+        if regular_optional:
+            install = " ".join(dep.pip_name for dep in regular_optional)
+            print(f"pip install {install}")
+        if any(dep.pip_name == "basicsr" for dep in missing_optional):
+            print("pip install --no-build-isolation basicsr")
         print("Install xformers separately only if it matches your torch/CUDA version.")
 
     return 1 if missing_required else 0

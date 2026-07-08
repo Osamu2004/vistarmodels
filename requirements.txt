@@ -1,5 +1,3 @@
-albumentations
-basicsr
 einops
 numpy
 omegaconf
@@ -13,4 +11,3 @@ safetensors
 timm
 tqdm
 transformers
-ttach
