@@ -62,6 +62,18 @@ def _save_rgb(array: np.ndarray, path: Path, size: int | None = None) -> None:
     image.save(path)
 
 
+def _is_valid_rgb_file(path: Path, size: int) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        with Image.open(path) as image:
+            image.verify()
+        with Image.open(path) as image:
+            return image.mode in {"RGB", "RGBA", "P"} and image.size == (int(size), int(size))
+    except Exception:
+        return False
+
+
 def _read_manifest(path: Path, max_samples: int) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as f:
@@ -318,13 +330,14 @@ def main() -> None:
                     gt_rgb = _load_rgb(Path(row["target_image"]), int(args.eval_size))
                     _save_rgb(gt_rgb, gt_out, size=int(args.eval_size))
 
+                has_valid_prediction = _is_valid_rgb_file(pred_path, int(args.eval_size))
                 record = {
                     "row": row,
                     "name": name,
                     "condition_rgb": condition_rgb,
                     "pred_path": pred_path,
                     "native_path": native_path,
-                    "status": "skipped_existing" if pred_path.is_file() and not args.overwrite else "pending",
+                    "status": "skipped_existing" if has_valid_prediction and not args.overwrite else "pending",
                 }
                 if record["status"] == "pending":
                     generate_records.append(record)

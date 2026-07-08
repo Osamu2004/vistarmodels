@@ -106,6 +106,18 @@ def _save_rgb(image: Image.Image, path: Path, size: int | None = None, *, neares
     out.save(path)
 
 
+def _is_valid_rgb_file(path: Path, size: int) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        with Image.open(path) as image:
+            image.verify()
+        with Image.open(path) as image:
+            return image.mode in {"RGB", "RGBA", "P"} and image.size == (int(size), int(size))
+    except Exception:
+        return False
+
+
 def _segments_from_mask(mask_rgb: Image.Image) -> list[dict[str, Any]]:
     arr = np.asarray(mask_rgb.convert("RGB"), dtype=np.uint8)
     colors = np.unique(arr.reshape(-1, 3), axis=0)
@@ -338,7 +350,8 @@ def main() -> None:
                 gt_rgb = _load_rgb(Path(row["target_image"]), int(args.eval_size), nearest=False)
                 _save_rgb(gt_rgb, gt_out, size=int(args.eval_size), nearest=False)
 
-            status = "skipped_existing" if pred_path.is_file() and not args.overwrite else "pending"
+            has_valid_prediction = _is_valid_rgb_file(pred_path, int(args.eval_size))
+            status = "skipped_existing" if has_valid_prediction and not args.overwrite else "pending"
             input_json = _write_seg2any_input(
                 name=name,
                 mask_rgb=condition_image,

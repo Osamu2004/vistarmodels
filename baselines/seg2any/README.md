@@ -67,6 +67,11 @@ MAX_SAMPLES=5 bash run_bash/seg2any_loveda_gen.bash
 bash run_bash/seg2any_loveda_gen.bash
 ```
 
+Resume is enabled by default. Existing valid
+`pred_rgb/<name>_pred_rgb.png` files are skipped unless `OVERWRITE=1` is set.
+If an interrupted run leaves a corrupt or wrong-size prediction, it is
+regenerated automatically.
+
 By default, the script uses physical GPU 1:
 
 ```bash

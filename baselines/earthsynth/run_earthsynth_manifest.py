@@ -83,6 +83,18 @@ def _save_rgb(image: Image.Image, path: Path, size: int | None = None, nearest: 
     out.save(path)
 
 
+def _is_valid_rgb_file(path: Path, size: int) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        with Image.open(path) as image:
+            image.verify()
+        with Image.open(path) as image:
+            return image.mode in {"RGB", "RGBA", "P"} and image.size == (int(size), int(size))
+    except Exception:
+        return False
+
+
 def _batched(items: list[dict[str, Any]], batch_size: int) -> list[list[dict[str, Any]]]:
     step = max(1, int(batch_size))
     return [items[start:start + step] for start in range(0, len(items), step)]
@@ -270,6 +282,7 @@ def main() -> None:
                     gt_rgb = _load_rgb_image(Path(row["target_image"]), int(args.eval_size))
                     _save_rgb(gt_rgb, gt_out, size=int(args.eval_size))
 
+                has_valid_prediction = _is_valid_rgb_file(pred_path, int(args.eval_size))
                 record = {
                     "row": row,
                     "index": index,
@@ -277,7 +290,7 @@ def main() -> None:
                     "condition_image": condition_image,
                     "pred_path": pred_path,
                     "native_path": native_path,
-                    "status": "skipped_existing" if pred_path.is_file() and not args.overwrite else "pending",
+                    "status": "skipped_existing" if has_valid_prediction and not args.overwrite else "pending",
                 }
                 if record["status"] == "pending":
                     generate_records.append(record)
