@@ -87,6 +87,7 @@ python baselines/crsdiff/run_crsdiff_manifest.py \
   --condition_slot seg \
   --resolution 512 \
   --eval_size 512 \
+  --batch_size 2 \
   --ddim_steps 50 \
   --scale 7.5 \
   --seed 0
@@ -104,6 +105,10 @@ manifest_resolved.jsonl
 
 The `pred_rgb` images are resized to `eval_size`, so they can be evaluated with
 the same image-distribution metrics as Vistar outputs.
+
+Existing `pred_rgb/<name>_pred_rgb.png` files are skipped unless `--overwrite`
+is passed. The one-command bash defaults to `BATCH_SIZE=2` and `OVERWRITE=0`,
+so interrupted runs can be resumed by rerunning the same command.
 
 ## One-Command LoveDA Generation
 
@@ -130,6 +135,12 @@ Small smoke test:
 
 ```bash
 MAX_SAMPLES=5 bash run_bash/crsdiff_loveda_gen.bash
+```
+
+Use a larger or smaller generation batch:
+
+```bash
+BATCH_SIZE=4 bash run_bash/crsdiff_loveda_gen.bash
 ```
 
 Override the Vistar eval source:

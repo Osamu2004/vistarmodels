@@ -96,6 +96,11 @@ def _make_local_control(condition_rgb: np.ndarray, slot: str, resolution: int, d
     return local_control
 
 
+def _batched(items: list[dict[str, Any]], batch_size: int) -> list[list[dict[str, Any]]]:
+    step = max(1, int(batch_size))
+    return [items[start:start + step] for start in range(0, len(items), step)]
+
+
 def _install_crsdiff_lightning_compat() -> None:
     try:
         from pytorch_lightning.utilities.rank_zero import rank_zero_only
@@ -171,12 +176,12 @@ def _load_crsdiff(
     return model, sampler
 
 
-def _generate_one(
+def _generate_batch(
     *,
     model: Any,
     sampler: Any,
-    condition_rgb: np.ndarray,
-    prompt: str,
+    condition_rgbs: list[np.ndarray],
+    prompts: list[str],
     slot: str,
     resolution: int,
     ddim_steps: int,
@@ -187,21 +192,30 @@ def _generate_one(
     negative_prompt: str,
     added_prompt: str,
     device: torch.device,
-) -> np.ndarray:
-    with torch.no_grad():
-        local_control = _make_local_control(condition_rgb, slot, resolution, device)
-        global_control = torch.zeros((1, 1536), dtype=torch.float32, device=device)
-        metadata_control = torch.zeros((7,), dtype=torch.float32, device=device)
+) -> list[np.ndarray]:
+    if len(condition_rgbs) != len(prompts):
+        raise ValueError("condition_rgbs and prompts must have the same length")
+    if not condition_rgbs:
+        return []
 
-        prompt_full = f"{prompt}, {added_prompt}" if added_prompt else prompt
+    with torch.no_grad():
+        local_control = torch.cat(
+            [_make_local_control(condition_rgb, slot, resolution, device) for condition_rgb in condition_rgbs],
+            dim=0,
+        )
+        batch_size = local_control.shape[0]
+        global_control = torch.zeros((batch_size, 1536), dtype=torch.float32, device=device)
+        metadata_control = torch.zeros((batch_size, 7), dtype=torch.float32, device=device)
+
+        prompt_fulls = [f"{prompt}, {added_prompt}" if added_prompt else prompt for prompt in prompts]
         cond = {
             "local_control": [local_control],
-            "c_crossattn": [model.get_learned_conditioning([prompt_full])],
+            "c_crossattn": [model.get_learned_conditioning(prompt_fulls)],
             "global_control": [global_control],
         }
         un_cond = {
             "local_control": [local_control],
-            "c_crossattn": [model.get_learned_conditioning([negative_prompt])],
+            "c_crossattn": [model.get_learned_conditioning([negative_prompt] * batch_size)],
             "global_control": [torch.zeros_like(global_control)],
         }
 
@@ -212,7 +226,7 @@ def _generate_one(
         shape = (4, resolution // 8, resolution // 8)
         samples, _ = sampler.sample(
             int(ddim_steps),
-            1,
+            batch_size,
             shape,
             metadata_control,
             conditioning=cond,
@@ -224,7 +238,8 @@ def _generate_one(
         )
         decoded = model.decode_first_stage(samples)
         image = (einops.rearrange(decoded, "b c h w -> b h w c") * 127.5 + 127.5)
-        return image[0].detach().cpu().numpy().clip(0, 255).astype(np.uint8)
+        images = image.detach().cpu().numpy().clip(0, 255).astype(np.uint8)
+        return [images[index] for index in range(images.shape[0])]
 
 
 def main() -> None:
@@ -242,6 +257,7 @@ def main() -> None:
     parser.add_argument("--condition_slot", choices=sorted(SLOT_TO_INDEX), default="seg")
     parser.add_argument("--resolution", type=int, default=512, help="native CRS-Diff generation resolution")
     parser.add_argument("--eval_size", type=int, default=512, help="saved pred_rgb size for fair metric comparison")
+    parser.add_argument("--batch_size", type=int, default=1, help="number of missing samples to generate per DDIM call")
     parser.add_argument("--ddim_steps", type=int, default=50)
     parser.add_argument("--scale", type=float, default=7.5)
     parser.add_argument("--strength", type=float, default=1.0)
@@ -283,28 +299,43 @@ def main() -> None:
 
     resolved_manifest = output_dir / "manifest_resolved.jsonl"
     with resolved_manifest.open("w", encoding="utf-8") as manifest_f:
-        for index, row in enumerate(tqdm(rows, desc="CRS-Diff inference")):
-            name = str(row.get("name") or f"sample_{index:06d}")
-            pred_path = output_dir / "pred_rgb" / f"{name}_pred_rgb.png"
-            native_path = output_dir / "pred_rgb_native" / f"{name}_pred_rgb_{args.resolution}.png"
-            cond_out = output_dir / "cond_mask" / f"{name}_cond_mask.png"
-            gt_out = output_dir / "gt_rgb" / f"{name}_gt_rgb.png"
+        row_batches = _batched(rows, max(1, int(args.batch_size)))
+        for batch_index, row_batch in enumerate(tqdm(row_batches, desc="CRS-Diff inference batches")):
+            batch_records: list[dict[str, Any]] = []
+            generate_records: list[dict[str, Any]] = []
+            for offset, row in enumerate(row_batch):
+                index = batch_index * max(1, int(args.batch_size)) + offset
+                name = str(row.get("name") or f"sample_{index:06d}")
+                pred_path = output_dir / "pred_rgb" / f"{name}_pred_rgb.png"
+                native_path = output_dir / "pred_rgb_native" / f"{name}_pred_rgb_{args.resolution}.png"
+                cond_out = output_dir / "cond_mask" / f"{name}_cond_mask.png"
+                gt_out = output_dir / "gt_rgb" / f"{name}_gt_rgb.png"
 
-            condition_path = Path(row["condition_image"])
-            condition_rgb = _load_rgb(condition_path, int(args.resolution))
-            _save_rgb(condition_rgb, cond_out, size=int(args.eval_size))
-            if row.get("target_image"):
-                gt_rgb = _load_rgb(Path(row["target_image"]), int(args.eval_size))
-                _save_rgb(gt_rgb, gt_out, size=int(args.eval_size))
+                condition_path = Path(row["condition_image"])
+                condition_rgb = _load_rgb(condition_path, int(args.resolution))
+                _save_rgb(condition_rgb, cond_out, size=int(args.eval_size))
+                if row.get("target_image"):
+                    gt_rgb = _load_rgb(Path(row["target_image"]), int(args.eval_size))
+                    _save_rgb(gt_rgb, gt_out, size=int(args.eval_size))
 
-            if pred_path.is_file() and not args.overwrite:
-                status = "skipped_existing"
-            else:
-                image = _generate_one(
+                record = {
+                    "row": row,
+                    "name": name,
+                    "condition_rgb": condition_rgb,
+                    "pred_path": pred_path,
+                    "native_path": native_path,
+                    "status": "skipped_existing" if pred_path.is_file() and not args.overwrite else "pending",
+                }
+                if record["status"] == "pending":
+                    generate_records.append(record)
+                batch_records.append(record)
+
+            if generate_records:
+                images = _generate_batch(
                     model=model,
                     sampler=sampler,
-                    condition_rgb=condition_rgb,
-                    prompt=str(row.get("prompt") or ""),
+                    condition_rgbs=[record["condition_rgb"] for record in generate_records],
+                    prompts=[str(record["row"].get("prompt") or "") for record in generate_records],
                     slot=args.condition_slot,
                     resolution=int(args.resolution),
                     ddim_steps=int(args.ddim_steps),
@@ -316,28 +347,32 @@ def main() -> None:
                     added_prompt=str(args.added_prompt),
                     device=device,
                 )
-                _save_rgb(image, native_path)
-                _save_rgb(image, pred_path, size=int(args.eval_size))
-                status = "generated"
+                for record, image in zip(generate_records, images):
+                    _save_rgb(image, record["native_path"])
+                    _save_rgb(image, record["pred_path"], size=int(args.eval_size))
+                    record["status"] = "generated"
 
-            manifest_f.write(
-                json.dumps(
-                    {
-                        **row,
-                        "name": name,
-                        "pred_rgb": str(pred_path),
-                        "pred_rgb_native": str(native_path),
-                        "condition_slot": args.condition_slot,
-                        "resolution": int(args.resolution),
-                        "eval_size": int(args.eval_size),
-                        "ddim_steps": int(args.ddim_steps),
-                        "scale": float(args.scale),
-                        "status": status,
-                    },
-                    ensure_ascii=False,
+            for record in batch_records:
+                row = record["row"]
+                manifest_f.write(
+                    json.dumps(
+                        {
+                            **row,
+                            "name": record["name"],
+                            "pred_rgb": str(record["pred_path"]),
+                            "pred_rgb_native": str(record["native_path"]),
+                            "condition_slot": args.condition_slot,
+                            "resolution": int(args.resolution),
+                            "eval_size": int(args.eval_size),
+                            "batch_size": int(args.batch_size),
+                            "ddim_steps": int(args.ddim_steps),
+                            "scale": float(args.scale),
+                            "status": record["status"],
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
                 )
-                + "\n"
-            )
 
     print(f"[run_crsdiff_manifest] wrote outputs to {output_dir}")
 

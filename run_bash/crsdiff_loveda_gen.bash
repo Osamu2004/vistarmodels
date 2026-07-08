@@ -20,6 +20,7 @@ BOOTSTRAP_CRSDIFF="${BOOTSTRAP_CRSDIFF:-1}"
 CONDITION_SLOT="${CONDITION_SLOT:-seg}"
 RESOLUTION="${RESOLUTION:-512}"
 EVAL_SIZE="${EVAL_SIZE:-512}"
+BATCH_SIZE="${BATCH_SIZE:-2}"
 DDIM_STEPS="${DDIM_STEPS:-50}"
 SCALE="${SCALE:-7.5}"
 STRENGTH="${STRENGTH:-1.0}"
@@ -60,7 +61,7 @@ echo "[crsdiff_loveda_gen] CRSDIFF_CKPT=${CRSDIFF_CKPT}"
 echo "[crsdiff_loveda_gen] CRSDIFF_CLIP_VERSION=${CRSDIFF_CLIP_VERSION}"
 echo "[crsdiff_loveda_gen] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[crsdiff_loveda_gen] MANIFEST=${MANIFEST}"
-echo "[crsdiff_loveda_gen] condition_slot=${CONDITION_SLOT} resolution=${RESOLUTION} eval_size=${EVAL_SIZE}"
+echo "[crsdiff_loveda_gen] condition_slot=${CONDITION_SLOT} resolution=${RESOLUTION} eval_size=${EVAL_SIZE} batch_size=${BATCH_SIZE}"
 echo "[crsdiff_loveda_gen] ddim_steps=${DDIM_STEPS} scale=${SCALE} strength=${STRENGTH} global_strength=${GLOBAL_STRENGTH} eta=${ETA} seed=${SEED}"
 echo "[crsdiff_loveda_gen] max_samples=${MAX_SAMPLES} overwrite=${OVERWRITE}"
 echo "[crsdiff_loveda_gen] prompt=${PROMPT}"
@@ -89,6 +90,7 @@ fi
   --condition_slot "${CONDITION_SLOT}" \
   --resolution "${RESOLUTION}" \
   --eval_size "${EVAL_SIZE}" \
+  --batch_size "${BATCH_SIZE}" \
   --ddim_steps "${DDIM_STEPS}" \
   --scale "${SCALE}" \
   --strength "${STRENGTH}" \
