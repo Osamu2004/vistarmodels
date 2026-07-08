@@ -6,6 +6,7 @@ generation comparison.
 EarthSynth is used through the public Diffusers interface:
 
 - ControlNet: `jaychempan/EarthSynth`
+- ControlNet subfolder: `controlnet`
 - Base model: `stable-diffusion-v1-5/stable-diffusion-v1-5`
 
 The wrapper reads the same JSONL manifest format as the CRS-Diff wrapper:
@@ -41,6 +42,15 @@ MAX_SAMPLES=5 bash run_bash/earthsynth_loveda_gen.bash
 
 Resume is enabled by default. Existing files in `pred_rgb/` are skipped unless
 `OVERWRITE=1` is set.
+
+If using a local folder that directly contains the ControlNet `config.json`, run
+with:
+
+```bash
+EARTHSYNTH_CONTROLNET_MODEL=/path/to/EarthSynth/controlnet \
+EARTHSYNTH_CONTROLNET_SUBFOLDER= \
+bash run_bash/earthsynth_loveda_gen.bash
+```
 
 ## Fairness Notes
 

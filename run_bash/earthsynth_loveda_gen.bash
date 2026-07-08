@@ -14,6 +14,7 @@ VISTAR_EVAL_DIR="${VISTAR_EVAL_DIR:-/root/data/experiment/eval_flux2_loveda_val_
 
 EARTHSYNTH_BASE_MODEL="${EARTHSYNTH_BASE_MODEL:-stable-diffusion-v1-5/stable-diffusion-v1-5}"
 EARTHSYNTH_CONTROLNET_MODEL="${EARTHSYNTH_CONTROLNET_MODEL:-jaychempan/EarthSynth}"
+EARTHSYNTH_CONTROLNET_SUBFOLDER="${EARTHSYNTH_CONTROLNET_SUBFOLDER:-controlnet}"
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/earthsynth_loveda_val_mask_to_rgb_gen_resize512_steps50_scale7p5_seed0}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_val.jsonl}"
 
@@ -51,6 +52,7 @@ echo "[earthsynth_loveda_gen] VISTAR_EVAL_DIR=${VISTAR_EVAL_DIR}"
 echo "[earthsynth_loveda_gen] CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
 echo "[earthsynth_loveda_gen] EARTHSYNTH_BASE_MODEL=${EARTHSYNTH_BASE_MODEL}"
 echo "[earthsynth_loveda_gen] EARTHSYNTH_CONTROLNET_MODEL=${EARTHSYNTH_CONTROLNET_MODEL}"
+echo "[earthsynth_loveda_gen] EARTHSYNTH_CONTROLNET_SUBFOLDER=${EARTHSYNTH_CONTROLNET_SUBFOLDER}"
 echo "[earthsynth_loveda_gen] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[earthsynth_loveda_gen] MANIFEST=${MANIFEST}"
 echo "[earthsynth_loveda_gen] resolution=${RESOLUTION} eval_size=${EVAL_SIZE} batch_size=${BATCH_SIZE}"
@@ -86,6 +88,7 @@ fi
   --output_dir "${OUTPUT_DIR}" \
   --base_model "${EARTHSYNTH_BASE_MODEL}" \
   --controlnet_model "${EARTHSYNTH_CONTROLNET_MODEL}" \
+  --controlnet_subfolder "${EARTHSYNTH_CONTROLNET_SUBFOLDER}" \
   --resolution "${RESOLUTION}" \
   --eval_size "${EVAL_SIZE}" \
   --batch_size "${BATCH_SIZE}" \

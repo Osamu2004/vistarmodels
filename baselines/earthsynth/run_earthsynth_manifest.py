@@ -111,6 +111,7 @@ def _load_pipe(
     *,
     base_model: str,
     controlnet_model: str,
+    controlnet_subfolder: str,
     dtype: torch.dtype,
     device: torch.device,
     scheduler: str,
@@ -129,7 +130,10 @@ def _load_pipe(
     except ImportError as exc:
         raise ImportError("Install EarthSynth dependencies with `pip install -r requirements.txt`.") from exc
 
-    controlnet = ControlNetModel.from_pretrained(controlnet_model, torch_dtype=dtype)
+    controlnet_kwargs: dict[str, Any] = {"torch_dtype": dtype}
+    if controlnet_subfolder:
+        controlnet_kwargs["subfolder"] = controlnet_subfolder
+    controlnet = ControlNetModel.from_pretrained(controlnet_model, **controlnet_kwargs)
     pipe = StableDiffusionControlNetPipeline.from_pretrained(
         base_model,
         controlnet=controlnet,
@@ -200,6 +204,11 @@ def main() -> None:
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--base_model", default="stable-diffusion-v1-5/stable-diffusion-v1-5")
     parser.add_argument("--controlnet_model", default="jaychempan/EarthSynth")
+    parser.add_argument(
+        "--controlnet_subfolder",
+        default="controlnet",
+        help="EarthSynth stores the Diffusers ControlNet under this subfolder; set to empty for a direct local ControlNet folder.",
+    )
     parser.add_argument("--resolution", type=int, default=512, help="native generation/control resolution")
     parser.add_argument("--eval_size", type=int, default=512, help="saved pred_rgb size for metric comparison")
     parser.add_argument("--batch_size", type=int, default=2)
@@ -232,6 +241,7 @@ def main() -> None:
     pipe = _load_pipe(
         base_model=_normalize_wsl_unc(args.base_model),
         controlnet_model=_normalize_wsl_unc(args.controlnet_model),
+        controlnet_subfolder=str(args.controlnet_subfolder),
         dtype=dtype,
         device=device,
         scheduler=args.scheduler,
@@ -310,6 +320,7 @@ def main() -> None:
                             "scheduler": str(args.scheduler),
                             "base_model": str(args.base_model),
                             "controlnet_model": str(args.controlnet_model),
+                            "controlnet_subfolder": str(args.controlnet_subfolder),
                             "status": record["status"],
                         },
                         ensure_ascii=False,
