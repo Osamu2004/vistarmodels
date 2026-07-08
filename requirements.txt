@@ -1,8 +1,13 @@
 einops
 numpy
+omegaconf
+open-clip-torch
 opencv-python
 pillow
 pytorch-lightning
 pyyaml
+scipy
+safetensors
+timm
 tqdm
-
+transformers
