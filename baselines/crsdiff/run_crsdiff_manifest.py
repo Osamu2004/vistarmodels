@@ -241,7 +241,7 @@ def main() -> None:
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--condition_slot", choices=sorted(SLOT_TO_INDEX), default="seg")
     parser.add_argument("--resolution", type=int, default=512, help="native CRS-Diff generation resolution")
-    parser.add_argument("--eval_size", type=int, default=256, help="saved pred_rgb size for fair metric comparison")
+    parser.add_argument("--eval_size", type=int, default=512, help="saved pred_rgb size for fair metric comparison")
     parser.add_argument("--ddim_steps", type=int, default=50)
     parser.add_argument("--scale", type=float, default=7.5)
     parser.add_argument("--strength", type=float, default=1.0)

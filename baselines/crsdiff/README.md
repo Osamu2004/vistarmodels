@@ -86,7 +86,7 @@ python baselines/crsdiff/run_crsdiff_manifest.py \
   --output_dir /root/data/experiment/crsdiff_second_gen \
   --condition_slot seg \
   --resolution 512 \
-  --eval_size 256 \
+  --eval_size 512 \
   --ddim_steps 50 \
   --scale 7.5 \
   --seed 0
@@ -123,7 +123,7 @@ Default input:
 Default output:
 
 ```text
-/root/data/experiment/crsdiff_loveda_val_mask_to_rgb_gen_resize256_steps50_scale7p5_seed0
+/root/data/experiment/crsdiff_loveda_val_mask_to_rgb_gen_resize512_steps50_scale7p5_seed0
 ```
 
 Small smoke test:
