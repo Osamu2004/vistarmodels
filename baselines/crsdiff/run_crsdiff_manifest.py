@@ -5,6 +5,7 @@ import json
 import os
 import random
 import sys
+import types
 from pathlib import Path
 from typing import Any
 
@@ -94,9 +95,23 @@ def _make_local_control(condition_rgb: np.ndarray, slot: str, resolution: int, d
     return local_control
 
 
+def _install_crsdiff_lightning_compat() -> None:
+    try:
+        from pytorch_lightning.utilities.rank_zero import rank_zero_only
+    except ImportError:
+        return
+    module_name = "pytorch_lightning.utilities.distributed"
+    if module_name in sys.modules:
+        return
+    compat_module = types.ModuleType(module_name)
+    compat_module.rank_zero_only = rank_zero_only
+    sys.modules[module_name] = compat_module
+
+
 def _load_crsdiff(crsdiff_root: Path, ckpt: Path, config_path: Path, device: torch.device):
     sys.path.insert(0, str(crsdiff_root))
     os.chdir(crsdiff_root)
+    _install_crsdiff_lightning_compat()
     from models.ddim_hacked import DDIMSampler
     from models.util import create_model, load_state_dict
 
