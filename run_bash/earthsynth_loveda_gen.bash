@@ -15,7 +15,7 @@ VISTAR_EVAL_DIR="${VISTAR_EVAL_DIR:-/root/data/experiment/eval_flux2_loveda_val_
 EARTHSYNTH_BASE_MODEL="${EARTHSYNTH_BASE_MODEL:-stable-diffusion-v1-5/stable-diffusion-v1-5}"
 EARTHSYNTH_CONTROLNET_MODEL="${EARTHSYNTH_CONTROLNET_MODEL:-jaychempan/EarthSynth}"
 EARTHSYNTH_CONTROLNET_SUBFOLDER="${EARTHSYNTH_CONTROLNET_SUBFOLDER:-controlnet}"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/earthsynth_loveda_val_mask_to_rgb_gen_resize512_steps50_scale7p5_seed0}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/earthsynth_loveda_val_mask_to_rgb_gen_resize512_steps50_scale7p5_no_controlprompt_seed0}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_val.jsonl}"
 
 RESOLUTION="${RESOLUTION:-512}"
@@ -33,7 +33,7 @@ ENABLE_XFORMERS="${ENABLE_XFORMERS:-0}"
 CPU_OFFLOAD="${CPU_OFFLOAD:-0}"
 PIPELINE_PROGRESS="${PIPELINE_PROGRESS:-0}"
 
-PROMPT="${PROMPT:-A satellite image of buildings, roads, water, barren land, forest, and agriculture, controlled by the semantic segmentation map.}"
+PROMPT="${PROMPT:-A satellite image of buildings, roads, water, barren land, forest, and agriculture.}"
 NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-Low resolution, cropped, worst quality, low quality}"
 
 if [[ ! -d "${VISTAR_EVAL_DIR}/cond_mask" ]]; then
