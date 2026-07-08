@@ -1,4 +1,7 @@
+accelerate
+diffusers>=0.30.3
 einops
+huggingface-hub
 numpy
 omegaconf
 open-clip-torch
