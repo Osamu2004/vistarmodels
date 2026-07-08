@@ -89,3 +89,37 @@ manifest_resolved.jsonl
 The `pred_rgb` images are resized to `eval_size`, so they can be evaluated with
 the same image-distribution metrics as Vistar outputs.
 
+## One-Command LoveDA Generation
+
+If you already have the Vistar LoveDA generation eval output, run:
+
+```bash
+cd /root/code/vistarmodels
+bash run_bash/crsdiff_loveda_gen.bash
+```
+
+Default input:
+
+```text
+/root/data/experiment/eval_flux2_loveda_val_mask_to_rgb_gen_resize256_checkpoint1_2gpu
+```
+
+Default output:
+
+```text
+/root/data/experiment/crsdiff_loveda_val_mask_to_rgb_gen_resize256_steps50_scale7p5_seed0
+```
+
+Small smoke test:
+
+```bash
+MAX_SAMPLES=5 bash run_bash/crsdiff_loveda_gen.bash
+```
+
+Override the Vistar eval source:
+
+```bash
+VISTAR_EVAL_DIR=/root/data/experiment/your_loveda_eval_dir \
+OUTPUT_DIR=/root/data/experiment/crsdiff_loveda_your_run \
+bash run_bash/crsdiff_loveda_gen.bash
+```

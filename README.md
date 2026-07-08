@@ -11,3 +11,9 @@ and source code into the training repository.
 - `baselines/crsdiff`: CRS-Diff wrapper for remote-sensing controllable image
   generation.
 
+Run CRS-Diff on LoveDA generation using the same `cond_mask` and `gt_rgb`
+folders saved by Vistar LoveDA gen eval:
+
+```bash
+bash run_bash/crsdiff_loveda_gen.bash
+```
