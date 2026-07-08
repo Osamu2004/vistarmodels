@@ -5,6 +5,7 @@ import json
 import os
 import random
 import sys
+import tempfile
 import types
 from pathlib import Path
 from typing import Any
@@ -108,14 +109,39 @@ def _install_crsdiff_lightning_compat() -> None:
     sys.modules[module_name] = compat_module
 
 
-def _load_crsdiff(crsdiff_root: Path, ckpt: Path, config_path: Path, device: torch.device):
+def _make_patched_config(config_path: Path, clip_version: str) -> Path:
+    from omegaconf import OmegaConf
+
+    config = OmegaConf.load(str(config_path))
+    cond_stage_config = config.model.params.cond_stage_config
+    if "params" not in cond_stage_config or cond_stage_config.params is None:
+        cond_stage_config.params = {}
+    cond_stage_config.params.version = str(clip_version)
+
+    with tempfile.NamedTemporaryFile("w", suffix="_crsdiff_config.yaml", delete=False) as f:
+        OmegaConf.save(config=config, f=f.name)
+        return Path(f.name)
+
+
+def _load_crsdiff(
+    crsdiff_root: Path,
+    ckpt: Path,
+    config_path: Path,
+    device: torch.device,
+    clip_version: str,
+):
     sys.path.insert(0, str(crsdiff_root))
     os.chdir(crsdiff_root)
     _install_crsdiff_lightning_compat()
     from models.ddim_hacked import DDIMSampler
     from models.util import create_model, load_state_dict
 
-    model = create_model(str(config_path)).cpu()
+    patched_config_path = _make_patched_config(config_path, clip_version)
+    print(f"[run_crsdiff_manifest] clip_version={clip_version}")
+    try:
+        model = create_model(str(patched_config_path)).cpu()
+    finally:
+        patched_config_path.unlink(missing_ok=True)
     state = load_state_dict(str(ckpt), location=str(device))
     model.load_state_dict(state)
     model = model.to(device).eval()
@@ -184,6 +210,11 @@ def main() -> None:
     parser.add_argument("--crsdiff_root", default="third_party/CRS-Diff")
     parser.add_argument("--ckpt", default="/root/data/weight/crsdiff/last.ckpt")
     parser.add_argument("--config", default="", help="defaults to <crsdiff_root>/configs/crs.yaml")
+    parser.add_argument(
+        "--clip_version",
+        default=os.environ.get("CRSDIFF_CLIP_VERSION", "openai/clip-vit-large-patch14"),
+        help="HuggingFace repo id or local directory for CRS-Diff FrozenCLIPEmbedder.",
+    )
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--condition_slot", choices=sorted(SLOT_TO_INDEX), default="seg")
@@ -220,7 +251,13 @@ def main() -> None:
 
     _seed_everything(int(args.seed))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, sampler = _load_crsdiff(crsdiff_root, ckpt, config_path, device)
+    model, sampler = _load_crsdiff(
+        crsdiff_root,
+        ckpt,
+        config_path,
+        device,
+        _normalize_wsl_unc(args.clip_version),
+    )
 
     resolved_manifest = output_dir / "manifest_resolved.jsonl"
     with resolved_manifest.open("w", encoding="utf-8") as manifest_f:

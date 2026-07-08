@@ -49,6 +49,20 @@ Put the official CRS-Diff checkpoint at:
 
 or pass `--ckpt` manually.
 
+The official CRS-Diff config hard-codes the authors' local CLIP path. This
+wrapper overrides it with:
+
+```text
+openai/clip-vit-large-patch14
+```
+
+If the server cannot download from HuggingFace, download it manually and run:
+
+```bash
+CRSDIFF_CLIP_VERSION=/root/data/weight/clip-vit-large-patch14 \
+bash run_bash/crsdiff_loveda_gen.bash
+```
+
 ## Build A Manifest From An Existing Vistar Eval Directory
 
 The easiest fair setup is to reuse the exact `cond_mask` and `gt_rgb` images

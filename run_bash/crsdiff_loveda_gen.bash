@@ -12,6 +12,7 @@ VISTAR_EVAL_DIR="${VISTAR_EVAL_DIR:-/root/data/experiment/eval_flux2_loveda_val_
 
 CRSDIFF_ROOT="${CRSDIFF_ROOT:-${ROOT_DIR}/third_party/CRS-Diff}"
 CRSDIFF_CKPT="${CRSDIFF_CKPT:-/root/data/weight/crsdiff/last.ckpt}"
+CRSDIFF_CLIP_VERSION="${CRSDIFF_CLIP_VERSION:-openai/clip-vit-large-patch14}"
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/crsdiff_loveda_val_mask_to_rgb_gen_resize256_steps50_scale7p5_seed0}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_val.jsonl}"
 
@@ -56,6 +57,7 @@ mkdir -p "${OUTPUT_DIR}"
 echo "[crsdiff_loveda_gen] VISTAR_EVAL_DIR=${VISTAR_EVAL_DIR}"
 echo "[crsdiff_loveda_gen] CRSDIFF_ROOT=${CRSDIFF_ROOT}"
 echo "[crsdiff_loveda_gen] CRSDIFF_CKPT=${CRSDIFF_CKPT}"
+echo "[crsdiff_loveda_gen] CRSDIFF_CLIP_VERSION=${CRSDIFF_CLIP_VERSION}"
 echo "[crsdiff_loveda_gen] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[crsdiff_loveda_gen] MANIFEST=${MANIFEST}"
 echo "[crsdiff_loveda_gen] condition_slot=${CONDITION_SLOT} resolution=${RESOLUTION} eval_size=${EVAL_SIZE}"
@@ -81,6 +83,7 @@ fi
 "${PYTHON_BIN}" "${ROOT_DIR}/baselines/crsdiff/run_crsdiff_manifest.py" \
   --crsdiff_root "${CRSDIFF_ROOT}" \
   --ckpt "${CRSDIFF_CKPT}" \
+  --clip_version "${CRSDIFF_CLIP_VERSION}" \
   --manifest "${MANIFEST}" \
   --output_dir "${OUTPUT_DIR}" \
   --condition_slot "${CONDITION_SLOT}" \
