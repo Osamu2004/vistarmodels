@@ -27,8 +27,8 @@ ETA="${ETA:-0.2}"
 SEED="${SEED:-0}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
 OVERWRITE="${OVERWRITE:-0}"
-PROMPT="${PROMPT:-A high-resolution remote-sensing image matching the given semantic segmentation mask.}"
-NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-Blurry, distorted, overexposed}"
+PROMPT="${PROMPT:-A high-resolution remote sensing satellite image of an urban and rural scene with buildings, roads, water, barren land, forest, and agriculture, controlled by the semantic segmentation map.}"
+NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-Low resolution, cropped, worst quality, low quality}"
 ADDED_PROMPT="${ADDED_PROMPT:-best quality, extremely detailed}"
 
 if [[ "${BOOTSTRAP_CRSDIFF}" == "1" || "${BOOTSTRAP_CRSDIFF}" == "true" || "${BOOTSTRAP_CRSDIFF}" == "yes" ]]; then
@@ -61,6 +61,9 @@ echo "[crsdiff_loveda_gen] MANIFEST=${MANIFEST}"
 echo "[crsdiff_loveda_gen] condition_slot=${CONDITION_SLOT} resolution=${RESOLUTION} eval_size=${EVAL_SIZE}"
 echo "[crsdiff_loveda_gen] ddim_steps=${DDIM_STEPS} scale=${SCALE} strength=${STRENGTH} global_strength=${GLOBAL_STRENGTH} eta=${ETA} seed=${SEED}"
 echo "[crsdiff_loveda_gen] max_samples=${MAX_SAMPLES} overwrite=${OVERWRITE}"
+echo "[crsdiff_loveda_gen] prompt=${PROMPT}"
+echo "[crsdiff_loveda_gen] added_prompt=${ADDED_PROMPT}"
+echo "[crsdiff_loveda_gen] negative_prompt=${NEGATIVE_PROMPT}"
 
 "${PYTHON_BIN}" "${ROOT_DIR}/tools/build_manifest_from_vistar_eval.py" \
   --eval_dir "${VISTAR_EVAL_DIR}" \
