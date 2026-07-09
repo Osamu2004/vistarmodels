@@ -63,8 +63,8 @@ bash run_bash/instancediffusion_loveda_gen.bash
 Run DreamCD on SECOND-style paired change generation:
 
 ```bash
-bash scripts/bootstrap_dreamcd.sh
 pip install -r requirements-dreamcd.txt
+bash scripts/bootstrap_dreamcd.sh
 python tools/check_dreamcd_deps.py
 SECOND_ROOT=/root/data/SECOND MAX_SAMPLES=5 bash run_bash/dreamcd_second_gen.bash
 SECOND_ROOT=/root/data/SECOND bash run_bash/dreamcd_second_gen.bash

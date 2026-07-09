@@ -21,6 +21,7 @@ DEPENDENCIES: tuple[Dependency, ...] = (
     Dependency("torchvision", "torchvision", True, "DreamCD preview/grid utilities"),
     Dependency("numpy", "numpy", True, "image/tensor preprocessing"),
     Dependency("pillow", "PIL", True, "image IO"),
+    Dependency("huggingface-hub", "huggingface_hub", True, "automatic DreamCD checkpoint download"),
     Dependency("opencv-python", "cv2", True, "Albumentations interpolation constants"),
     Dependency("albumentations", "albumentations", True, "official DreamCD dataset resizing/cropping"),
     Dependency("omegaconf", "omegaconf", True, "DreamCD YAML config loading"),

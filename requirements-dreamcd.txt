@@ -3,6 +3,7 @@
 albumentations
 einops
 imageio
+huggingface-hub
 kornia
 numpy
 omegaconf

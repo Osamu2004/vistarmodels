@@ -30,19 +30,21 @@ semantic-mask and binary-change-mask conditioning.
 
 ```bash
 cd /root/code/vistarmodels
-bash scripts/bootstrap_dreamcd.sh
 pip install -r requirements-dreamcd.txt
+bash scripts/bootstrap_dreamcd.sh
 python tools/check_dreamcd_deps.py
 ```
 
-Put official SECOND weights at:
+`bootstrap_dreamcd.sh` clones the official DreamCD repo and downloads the
+official SECOND weights from HuggingFace by default:
 
 ```text
 third_party/DreamCD/checkpoints/second/vqvae.ckpt
 third_party/DreamCD/checkpoints/second/ldm.ckpt
 ```
 
-or pass `DREAMCD_VQVAE_CKPT` and `DREAMCD_CKPT` to the run script.
+Use `DREAMCD_DOWNLOAD_WEIGHTS=0` to skip downloading, or pass
+`DREAMCD_VQVAE_CKPT` and `DREAMCD_CKPT` to use custom paths.
 
 DreamCD's official environment pins an old CUDA 11.1 PyTorch stack. In practice,
 use a separate conda environment and let `tools/check_dreamcd_deps.py` tell you

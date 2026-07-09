@@ -52,7 +52,11 @@ _is_truthy() {
 }
 
 if _is_truthy "${BOOTSTRAP_DREAMCD}"; then
-  DREAMCD_ROOT="${DREAMCD_ROOT}" bash "${ROOT_DIR}/scripts/bootstrap_dreamcd.sh"
+  PYTHON_BIN="${PYTHON_BIN}" \
+  DREAMCD_ROOT="${DREAMCD_ROOT}" \
+  DREAMCD_CKPT="${DREAMCD_CKPT}" \
+  DREAMCD_VQVAE_CKPT="${DREAMCD_VQVAE_CKPT}" \
+    bash "${ROOT_DIR}/scripts/bootstrap_dreamcd.sh"
 fi
 
 if [[ ! -d "${SECOND_ROOT}" ]]; then
