@@ -23,12 +23,13 @@ SEG2ANY_FLUX1_REPO="${SEG2ANY_FLUX1_REPO:-black-forest-labs/FLUX.1-dev}"
 SEG2ANY_FLUX1_LOCAL_DIR="${SEG2ANY_FLUX1_LOCAL_DIR:-/root/data/weight/flux1/FLUX.1-dev}"
 SEG2ANY_FLUX1_MODEL="${SEG2ANY_FLUX1_MODEL:-${SEG2ANY_FLUX1_LOCAL_DIR}}"
 SEG2ANY_LORA_CKPT="${SEG2ANY_LORA_CKPT:-/root/data/weight/seg2any/sacap_1m/seg2any/checkpoint-20000}"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/seg2any_loveda_val_mask_to_rgb_gen_resize512_steps32_cfg3p5_seed0}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/seg2any_loveda_val_mask_to_rgb_gen_resize256_steps32_cfg3p5_seed0}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_val.jsonl}"
 
 BOOTSTRAP_SEG2ANY="${BOOTSTRAP_SEG2ANY:-1}"
-RESOLUTION="${RESOLUTION:-512}"
-EVAL_SIZE="${EVAL_SIZE:-512}"
+RESOLUTION="${RESOLUTION:-256}"
+EVAL_SIZE="${EVAL_SIZE:-256}"
+BATCH_SIZE="${BATCH_SIZE:-1}"
 COND_SCALE_FACTOR="${COND_SCALE_FACTOR:-2}"
 NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-32}"
 GUIDANCE_SCALE="${GUIDANCE_SCALE:-3.5}"
@@ -150,7 +151,7 @@ echo "[seg2any_loveda_gen] SEG2ANY_LORA_CKPT=${SEG2ANY_LORA_CKPT}"
 echo "[seg2any_loveda_gen] SEG2ANY_LORA_REPO=${SEG2ANY_LORA_REPO}"
 echo "[seg2any_loveda_gen] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[seg2any_loveda_gen] MANIFEST=${MANIFEST}"
-echo "[seg2any_loveda_gen] resolution=${RESOLUTION} eval_size=${EVAL_SIZE} cond_scale_factor=${COND_SCALE_FACTOR}"
+echo "[seg2any_loveda_gen] resolution=${RESOLUTION} eval_size=${EVAL_SIZE} batch_size=${BATCH_SIZE} cond_scale_factor=${COND_SCALE_FACTOR}"
 echo "[seg2any_loveda_gen] steps=${NUM_INFERENCE_STEPS} cfg=${GUIDANCE_SCALE} cond2image_attention_weight=${COND2IMAGE_ATTENTION_WEIGHT}"
 echo "[seg2any_loveda_gen] attention_mask_method=${ATTENTION_MASK_METHOD} hard_attn_block_range=${HARD_ATTN_BLOCK_START},${HARD_ATTN_BLOCK_END}"
 echo "[seg2any_loveda_gen] dtype=${DTYPE} seed=${SEED} max_samples=${MAX_SAMPLES} overwrite=${OVERWRITE}"
@@ -180,6 +181,7 @@ fi
   --lora_ckpt_path "${SEG2ANY_LORA_CKPT}" \
   --resolution "${RESOLUTION}" \
   --eval_size "${EVAL_SIZE}" \
+  --batch_size "${BATCH_SIZE}" \
   --cond_scale_factor "${COND_SCALE_FACTOR}" \
   --num_inference_steps "${NUM_INFERENCE_STEPS}" \
   --guidance_scale "${GUIDANCE_SCALE}" \

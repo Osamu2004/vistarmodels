@@ -75,6 +75,10 @@ Resume is enabled by default. Existing valid
 If an interrupted run leaves a corrupt or wrong-size prediction, it is
 regenerated automatically.
 
+Default Seg2Any inference runs one image at a time (`BATCH_SIZE=1`) at
+`RESOLUTION=256` and writes `EVAL_SIZE=256` outputs. For the older 512-pixel
+setting, override with `RESOLUTION=512 EVAL_SIZE=512`.
+
 By default, the script uses physical GPU 1:
 
 ```bash

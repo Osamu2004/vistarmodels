@@ -311,8 +311,14 @@ def main() -> None:
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--pretrained_model_name_or_path", default="black-forest-labs/FLUX.1-dev")
     parser.add_argument("--lora_ckpt_path", default="/root/data/weight/seg2any/sacap_1m/seg2any/checkpoint-20000")
-    parser.add_argument("--resolution", type=int, default=512)
-    parser.add_argument("--eval_size", type=int, default=512)
+    parser.add_argument("--resolution", type=int, default=256)
+    parser.add_argument("--eval_size", type=int, default=256)
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=1,
+        help="Seg2Any FLUX inference is run one image at a time; keep this at 1 to avoid OOM.",
+    )
     parser.add_argument("--cond_scale_factor", type=int, default=2)
     parser.add_argument("--num_inference_steps", type=int, default=32)
     parser.add_argument("--guidance_scale", type=float, default=3.5)
@@ -345,6 +351,11 @@ def main() -> None:
         raise NotADirectoryError(f"Seg2Any LoRA checkpoint not found: {lora_ckpt_path}")
     if _is_local_ref(pretrained_ref) and not Path(pretrained_ref).expanduser().exists():
         raise FileNotFoundError(f"FLUX.1-dev local path not found: {pretrained_ref}")
+    if int(args.batch_size) != 1:
+        raise ValueError(
+            "Seg2Any wrapper only supports batch_size=1. "
+            "For OOM, lower --resolution instead of increasing batch size."
+        )
     if int(args.resolution) % (16 * int(args.cond_scale_factor)) != 0:
         raise ValueError(
             f"resolution={args.resolution} must be divisible by 16 * cond_scale_factor={16 * int(args.cond_scale_factor)}"
@@ -437,6 +448,7 @@ def main() -> None:
                         "seg2any_input_json": str(input_json),
                         "resolution": int(args.resolution),
                         "eval_size": int(args.eval_size),
+                        "batch_size": int(args.batch_size),
                         "cond_scale_factor": int(args.cond_scale_factor),
                         "num_inference_steps": int(args.num_inference_steps),
                         "guidance_scale": float(args.guidance_scale),
