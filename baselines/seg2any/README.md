@@ -46,11 +46,14 @@ Seg2Any needs:
 - Seg2Any LoRA checkpoint, default path:
   `/root/data/weight/seg2any/sacap_1m/seg2any/checkpoint-20000`
 
-Download the LoRA weights from:
+The one-command bash auto-downloads missing weights by default
+(`AUTO_DOWNLOAD_WEIGHTS=1`). To download manually:
 
 ```bash
 huggingface-cli download 0xLDF/Seg2Any \
   --local-dir /root/data/weight/seg2any
+hf download black-forest-labs/FLUX.1-dev \
+  --local-dir /root/data/weight/flux1/FLUX.1-dev
 ```
 
 FLUX.1-dev is gated on HuggingFace. Log in or point
