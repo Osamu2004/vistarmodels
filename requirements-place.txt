@@ -1,0 +1,12 @@
+einops
+numpy
+omegaconf
+pillow
+pytorch-lightning
+scipy
+tqdm
+transformers
+
+# Optional but useful for compatibility with official PLACE scripts.
+open-clip-torch
+opencv-python

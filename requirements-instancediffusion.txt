@@ -1,0 +1,12 @@
+accelerate
+huggingface-hub
+numpy
+pillow
+safetensors
+tqdm
+transformers
+
+# InstanceDiffusion is currently available through this diffusers fork/branch.
+# The wrapper can also import it from third_party after running:
+#   bash scripts/bootstrap_instancediffusion.sh
+git+https://github.com/gokyeongryeol/diffusers.git@instancediffusion#egg=diffusers
