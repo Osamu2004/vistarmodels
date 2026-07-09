@@ -16,6 +16,8 @@ and source code into the training repository.
   generation on the same LoveDA mask-to-RGB manifest.
 - `baselines/instancediffusion`: InstanceDiffusion wrapper for open-set
   box-conditioned image generation from LoveDA semantic masks.
+- `baselines/dreamcd`: DreamCD wrapper for closed-set SECOND change image
+  synthesis with paired semantic masks and binary change masks.
 - `baselines/place`: PLACE wrapper for semantic-mask plus class-text image
   synthesis from LoveDA masks.
 
@@ -56,6 +58,16 @@ pip install -r requirements-instancediffusion.txt
 python tools/check_instancediffusion_deps.py
 MAX_SAMPLES=5 bash run_bash/instancediffusion_loveda_gen.bash
 bash run_bash/instancediffusion_loveda_gen.bash
+```
+
+Run DreamCD on SECOND-style paired change generation:
+
+```bash
+bash scripts/bootstrap_dreamcd.sh
+pip install -r requirements-dreamcd.txt
+python tools/check_dreamcd_deps.py
+SECOND_ROOT=/root/data/SECOND MAX_SAMPLES=5 bash run_bash/dreamcd_second_gen.bash
+SECOND_ROOT=/root/data/SECOND bash run_bash/dreamcd_second_gen.bash
 ```
 
 Run PLACE on the same LoveDA generation manifest:

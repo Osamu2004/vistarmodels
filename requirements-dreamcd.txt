@@ -1,0 +1,19 @@
+# DreamCD official requirement.txt pins torch==1.8.1+cu111. Install torch and
+# torchvision separately for your CUDA driver, preferably in a dedicated env.
+albumentations
+einops
+imageio
+kornia
+numpy
+omegaconf
+opencv-python
+pillow
+pytorch-lightning
+termcolor
+test-tube
+torch-fidelity
+torchmetrics
+tqdm
+taming-transformers
+transformers
+clip

@@ -1,0 +1,330 @@
+from __future__ import annotations
+
+import argparse
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp")
+MASK_EXTS = (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
+DIRECTIONS = ("t1_to_t2", "t2_to_t1")
+
+
+@dataclass(frozen=True)
+class SecondDirs:
+    t1_dir: Path
+    t2_dir: Path
+    label1_dir: Path
+    label2_dir: Path
+    change_dir: Path | None
+
+
+def _normalize_wsl_unc(path: str) -> str:
+    text = str(path)
+    for prefix in ("\\\\wsl.localhost\\", "\\wsl.localhost\\"):
+        if text.startswith(prefix):
+            parts = [p for p in text.strip("\\").split("\\") if p]
+            if len(parts) >= 3:
+                return "/" + "/".join(parts[2:])
+    return text
+
+
+def _candidate_bases(root: Path, split: str) -> list[Path]:
+    split_aliases = {
+        "train": ("train", "Train", "training", "Training"),
+        "test": ("test", "Test", "testing", "Testing"),
+        "val": ("val", "Val", "valid", "Valid", "validation", "Validation"),
+    }
+    bases = [root]
+    if split and split != "auto":
+        bases.extend(root / name for name in split_aliases.get(split, (split,)))
+    else:
+        for key in ("train", "test", "val"):
+            bases.extend(root / name for name in split_aliases[key])
+    return bases
+
+
+def _candidate_dirs(root: Path, names: tuple[str, ...], split: str) -> list[Path]:
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for base in _candidate_bases(root, split):
+        for name in names:
+            path = base / name
+            if path not in seen:
+                out.append(path)
+                seen.add(path)
+    return out
+
+
+def _first_dir(paths: list[Path]) -> Path | None:
+    for path in paths:
+        if path.is_dir():
+            return path
+    return None
+
+
+def _resolve_second_dirs(root: Path, split: str) -> SecondDirs:
+    t1_dir = _first_dir(
+        _candidate_dirs(
+            root,
+            (
+                "img_A",
+                "im1",
+                "img1",
+                "image1",
+                "Image1",
+                "images1",
+                "T1",
+                "t1",
+                "A",
+                "images/T1",
+                "images/t1",
+                "images/A",
+            ),
+            split,
+        )
+    )
+    t2_dir = _first_dir(
+        _candidate_dirs(
+            root,
+            (
+                "img_B",
+                "im2",
+                "img2",
+                "image2",
+                "Image2",
+                "images2",
+                "T2",
+                "t2",
+                "B",
+                "images/T2",
+                "images/t2",
+                "images/B",
+            ),
+            split,
+        )
+    )
+    label1_dir = _first_dir(
+        _candidate_dirs(
+            root,
+            (
+                "mask_A",
+                "label1",
+                "Label1",
+                "labels1",
+                "Labels1",
+                "semantic1",
+                "Semantic1",
+                "labels/label1",
+                "labels/Label1",
+            ),
+            split,
+        )
+    )
+    label2_dir = _first_dir(
+        _candidate_dirs(
+            root,
+            (
+                "mask_B",
+                "label2",
+                "Label2",
+                "labels2",
+                "Labels2",
+                "semantic2",
+                "Semantic2",
+                "labels/label2",
+                "labels/Label2",
+            ),
+            split,
+        )
+    )
+    change_dir = _first_dir(
+        _candidate_dirs(
+            root,
+            (
+                "bcd_mask",
+                "change_mask",
+                "binary_change_mask",
+                "label",
+                "Label",
+                "change",
+                "Change",
+                "change_label",
+                "Change_Label",
+                "mask",
+                "masks",
+                "gt",
+                "GT",
+            ),
+            split,
+        )
+    )
+
+    missing = []
+    if t1_dir is None:
+        missing.append("T1/img_A")
+    if t2_dir is None:
+        missing.append("T2/img_B")
+    if label1_dir is None:
+        missing.append("label1/mask_A")
+    if label2_dir is None:
+        missing.append("label2/mask_B")
+    if missing:
+        raise NotADirectoryError(
+            "Cannot find required SECOND/DreamCD folders: "
+            + ", ".join(missing)
+            + ". DreamCD needs paired images and paired semantic masks."
+        )
+
+    return SecondDirs(
+        t1_dir=t1_dir,
+        t2_dir=t2_dir,
+        label1_dir=label1_dir,
+        label2_dir=label2_dir,
+        change_dir=change_dir,
+    )
+
+
+def _index_files(folder: Path, exts: tuple[str, ...]) -> dict[str, Path]:
+    out: dict[str, Path] = {}
+    for path in sorted(folder.iterdir()):
+        if path.name.startswith(".") or path.suffix.lower() not in exts:
+            continue
+        out.setdefault(path.stem, path)
+        out.setdefault(path.stem.lower(), path)
+    return out
+
+
+def _lookup_path(index: dict[str, Path], stem: str, folder: Path) -> Path:
+    for key in (stem, stem.lower()):
+        found = index.get(key)
+        if found is not None:
+            return found
+    replacements = (
+        ("_t1", "_t2"),
+        ("_T1", "_T2"),
+        ("_1", "_2"),
+        ("-t1", "-t2"),
+        ("-T1", "-T2"),
+        ("-1", "-2"),
+        ("_A", "_B"),
+        ("_a", "_b"),
+    )
+    for src, dst in replacements:
+        if src in stem:
+            key = stem.replace(src, dst)
+            found = index.get(key) or index.get(key.lower())
+            if found is not None:
+                return found
+    raise FileNotFoundError(f"cannot find matching file for stem={stem!r} under {folder}")
+
+
+def _build_pairs(dirs: SecondDirs) -> list[dict[str, Path]]:
+    t1_index = _index_files(dirs.t1_dir, IMAGE_EXTS)
+    t2_index = _index_files(dirs.t2_dir, IMAGE_EXTS)
+    label1_index = _index_files(dirs.label1_dir, MASK_EXTS)
+    label2_index = _index_files(dirs.label2_dir, MASK_EXTS)
+    change_index = _index_files(dirs.change_dir, MASK_EXTS) if dirs.change_dir is not None else {}
+
+    pairs: list[dict[str, Path]] = []
+    seen: set[str] = set()
+    for stem, t1_path in sorted(t1_index.items()):
+        if stem.lower() in seen:
+            continue
+        seen.add(stem.lower())
+        item = {
+            "stem": stem,
+            "t1": t1_path,
+            "t2": _lookup_path(t2_index, t1_path.stem, dirs.t2_dir),
+            "label1": _lookup_path(label1_index, t1_path.stem, dirs.label1_dir),
+            "label2": _lookup_path(label2_index, t1_path.stem, dirs.label2_dir),
+        }
+        if dirs.change_dir is not None:
+            item["change"] = _lookup_path(change_index, t1_path.stem, dirs.change_dir)
+        pairs.append(item)
+    if not pairs:
+        raise FileNotFoundError(f"no image pairs found under {dirs.t1_dir} and {dirs.t2_dir}")
+    return pairs
+
+
+def _selected_directions(value: str) -> list[str]:
+    if value == "both":
+        return list(DIRECTIONS)
+    if value not in DIRECTIONS:
+        raise ValueError(f"unsupported direction={value!r}")
+    return [value]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Build a DreamCD JSONL manifest from a SECOND-style paired image/mask directory."
+    )
+    parser.add_argument("--second_root", required=True)
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--split", default="auto", help="auto, train, test, val, or a custom split directory name")
+    parser.add_argument("--direction", choices=["t1_to_t2", "t2_to_t1", "both"], default="t1_to_t2")
+    parser.add_argument("--max_samples", type=int, default=0)
+    parser.add_argument(
+        "--allow_missing_change_mask",
+        action="store_true",
+        help="omit change_mask if no binary mask folder exists; run_dreamcd_manifest.py will derive it from label1/label2",
+    )
+    args = parser.parse_args()
+
+    root = Path(_normalize_wsl_unc(args.second_root)).expanduser().resolve()
+    out_path = Path(_normalize_wsl_unc(args.output)).expanduser().resolve()
+    dirs = _resolve_second_dirs(root, str(args.split))
+    if dirs.change_dir is None and not args.allow_missing_change_mask:
+        raise NotADirectoryError(
+            "Cannot find binary change mask folder. Pass --allow_missing_change_mask "
+            "to derive change masks from paired semantic masks during inference."
+        )
+
+    pairs = _build_pairs(dirs)
+    if int(args.max_samples) > 0:
+        pairs = pairs[: int(args.max_samples)]
+
+    rows = []
+    for pair in pairs:
+        for direction in _selected_directions(str(args.direction)):
+            if direction == "t1_to_t2":
+                source_image = pair["t1"]
+                target_image = pair["t2"]
+                source_mask = pair["label1"]
+                target_mask = pair["label2"]
+            else:
+                source_image = pair["t2"]
+                target_image = pair["t1"]
+                source_mask = pair["label2"]
+                target_mask = pair["label1"]
+
+            row = {
+                "name": f"{pair['stem']}_{direction}",
+                "direction": direction,
+                "source_image": str(source_image),
+                "target_image": str(target_image),
+                "source_mask": str(source_mask),
+                "target_mask": str(target_mask),
+                "prompt": "Synthesize the target-time remote-sensing image from the source image, target semantic mask, and binary change mask.",
+            }
+            if "change" in pair:
+                row["change_mask"] = str(pair["change"])
+            rows.append(row)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    print(f"[build_dreamcd_second_manifest] second_root={root}")
+    print(f"[build_dreamcd_second_manifest] t1_dir={dirs.t1_dir}")
+    print(f"[build_dreamcd_second_manifest] t2_dir={dirs.t2_dir}")
+    print(f"[build_dreamcd_second_manifest] label1_dir={dirs.label1_dir}")
+    print(f"[build_dreamcd_second_manifest] label2_dir={dirs.label2_dir}")
+    print(f"[build_dreamcd_second_manifest] change_dir={dirs.change_dir}")
+    print(f"[build_dreamcd_second_manifest] wrote {len(rows)} rows to {out_path}")
+
+
+if __name__ == "__main__":
+    main()
