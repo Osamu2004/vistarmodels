@@ -160,12 +160,47 @@ def _write_seg2any_input(
     return json_path
 
 
+def _draw_binary_contour(mask: np.ndarray, thickness: int) -> np.ndarray:
+    mask_bool = mask.astype(bool)
+    if not mask_bool.any():
+        return np.zeros_like(mask_bool)
+    boundary = np.zeros_like(mask_bool)
+    boundary[:-1, :] |= mask_bool[:-1, :] != mask_bool[1:, :]
+    boundary[1:, :] |= mask_bool[1:, :] != mask_bool[:-1, :]
+    boundary[:, :-1] |= mask_bool[:, :-1] != mask_bool[:, 1:]
+    boundary[:, 1:] |= mask_bool[:, 1:] != mask_bool[:, :-1]
+    boundary &= mask_bool
+    radius = max(0, int(thickness) - 1)
+    if radius <= 0:
+        return boundary
+    padded = np.pad(boundary, radius, mode="constant", constant_values=False)
+    dilated = np.zeros_like(boundary)
+    for dy in range(2 * radius + 1):
+        for dx in range(2 * radius + 1):
+            dilated |= padded[dy : dy + boundary.shape[0], dx : dx + boundary.shape[1]]
+    return dilated
+
+
+def _draw_contours(
+    image: np.ndarray,
+    labels: np.ndarray,
+    *,
+    thickness: int,
+    colors: list[tuple[int, int, int]],
+) -> np.ndarray:
+    out = image.copy()
+    for idx, mask in enumerate(labels):
+        color = colors[idx] if idx < len(colors) else (255, 255, 255)
+        contour = _draw_binary_contour(mask, thickness)
+        out[contour] = np.asarray(color, dtype=np.uint8)
+    return out
+
+
 def _make_seg2any_batch(
     *,
     seg_map_path: Path,
     seg_anno_path: Path,
     cond_scale_factor: int,
-    visualizer: Any,
 ) -> dict[str, Any]:
     seg_map = Image.open(seg_map_path).convert("RGB")
     img_w, img_h = seg_map.size
@@ -212,7 +247,7 @@ def _make_seg2any_batch(
 
     label = torch.from_numpy(np.stack(labels, axis=0)).long()
     cond_pixels = np.zeros([label.shape[-2], label.shape[-1], 3], dtype=np.uint8)
-    cond_pixels = visualizer.draw_contours(
+    cond_pixels = _draw_contours(
         cond_pixels,
         label.cpu().numpy(),
         thickness=1,
@@ -243,7 +278,6 @@ def _load_seg2any_pipeline(
     sys.path.insert(0, str(seg2any_root))
     from src.models import FluxTransformer2DModel
     from src.pipelines import FluxRegionalPipeline
-    from utils.visualizer import Visualizer
 
     transformer = FluxTransformer2DModel.from_pretrained(
         pretrained_model_name_or_path,
@@ -267,7 +301,7 @@ def _load_seg2any_pipeline(
         pipeline.set_adapters(["cond", "default"])
     pipeline.set_progress_bar_config(disable=not pipeline_progress)
     pipeline = pipeline.to(device)
-    return pipeline, Visualizer()
+    return pipeline
 
 
 def main() -> None:
@@ -326,7 +360,7 @@ def main() -> None:
     _seed_everything(int(args.seed))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dtype = _dtype_from_name(args.dtype)
-    pipeline, visualizer = _load_seg2any_pipeline(
+    pipeline = _load_seg2any_pipeline(
         seg2any_root=seg2any_root,
         pretrained_model_name_or_path=pretrained_ref,
         lora_ckpt_path=lora_ckpt_path,
@@ -366,7 +400,6 @@ def main() -> None:
                     seg_map_path=input_png,
                     seg_anno_path=input_json,
                     cond_scale_factor=int(args.cond_scale_factor),
-                    visualizer=visualizer,
                 )
                 generator = torch.Generator(device=device).manual_seed(int(batch["seed"]))
                 with torch.inference_mode():
