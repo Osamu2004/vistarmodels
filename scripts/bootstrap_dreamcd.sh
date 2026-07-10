@@ -76,9 +76,8 @@ PY
 
 mkdir -p "${THIRD_PARTY_DIR}"
 
-if [[ -d "${DREAMCD_ROOT}/.git" ]]; then
-  echo "[bootstrap_dreamcd] DreamCD already exists: ${DREAMCD_ROOT}"
-  git -C "${DREAMCD_ROOT}" pull --ff-only
+if [[ -f "${DREAMCD_ROOT}/changeanywhere2_synthesis.py" ]]; then
+  echo "[bootstrap_dreamcd] DreamCD source is available: ${DREAMCD_ROOT}"
 else
   echo "[bootstrap_dreamcd] cloning ${DREAMCD_REPO} -> ${DREAMCD_ROOT}"
   git clone "${DREAMCD_REPO}" "${DREAMCD_ROOT}"

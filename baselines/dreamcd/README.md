@@ -10,6 +10,11 @@ Official DreamCD repository:
 - Paper: *DreamCD: A Change-Label-Free Framework for Change Detection via a
   Weakly Conditional Semantic Diffusion Model in Optical VHR Imagery*, JAG 2026.
 
+The required official inference source is vendored under
+`third_party/DreamCD` at upstream commit
+`d4750ff6f7d35fe9640059d7b9cdfe6902fcf9c5`. A fresh clone of `vistarmodels`
+therefore does not need a separate DreamCD source clone.
+
 ## What This Baseline Is
 
 DreamCD is a closed-set, SECOND/LsSCD-style change image synthesis model. It is
@@ -43,8 +48,9 @@ bash scripts/bootstrap_dreamcd.sh
 python tools/check_dreamcd_deps.py
 ```
 
-`bootstrap_dreamcd.sh` clones the official DreamCD repo and downloads the
-official SECOND weights from HuggingFace by default:
+`bootstrap_dreamcd.sh` verifies the vendored official source and downloads the
+official SECOND weights from HuggingFace by default. It retains a clone fallback
+only for older checkouts where `third_party/DreamCD` is absent:
 
 ```text
 /root/data/weight/dreamcd/second/vqvae.ckpt
