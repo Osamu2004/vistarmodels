@@ -48,7 +48,7 @@ def main() -> None:
     parser.add_argument("--second_root", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--split", default="test")
-    parser.add_argument("--direction", choices=["t1_to_t2", "t2_to_t1", "both"], default="t1_to_t2")
+    parser.add_argument("--direction", choices=["t1_to_t2", "t2_to_t1", "both"], default="both")
     parser.add_argument("--max_samples", type=int, default=0)
     args = parser.parse_args()
 
