@@ -12,7 +12,7 @@ DIRECTION="${DIRECTION:-both}"
 RCDGEN_MODEL_ID="${RCDGEN_MODEL_ID:-yilmazkorkmaz/RCDGen}"
 RCDGEN_WEIGHT_ROOT="${RCDGEN_WEIGHT_ROOT:-/root/data/weight/rcdgen}"
 RCDGEN_MODEL_DIR="${RCDGEN_MODEL_DIR:-${RCDGEN_WEIGHT_ROOT}/RCDGen}"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rcdgen_second_${SPLIT}_${DIRECTION}_source_text_resize512_eval256_steps100_seed42}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rcdgen_second_${SPLIT}_${DIRECTION}_oneclass_random_source_text_resize512_eval256_steps100_seed42}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest.jsonl}"
 BOOTSTRAP_RCDGEN="${BOOTSTRAP_RCDGEN:-1}"
 RESOLUTION="${RESOLUTION:-512}"
@@ -22,7 +22,8 @@ IMAGE_GUIDANCE_SCALE="${IMAGE_GUIDANCE_SCALE:-1.5}"
 GUIDANCE_SCALE="${GUIDANCE_SCALE:-7.0}"
 SEED="${SEED:-42}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
-CATEGORY="${CATEGORY:-all}"
+CATEGORY_POLICY="${CATEGORY_POLICY:-random}"
+CATEGORY="${CATEGORY:-auto}"
 OVERWRITE="${OVERWRITE:-0}"
 
 if [[ "${BOOTSTRAP_RCDGEN}" == "1" ]]; then
@@ -45,6 +46,6 @@ if [[ "${OVERWRITE}" == "1" ]]; then RUN_ARGS+=(--overwrite); fi
   --resolution "${RESOLUTION}" --eval_size "${EVAL_SIZE}" \
   --num_inference_steps "${NUM_INFERENCE_STEPS}" \
   --image_guidance_scale "${IMAGE_GUIDANCE_SCALE}" --guidance_scale "${GUIDANCE_SCALE}" \
-  --seed "${SEED}" --category "${CATEGORY}" "${RUN_ARGS[@]}"
+  --seed "${SEED}" --category_policy "${CATEGORY_POLICY}" --category "${CATEGORY}" "${RUN_ARGS[@]}"
 
 echo "[rcdgen_second_gen] done: ${OUTPUT_DIR}"

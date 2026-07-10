@@ -27,8 +27,12 @@ SECOND_ROOT=/root/data/SECOND MAX_SAMPLES=1 bash run_bash/rcdgen_second_gen.bash
 SECOND_ROOT=/root/data/SECOND bash run_bash/rcdgen_second_gen.bash
 ```
 
-Each SECOND record is expanded once per changed target category. Final outputs
-follow the Vistar SECOND layout and additionally contain `pred_change_mask/`.
+By default, each SECOND record selects one changed target category using a
+record-local seeded RNG. It therefore produces exactly one prediction per
+sample and direction, keeps every GT image once, and is directly usable for
+FID and paired metrics. Set `CATEGORY_POLICY=all` only for the expanded
+per-category qualitative protocol. Final outputs follow the Vistar SECOND
+layout and additionally contain `pred_change_mask/`.
 The `cond_mask*` files are retained only for evaluation/alignment and are never
 passed into RCDGen. This protocol should not be described as spatially
 mask-conditioned generation.

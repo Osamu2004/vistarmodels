@@ -101,7 +101,17 @@ def main() -> None:
     parser.add_argument("--guidance_scale", type=float, default=7.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max_samples", type=int, default=0)
-    parser.add_argument("--category", default="all", help="all or one official SECOND class name")
+    parser.add_argument(
+        "--category_policy",
+        choices=["random", "all"],
+        default="random",
+        help="random selects one reproducible changed target class per record; all expands every class",
+    )
+    parser.add_argument(
+        "--category",
+        default="auto",
+        help="auto uses category_policy; otherwise force one official SECOND class name",
+    )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -138,12 +148,29 @@ def main() -> None:
         source_ids = ids(resolve(str(row["source_mask"])), args.resolution)
         changed = source_ids != target_ids
         present = sorted(int(v) for v in np.unique(target_ids[changed]) if int(v) in SECOND_CLASSES and int(v) != 0)
-        if args.category != "all":
-            present = [idx for idx in present if SECOND_CLASSES[idx] == args.category]
+        if args.category != "auto":
+            matching = [idx for idx, name in SECOND_CLASSES.items() if name == args.category]
+            if not matching:
+                raise ValueError(
+                    f"unsupported --category={args.category!r}; expected auto or one of "
+                    f"{sorted(SECOND_CLASSES.values())}"
+                )
+            selected = matching
+            selection_policy = "fixed"
+        elif args.category_policy == "all":
+            selected = present or [0]
+            selection_policy = "all_present_target_classes"
+        else:
+            # Use a record-local RNG so selection is reproducible and does not
+            # depend on resume state or the number of preceding model calls.
+            selector = random.Random(args.seed + row_index * 1009)
+            selected = [selector.choice(present)] if present else [0]
+            selection_policy = "seeded_random_present_target_class"
 
-        for class_id in present:
+        for class_id in selected:
             category = SECOND_CLASSES[class_id]
-            base = safe_name(f"{row.get('name', f'sample_{row_index:06d}')}_{category}")
+            row_name = str(row.get("name", f"sample_{row_index:06d}"))
+            base = safe_name(f"{row_name}_{category}" if args.category_policy == "all" else row_name)
             prompt = f"change in {category}"
             pred_path = dirs["pred_rgb"] / f"{base}_pred_rgb.png"
             pred_mask_path = dirs["pred_change_mask"] / f"{base}_pred_change_mask.png"
@@ -182,6 +209,9 @@ def main() -> None:
             metadata.append({
                 "name": base, "status": status, "dataset": "SECOND", "direction": row.get("direction"),
                 "category": category, "class_id": class_id, "prompt": prompt,
+                "category_selection_policy": selection_policy,
+                "available_changed_target_classes": [SECOND_CLASSES[idx] for idx in present],
+                "selection_seed": args.seed + row_index * 1009,
                 "condition_passed_to_model": ["source_rgb", "text_prompt"],
                 "ground_truth_change_mask_passed_to_model": False,
                 "source_image": str(source_path), "target_image": str(target_path),
@@ -192,7 +222,10 @@ def main() -> None:
         for item in metadata:
             handle.write(json.dumps(item, ensure_ascii=False) + "\n")
     (output / "class_map.json").write_text(json.dumps(SECOND_CLASSES, indent=2), encoding="utf-8")
-    print(f"[run_rcdgen_manifest] wrote {len(metadata)} category-conditioned outputs to {output}")
+    print(
+        f"[run_rcdgen_manifest] wrote {len(metadata)} category-conditioned outputs to {output}; "
+        f"category_policy={args.category_policy}"
+    )
 
 
 if __name__ == "__main__":
