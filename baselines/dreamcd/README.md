@@ -69,6 +69,21 @@ DreamCD's official environment pins an old CUDA 11.1 PyTorch stack. In practice,
 use a separate conda environment and let `tools/check_dreamcd_deps.py` tell you
 what is missing.
 
+The checker returns a non-zero exit status unless all inference-critical items
+are ready: vendored source, SECOND config, both checkpoints, required Python
+packages, official DreamCD imports, and a working CUDA tensor allocation. Run it
+on the intended GPU, for example:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python tools/check_dreamcd_deps.py
+```
+
+For a CPU-only source/package check, explicitly disable the CUDA requirement:
+
+```bash
+DREAMCD_REQUIRE_CUDA=0 python tools/check_dreamcd_deps.py
+```
+
 ## Build A SECOND Manifest
 
 The manifest builder recognizes the official DreamCD example layout:
