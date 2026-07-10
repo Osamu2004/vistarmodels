@@ -10,13 +10,18 @@ export CUDA_VISIBLE_DEVICES
 # Required layout:
 #   ${VISTAR_EVAL_DIR}/cond_mask/*_cond_mask.png
 #   ${VISTAR_EVAL_DIR}/gt_rgb/*_gt_rgb.png
-VISTAR_EVAL_DIR="${VISTAR_EVAL_DIR:-/root/data/experiment/eval_flux2_loveda_val_mask_to_rgb_gen_resize256_checkpoint1_2gpu}"
+# The source contains the merged LoveDA train+val set. EarthSynth resumes by
+# checking each pred_rgb/<name>_pred_rgb.png, matching Vistar's eval behavior.
+VISTAR_EVAL_DIR="${VISTAR_EVAL_DIR:-/root/data/experiment/eval_loveda_gen_gen_only_step300000}"
 
 EARTHSYNTH_BASE_MODEL="${EARTHSYNTH_BASE_MODEL:-stable-diffusion-v1-5/stable-diffusion-v1-5}"
 EARTHSYNTH_CONTROLNET_MODEL="${EARTHSYNTH_CONTROLNET_MODEL:-jaychempan/EarthSynth}"
 EARTHSYNTH_CONTROLNET_SUBFOLDER="${EARTHSYNTH_CONTROLNET_SUBFOLDER:-controlnet}"
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/earthsynth_loveda_val_mask_to_rgb_gen_resize512_steps50_scale7p5_no_controlprompt_seed0}"
-MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_val.jsonl}"
+MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_train_val.jsonl}"
+
+VERIFY_SAMPLE_COUNTS="${VERIFY_SAMPLE_COUNTS:-1}"
+EXPECTED_TOTAL_SAMPLES="${EXPECTED_TOTAL_SAMPLES:-4191}"
 
 RESOLUTION="${RESOLUTION:-512}"
 EVAL_SIZE="${EVAL_SIZE:-512}"
@@ -46,6 +51,19 @@ if [[ ! -d "${VISTAR_EVAL_DIR}/gt_rgb" ]]; then
   exit 1
 fi
 
+shopt -s nullglob
+ALL_MASKS=("${VISTAR_EVAL_DIR}"/cond_mask/*_cond_mask.png)
+shopt -u nullglob
+TOTAL_SAMPLE_COUNT="${#ALL_MASKS[@]}"
+
+if [[ "${VERIFY_SAMPLE_COUNTS}" == "1" || "${VERIFY_SAMPLE_COUNTS}" == "true" || "${VERIFY_SAMPLE_COUNTS}" == "yes" ]]; then
+  if [[ "${TOTAL_SAMPLE_COUNT}" -ne "${EXPECTED_TOTAL_SAMPLES}" ]]; then
+    echo "[earthsynth_loveda_gen] LoveDA train+val source is incomplete: total=${TOTAL_SAMPLE_COUNT}/${EXPECTED_TOTAL_SAMPLES}." >&2
+    echo "[earthsynth_loveda_gen] Populate VISTAR_EVAL_DIR with SPLITS=train,val first, or set VERIFY_SAMPLE_COUNTS=0 for a smoke test." >&2
+    exit 1
+  fi
+fi
+
 mkdir -p "${OUTPUT_DIR}"
 
 echo "[earthsynth_loveda_gen] VISTAR_EVAL_DIR=${VISTAR_EVAL_DIR}"
@@ -55,6 +73,8 @@ echo "[earthsynth_loveda_gen] EARTHSYNTH_CONTROLNET_MODEL=${EARTHSYNTH_CONTROLNE
 echo "[earthsynth_loveda_gen] EARTHSYNTH_CONTROLNET_SUBFOLDER=${EARTHSYNTH_CONTROLNET_SUBFOLDER}"
 echo "[earthsynth_loveda_gen] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[earthsynth_loveda_gen] MANIFEST=${MANIFEST}"
+echo "[earthsynth_loveda_gen] source_samples=${TOTAL_SAMPLE_COUNT} expected_train_val_total=${EXPECTED_TOTAL_SAMPLES} verify=${VERIFY_SAMPLE_COUNTS}"
+echo "[earthsynth_loveda_gen] overwrite=${OVERWRITE} (0/false/no resumes valid pred_rgb/<name>_pred_rgb.png files)"
 echo "[earthsynth_loveda_gen] resolution=${RESOLUTION} eval_size=${EVAL_SIZE} batch_size=${BATCH_SIZE}"
 echo "[earthsynth_loveda_gen] steps=${NUM_INFERENCE_STEPS} cfg=${GUIDANCE_SCALE} control_scale=${CONTROLNET_CONDITIONING_SCALE} scheduler=${SCHEDULER}"
 echo "[earthsynth_loveda_gen] dtype=${DTYPE} seed=${SEED} max_samples=${MAX_SAMPLES} overwrite=${OVERWRITE}"
