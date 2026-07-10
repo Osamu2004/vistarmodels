@@ -22,9 +22,6 @@ DREAMCD_CKPT="${DREAMCD_CKPT:-${DREAMCD_ROOT}/checkpoints/second/ldm.ckpt}"
 DREAMCD_VQVAE_CKPT="${DREAMCD_VQVAE_CKPT:-${DREAMCD_ROOT}/checkpoints/second/vqvae.ckpt}"
 DREAMCD_CONFIG="${DREAMCD_CONFIG:-${DREAMCD_ROOT}/configs/synthesis-wcsdm-second.yaml}"
 
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dreamcd_second_${SPLIT}_${DIRECTION}_resize256_steps200_seed2025}"
-MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_second.jsonl}"
-
 BOOTSTRAP_DREAMCD="${BOOTSTRAP_DREAMCD:-1}"
 RESOLUTION="${RESOLUTION:-256}"
 EVAL_SIZE="${EVAL_SIZE:-256}"
@@ -34,7 +31,7 @@ SEED="${SEED:-2025}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
 MANIFEST_MAX_SAMPLES="${MANIFEST_MAX_SAMPLES:-${MAX_SAMPLES}}"
 OVERWRITE="${OVERWRITE:-0}"
-WITH_ADAIN="${WITH_ADAIN:-1}"
+WITH_ADAIN="${WITH_ADAIN:-0}"
 NOISE_COND="${NOISE_COND:-1}"
 CHANGE_BACKGROUND="${CHANGE_BACKGROUND:-1}"
 ONLY_BUILDING="${ONLY_BUILDING:-0}"
@@ -50,6 +47,14 @@ _is_truthy() {
     *) return 1 ;;
   esac
 }
+
+if _is_truthy "${WITH_ADAIN}"; then
+  ADAIN_MODE="adain"
+else
+  ADAIN_MODE="noadain"
+fi
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dreamcd_second_${SPLIT}_${DIRECTION}_${ADAIN_MODE}_resize256_steps200_seed2025}"
+MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_second.jsonl}"
 
 if _is_truthy "${BOOTSTRAP_DREAMCD}"; then
   PYTHON_BIN="${PYTHON_BIN}" \
@@ -113,7 +118,9 @@ fi
 if _is_truthy "${OVERWRITE}"; then
   EXTRA_ARGS+=(--overwrite)
 fi
-if ! _is_truthy "${WITH_ADAIN}"; then
+if _is_truthy "${WITH_ADAIN}"; then
+  EXTRA_ARGS+=(--with_adain)
+else
   EXTRA_ARGS+=(--no-with_adain)
 fi
 if ! _is_truthy "${NOISE_COND}"; then

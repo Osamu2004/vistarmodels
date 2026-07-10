@@ -368,7 +368,7 @@ def main() -> None:
     parser.add_argument("--max_samples", type=int, default=0)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--num_labels", type=int, default=8)
-    _add_bool_arg(parser, "with_adain", True, "use target image B as DreamCD AdaIN style reference")
+    _add_bool_arg(parser, "with_adain", False, "use target image B as DreamCD AdaIN style reference")
     _add_bool_arg(parser, "noise_cond", True, "use DreamCD noise conditioning")
     _add_bool_arg(parser, "change_background", True, "let DreamCD synthesize changed background regions")
     parser.add_argument("--only_building", action="store_true")
@@ -465,9 +465,11 @@ def main() -> None:
         runtime_change_mask = output_dir / "runtime/bcd_mask" / f"{name}.png"
 
         source_rgb = _load_rgb(source_image_path, int(args.resolution))
-        target_rgb = _load_rgb(target_image_path, int(args.resolution))
+        target_rgb = _load_rgb(target_image_path, int(args.resolution)) if target_image_path_value else source_rgb
+        runtime_target_rgb = target_rgb if args.with_adain else source_rgb
         _save_rgb(source_rgb, runtime_source_image)
-        _save_rgb(target_rgb, runtime_target_image)
+        # Keep real target B out of the official inference input unless AdaIN is explicitly enabled.
+        _save_rgb(runtime_target_rgb, runtime_target_image)
         _save_rgb(source_rgb, source_rgb_out, size=int(args.eval_size))
         if target_image_path_value:
             _save_rgb(target_rgb, gt_rgb_out, size=int(args.eval_size))

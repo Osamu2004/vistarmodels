@@ -70,6 +70,10 @@ SECOND_ROOT=/root/data/SECOND MAX_SAMPLES=5 bash run_bash/dreamcd_second_gen.bas
 SECOND_ROOT=/root/data/SECOND bash run_bash/dreamcd_second_gen.bash
 ```
 
+DreamCD target-B AdaIN is disabled by default, so the real target image is not
+used as an inference style condition. Set `WITH_ADAIN=1` only when intentionally
+reproducing the official demo behavior.
+
 Run PLACE on the same LoveDA generation manifest:
 
 ```bash

@@ -20,8 +20,15 @@ condition is:
 source image A + source semantic mask A + target semantic mask B + binary change mask -> synthetic image B
 ```
 
-The official code can also use the real target image B for AdaIN style transfer;
-the wrapper keeps that enabled by default because the official demo does.
+The official code can also use the real target image B for AdaIN style transfer.
+For fair comparison, this wrapper disables that path by default: target B is not
+used as an inference condition or style reference. If target B is present in the
+manifest, it is retained only as `gt_rgb` for metric computation; the runtime
+DreamCD input receives source A as the inactive image-B placeholder.
+
+Set `WITH_ADAIN=1` in the one-command runner, or pass `--with_adain` directly,
+to explicitly restore the official-demo behavior that uses real target B style
+information. AdaIN and non-AdaIN runs use separate default output directories.
 
 For a fair report, describe DreamCD as a SECOND-trained closed-set baseline with
 semantic-mask and binary-change-mask conditioning.
@@ -107,6 +114,8 @@ bash run_bash/dreamcd_second_gen.bash
 
 Existing `pred_rgb/<name>_pred_rgb.png` files are skipped unless `OVERWRITE=1`
 is set, so interrupted runs can be resumed by rerunning the same command.
+The default output directory includes `noadain`; an explicit `WITH_ADAIN=1` run
+uses an `adain` directory instead.
 
 Outputs are saved in a Vistar-like layout:
 
