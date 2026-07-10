@@ -63,6 +63,12 @@ def _dreamcd_root() -> Path:
     return Path(_normalize_wsl_unc(os.environ.get("DREAMCD_ROOT", str(default_root)))).expanduser().resolve()
 
 
+def _dreamcd_weight_root() -> Path:
+    return Path(
+        _normalize_wsl_unc(os.environ.get("DREAMCD_WEIGHT_ROOT", "/root/data/weight/dreamcd"))
+    ).expanduser()
+
+
 def _install_lightning_compat() -> None:
     try:
         from pytorch_lightning.utilities.rank_zero import rank_zero_only
@@ -115,14 +121,15 @@ def main() -> int:
             print(f"MISSING required DreamCD modules     reason={exc}")
             missing_required.append(Dependency("DreamCD modules", "ldm/scripts", True, "official module imports"))
 
+    weight_root = _dreamcd_weight_root()
     ldm_ckpt = Path(
         _normalize_wsl_unc(
-            os.environ.get("DREAMCD_CKPT", str(root / "checkpoints/second/ldm.ckpt"))
+            os.environ.get("DREAMCD_CKPT", str(weight_root / "second/ldm.ckpt"))
         )
     ).expanduser()
     vqvae_ckpt = Path(
         _normalize_wsl_unc(
-            os.environ.get("DREAMCD_VQVAE_CKPT", str(root / "checkpoints/second/vqvae.ckpt"))
+            os.environ.get("DREAMCD_VQVAE_CKPT", str(weight_root / "second/vqvae.ckpt"))
         )
     ).expanduser()
     for label, path in (("LDM checkpoint", ldm_ckpt), ("VQ-VAE checkpoint", vqvae_ckpt)):

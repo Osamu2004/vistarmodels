@@ -70,6 +70,9 @@ SECOND_ROOT=/root/data/SECOND MAX_SAMPLES=5 bash run_bash/dreamcd_second_gen.bas
 SECOND_ROOT=/root/data/SECOND bash run_bash/dreamcd_second_gen.bash
 ```
 
+DreamCD weights default to `/root/data/weight/dreamcd/second/` rather than the
+Git repository. The folder contains `ldm.ckpt` and `vqvae.ckpt`.
+
 DreamCD target-B AdaIN is disabled by default, so the real target image is not
 used as an inference style condition. Set `WITH_ADAIN=1` only when intentionally
 reproducing the official demo behavior. Its final SECOND result directory uses

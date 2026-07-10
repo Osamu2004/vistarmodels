@@ -47,12 +47,17 @@ python tools/check_dreamcd_deps.py
 official SECOND weights from HuggingFace by default:
 
 ```text
-third_party/DreamCD/checkpoints/second/vqvae.ckpt
-third_party/DreamCD/checkpoints/second/ldm.ckpt
+/root/data/weight/dreamcd/second/vqvae.ckpt
+/root/data/weight/dreamcd/second/ldm.ckpt
 ```
 
 Use `DREAMCD_DOWNLOAD_WEIGHTS=0` to skip downloading, or pass
-`DREAMCD_VQVAE_CKPT` and `DREAMCD_CKPT` to use custom paths.
+`DREAMCD_VQVAE_CKPT` and `DREAMCD_CKPT` to use custom paths. On Windows, the
+default folder is visible at:
+
+```text
+\\wsl.localhost\Ubuntu-22.04\root\data\weight\dreamcd\second\
+```
 
 DreamCD's official environment pins an old CUDA 11.1 PyTorch stack. In practice,
 use a separate conda environment and let `tools/check_dreamcd_deps.py` tell you
@@ -91,8 +96,8 @@ python baselines/dreamcd/run_dreamcd_manifest.py \
   --dreamcd_root third_party/DreamCD \
   --manifest /root/data/experiment/dreamcd_second_test_manifest.jsonl \
   --output_dir /root/data/experiment/dreamcd_second_test_gen \
-  --ckpt third_party/DreamCD/checkpoints/second/ldm.ckpt \
-  --vqvae_ckpt third_party/DreamCD/checkpoints/second/vqvae.ckpt \
+  --ckpt /root/data/weight/dreamcd/second/ldm.ckpt \
+  --vqvae_ckpt /root/data/weight/dreamcd/second/vqvae.ckpt \
   --resolution 256 \
   --eval_size 256 \
   --batch_size 16 \

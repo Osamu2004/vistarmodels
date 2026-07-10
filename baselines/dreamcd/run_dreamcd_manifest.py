@@ -403,8 +403,8 @@ def main() -> None:
         help="optional DreamCD working directory; defaults to a temporary directory outside output_dir",
     )
     parser.add_argument("--config", default="", help="defaults to <dreamcd_root>/configs/synthesis-wcsdm-second.yaml")
-    parser.add_argument("--ckpt", default="", help="defaults to <dreamcd_root>/checkpoints/second/ldm.ckpt")
-    parser.add_argument("--vqvae_ckpt", default="", help="defaults to <dreamcd_root>/checkpoints/second/vqvae.ckpt")
+    parser.add_argument("--ckpt", default="", help="defaults to /root/data/weight/dreamcd/second/ldm.ckpt")
+    parser.add_argument("--vqvae_ckpt", default="", help="defaults to /root/data/weight/dreamcd/second/vqvae.ckpt")
     parser.add_argument("--resolution", type=int, default=256, help="DreamCD native input/output size")
     parser.add_argument("--eval_size", type=int, default=256, help="saved pred_rgb size for metric comparison")
     parser.add_argument("--batch_size", type=int, default=16)
@@ -438,8 +438,11 @@ def main() -> None:
     manifest = _resolve_path(args.manifest)
     output_dir = _resolve_path(args.output_dir)
     config_path = _resolve_path(args.config) if args.config else dreamcd_root / "configs/synthesis-wcsdm-second.yaml"
-    ckpt_path = _resolve_path(args.ckpt) if args.ckpt else dreamcd_root / "checkpoints/second/ldm.ckpt"
-    vqvae_ckpt = _resolve_path(args.vqvae_ckpt) if args.vqvae_ckpt else dreamcd_root / "checkpoints/second/vqvae.ckpt"
+    weight_root = _resolve_path(os.environ.get("DREAMCD_WEIGHT_ROOT", "/root/data/weight/dreamcd"))
+    ckpt_default = os.environ.get("DREAMCD_CKPT", str(weight_root / "second/ldm.ckpt"))
+    vqvae_default = os.environ.get("DREAMCD_VQVAE_CKPT", str(weight_root / "second/vqvae.ckpt"))
+    ckpt_path = _resolve_path(args.ckpt or ckpt_default)
+    vqvae_ckpt = _resolve_path(args.vqvae_ckpt or vqvae_default)
 
     if not dreamcd_root.is_dir():
         raise NotADirectoryError(f"DreamCD root not found: {dreamcd_root}")
