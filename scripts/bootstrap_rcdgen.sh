@@ -13,14 +13,16 @@ RCDGEN_MODEL_DIR="${RCDGEN_MODEL_DIR:-${RCDGEN_WEIGHT_ROOT}/RCDGen}"
 RCDGEN_DOWNLOAD_WEIGHTS="${RCDGEN_DOWNLOAD_WEIGHTS:-1}"
 
 mkdir -p "${THIRD_PARTY_DIR}"
-if [[ -d "${RCDGEN_ROOT}/.git" ]]; then
+PIPELINE_SOURCE="${RCDGEN_ROOT}/RCDGen/RCDGenSDPipeline.py"
+if [[ -f "${PIPELINE_SOURCE}" ]]; then
+  echo "[bootstrap_rcdgen] using vendored official pipeline: ${PIPELINE_SOURCE}"
+elif [[ -d "${RCDGEN_ROOT}/.git" ]]; then
   echo "[bootstrap_rcdgen] official source exists: ${RCDGEN_ROOT}"
 else
   echo "[bootstrap_rcdgen] cloning official source -> ${RCDGEN_ROOT}"
   git clone --depth 1 --branch "${RCDGEN_REVISION}" "${RCDGEN_REPO}" "${RCDGEN_ROOT}"
 fi
 
-PIPELINE_SOURCE="${RCDGEN_ROOT}/RCDGen/RCDGenSDPipeline.py"
 if [[ ! -f "${PIPELINE_SOURCE}" ]]; then
   echo "[bootstrap_rcdgen] missing official pipeline: ${PIPELINE_SOURCE}" >&2
   exit 1

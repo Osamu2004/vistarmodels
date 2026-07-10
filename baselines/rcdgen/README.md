@@ -13,8 +13,9 @@ bash scripts/bootstrap_rcdgen.sh
 python tools/check_rcdgen_deps.py
 ```
 
-The bootstrap clones the official source, installs its custom pipeline into
-Diffusers 0.31.0, and downloads/resumes the complete Hugging Face snapshot from
+The official custom pipeline is vendored under
+`third_party/referring_change_detection/RCDGen`. The bootstrap installs it into
+Diffusers 0.31.0 and downloads/resumes the complete Hugging Face snapshot from
 `yilmazkorkmaz/RCDGen` into `/root/data/weight/rcdgen/RCDGen`. Override
 `RCDGEN_MODEL_DIR` to use another shared weight directory. Set
 `RCDGEN_DOWNLOAD_WEIGHTS=0` only when the snapshot already exists.
