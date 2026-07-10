@@ -133,17 +133,18 @@ Default output:
 
 The output path intentionally keeps its legacy `val` name so an existing
 val-only CRS-Diff run can be continued without copying or regenerating its
-predictions. LoveDA val samples keep their old names; train samples are prefixed
-with `train_`. The main bash defaults to `OVERWRITE=0`, so rerunning it
-automatically skips valid val predictions and generates only missing train
-predictions:
+predictions. The main bash builds a manifest from all 4,191 train+val condition
+masks and defaults to `OVERWRITE=0`. The inference wrapper checks every
+`pred_rgb/<name>_pred_rgb.png`, automatically reuses valid existing predictions,
+and generates only the missing samples:
 
 ```bash
 bash run_bash/crsdiff_loveda_gen.bash
 ```
 
-By default the script verifies that the source contains 2,522 train and 1,669
-val samples. Set `VERIFY_SAMPLE_COUNTS=0` only for a partial smoke test.
+By default the script verifies that the source contains all 4,191 LoveDA
+train+val samples. It does not infer the split from filename prefixes. Set
+`VERIFY_SAMPLE_COUNTS=0` only for a partial smoke test.
 
 Small smoke test:
 
