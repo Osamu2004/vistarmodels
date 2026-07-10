@@ -149,6 +149,7 @@ output_dir/
   class_map.json
   prompt_<direction>_raw.txt
   prompt_<direction>_effective.txt
+  manifest.jsonl
   prompts.jsonl
 ```
 
@@ -157,5 +158,5 @@ ID 0 reserved for unchanged pixels, matching Vistar's SECOND generation output
 semantics. DreamCD-only native predictions, masks, patched config, CSV, and
 preview files are kept in a temporary working directory outside `output_dir`.
 Set `RUNTIME_DIR=/path/to/workdir` only when those internal artifacts need to be
-retained for debugging. The generated input manifest is also stored adjacent to
-the result directory rather than inside it.
+retained for debugging. The generated input manifest is stored inside the result
+directory as `output_dir/manifest.jsonl`.

@@ -55,7 +55,7 @@ else
   ADAIN_MODE="noadain"
 fi
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dreamcd_second_${SPLIT}_${DIRECTION}_${ADAIN_MODE}_vistar_layout_resize256_steps200_seed2025}"
-MANIFEST="${MANIFEST:-${OUTPUT_DIR}.manifest.jsonl}"
+MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest.jsonl}"
 RUNTIME_DIR="${RUNTIME_DIR:-}"
 
 if _is_truthy "${BOOTSTRAP_DREAMCD}"; then
