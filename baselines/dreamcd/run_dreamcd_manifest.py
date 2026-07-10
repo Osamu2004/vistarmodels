@@ -407,7 +407,7 @@ def main() -> None:
     parser.add_argument("--vqvae_ckpt", default="", help="defaults to /root/data/weight/dreamcd/second/vqvae.ckpt")
     parser.add_argument("--resolution", type=int, default=256, help="DreamCD native input/output size")
     parser.add_argument("--eval_size", type=int, default=256, help="saved pred_rgb size for metric comparison")
-    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--ddim_steps", type=int, default=200)
     parser.add_argument("--seed", type=int, default=2025)
     parser.add_argument("--max_samples", type=int, default=0)

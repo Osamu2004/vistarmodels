@@ -136,7 +136,7 @@ python baselines/dreamcd/run_dreamcd_manifest.py \
   --vqvae_ckpt /root/data/weight/dreamcd/second/vqvae.ckpt \
   --resolution 256 \
   --eval_size 256 \
-  --batch_size 16 \
+  --batch_size 1 \
   --ddim_steps 200 \
   --seed 2025
 ```
