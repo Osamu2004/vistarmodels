@@ -190,6 +190,18 @@ def _is_valid_rgb_file(path: Path, size: int) -> bool:
         return False
 
 
+def _is_valid_mask_file(path: Path, size: int) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        with Image.open(path) as image:
+            image.verify()
+        with Image.open(path) as image:
+            return image.mode in {"1", "L", "P", "I", "I;16"} and image.size == (int(size), int(size))
+    except Exception:
+        return False
+
+
 def _nearest_palette_ids(rgb: np.ndarray, palette_u8: np.ndarray) -> np.ndarray:
     rgb_i32 = rgb[..., :3].astype(np.int32)
     palette = palette_u8.astype(np.int32)
@@ -414,7 +426,7 @@ def main() -> None:
     parser.add_argument("--vqvae_ckpt", default="", help="defaults to /root/data/weight/dreamcd/second/vqvae.ckpt")
     parser.add_argument("--resolution", type=int, default=256, help="DreamCD native input/output size")
     parser.add_argument("--eval_size", type=int, default=256, help="saved pred_rgb size for metric comparison")
-    parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--ddim_steps", type=int, default=200)
     parser.add_argument("--seed", type=int, default=2025)
     parser.add_argument("--max_samples", type=int, default=0)
@@ -482,6 +494,11 @@ def main() -> None:
     all_records: list[dict[str, Any]] = []
     pending_records: list[dict[str, Any]] = []
     used_names: set[str] = set()
+    cached_preprocessing = 0
+    cond_palette_u8 = np.concatenate(
+        [np.asarray([[255, 255, 255]], dtype=np.uint8), np.asarray(DREAMCD_PALETTE_U8, dtype=np.uint8)],
+        axis=0,
+    )
 
     print(
         f"[run_dreamcd_manifest] preparing {len(rows)} manifest records; "
@@ -505,7 +522,13 @@ def main() -> None:
         change_mask_path = Path(change_mask_value) if change_mask_value else None
 
         pred_path = dirs["pred_rgb"] / f"{name}_pred_rgb.png"
-        native_path = runtime_dir / "pred_rgb_native" / f"{name}_pred_rgb_{args.resolution}.png"
+        # DreamCD natively emits `resolution` square images. When that matches
+        # Vistar's eval size (the default 256px path), write each sample directly
+        # to pred_rgb so results are visible and resumable during a long run.
+        if int(args.resolution) == int(args.eval_size):
+            native_path = pred_path
+        else:
+            native_path = runtime_dir / "pred_rgb_native" / f"{name}_pred_rgb_{args.resolution}.png"
         source_rgb_out = dirs["source_rgb"] / f"{name}_source_rgb.png"
         gt_rgb_out = dirs["gt_rgb"] / f"{name}_gt_rgb.png"
         cond_mask_out = dirs["cond_mask"] / f"{name}_cond_mask.png"
@@ -526,46 +549,73 @@ def main() -> None:
         runtime_target_mask = runtime_dir / "mask_B" / f"{name}.png"
         runtime_change_mask = runtime_dir / "bcd_mask" / f"{name}.png"
 
-        source_rgb = _load_rgb(source_image_path, int(args.resolution))
-        target_rgb = _load_rgb(target_image_path, int(args.resolution))
-        _save_rgb(source_rgb, source_rgb_out, size=int(args.eval_size))
-        _save_rgb(target_rgb, gt_rgb_out, size=int(args.eval_size))
-
-        source_ids = _load_semantic_ids(
-            source_mask_path,
-            size=int(args.resolution),
-            num_labels=int(args.num_labels),
-            semantic_rgb_mode=str(args.semantic_rgb_mode),
-        )
-        target_ids = _load_semantic_ids(
-            target_mask_path,
-            size=int(args.resolution),
-            num_labels=int(args.num_labels),
-            semantic_rgb_mode=str(args.semantic_rgb_mode),
-        )
-        if change_mask_path is not None:
-            change_mask = _load_change_mask(
-                change_mask_path,
-                size=int(args.resolution),
-                mode=str(args.binary_change_mode),
-            )
-            change_mask_source = str(change_mask_path)
-        else:
-            change_mask = _derive_official_change_mask(source_ids, target_ids)
-            change_mask_source = "derived_from_source_target_masks"
-
-        _save_l(source_ids, runtime_source_mask)
-        _save_l(target_ids, runtime_target_mask)
-        _save_l(change_mask, runtime_change_mask)
-        cond_ids, cond_palette_u8 = _vistar_change_condition(target_ids, change_mask)
-        _save_mask_vis(cond_ids, cond_mask_out, cond_palette_u8)
-        _save_mask_vis(cond_ids, cond_mask_official_out, cond_palette_u8)
-        _save_l(cond_ids, cond_mask_ids_out)
-        prompt_text = str(row.get("prompt") or "DreamCD semantic change image synthesis.")
-        prompt_out.write_text(prompt_text + "\n", encoding="utf-8")
-
         has_valid_prediction = _is_valid_rgb_file(pred_path, int(args.eval_size))
         status = "skipped_existing" if has_valid_prediction and not args.overwrite else "pending"
+        rgb_cache_valid = _is_valid_rgb_file(source_rgb_out, int(args.eval_size)) and _is_valid_rgb_file(
+            gt_rgb_out, int(args.eval_size)
+        )
+        final_mask_cache_valid = (
+            _is_valid_rgb_file(cond_mask_out, int(args.resolution))
+            and _is_valid_rgb_file(cond_mask_official_out, int(args.resolution))
+            and _is_valid_mask_file(cond_mask_ids_out, int(args.resolution))
+        )
+        runtime_mask_cache_valid = (
+            _is_valid_mask_file(runtime_source_mask, int(args.resolution))
+            and _is_valid_mask_file(runtime_target_mask, int(args.resolution))
+            and _is_valid_mask_file(runtime_change_mask, int(args.resolution))
+        )
+        needs_runtime_masks = status == "pending"
+        can_reuse_preprocessing = (
+            rgb_cache_valid
+            and final_mask_cache_valid
+            and (runtime_mask_cache_valid or not needs_runtime_masks)
+        )
+
+        if not _is_valid_rgb_file(source_rgb_out, int(args.eval_size)):
+            source_rgb = _load_rgb(source_image_path, int(args.resolution))
+            _save_rgb(source_rgb, source_rgb_out, size=int(args.eval_size))
+        if not _is_valid_rgb_file(gt_rgb_out, int(args.eval_size)):
+            target_rgb = _load_rgb(target_image_path, int(args.resolution))
+            _save_rgb(target_rgb, gt_rgb_out, size=int(args.eval_size))
+
+        if not can_reuse_preprocessing:
+            source_ids = _load_semantic_ids(
+                source_mask_path,
+                size=int(args.resolution),
+                num_labels=int(args.num_labels),
+                semantic_rgb_mode=str(args.semantic_rgb_mode),
+            )
+            target_ids = _load_semantic_ids(
+                target_mask_path,
+                size=int(args.resolution),
+                num_labels=int(args.num_labels),
+                semantic_rgb_mode=str(args.semantic_rgb_mode),
+            )
+            if change_mask_path is not None:
+                change_mask = _load_change_mask(
+                    change_mask_path,
+                    size=int(args.resolution),
+                    mode=str(args.binary_change_mode),
+                )
+            else:
+                change_mask = _derive_official_change_mask(source_ids, target_ids)
+
+            if needs_runtime_masks:
+                _save_l(source_ids, runtime_source_mask)
+                _save_l(target_ids, runtime_target_mask)
+                _save_l(change_mask, runtime_change_mask)
+            cond_ids, cond_palette_u8 = _vistar_change_condition(target_ids, change_mask)
+            _save_mask_vis(cond_ids, cond_mask_out, cond_palette_u8)
+            _save_mask_vis(cond_ids, cond_mask_official_out, cond_palette_u8)
+            _save_l(cond_ids, cond_mask_ids_out)
+        else:
+            cached_preprocessing += 1
+
+        change_mask_source = str(change_mask_path) if change_mask_path is not None else "derived_from_source_target_masks"
+        prompt_text = str(row.get("prompt") or "DreamCD semantic change image synthesis.")
+        if not prompt_out.is_file():
+            prompt_out.write_text(prompt_text + "\n", encoding="utf-8")
+
         record = {
             "row": row,
             "name": name,
@@ -598,7 +648,7 @@ def main() -> None:
 
     print(
         f"[run_dreamcd_manifest] preprocessing complete: "
-        f"records={len(all_records)} pending={len(pending_records)}",
+        f"records={len(all_records)} cached={cached_preprocessing} pending={len(pending_records)}",
         flush=True,
     )
 
@@ -625,10 +675,12 @@ def main() -> None:
 
         for record in pending_records:
             native_path = Path(record["native_path"])
-            if not native_path.is_file():
+            pred_path = Path(record["pred_path"])
+            if not _is_valid_rgb_file(native_path, int(args.resolution)):
                 raise FileNotFoundError(f"DreamCD did not produce expected output: {native_path}")
-            image = Image.open(native_path).convert("RGB")
-            _save_rgb(image, Path(record["pred_path"]), size=int(args.eval_size))
+            if native_path != pred_path:
+                image = Image.open(native_path).convert("RGB")
+                _save_rgb(image, pred_path, size=int(args.eval_size))
             record["status"] = "generated"
     else:
         _write_official_csv([], official_csv)

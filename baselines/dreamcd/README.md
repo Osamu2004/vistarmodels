@@ -136,7 +136,7 @@ python baselines/dreamcd/run_dreamcd_manifest.py \
   --vqvae_ckpt /root/data/weight/dreamcd/second/vqvae.ckpt \
   --resolution 256 \
   --eval_size 256 \
-  --batch_size 1 \
+  --batch_size 4 \
   --ddim_steps 200 \
   --seed 2025
 ```
@@ -165,9 +165,22 @@ The default output directory includes `noadain_vistar_layout`; an explicit
 
 Before the checkpoint is loaded, the wrapper prepares the Vistar evaluation
 files and DreamCD class-ID masks for every manifest record. Both preprocessing
-and official sampling display progress bars. With `WITH_ADAIN=0`, the generated
-`source_rgb` file is reused as DreamCD's inactive `img_B` placeholder; no
-separate target-style RGB input is written or exposed to the inference dataset.
+and official sampling display progress bars. The one-command runner keeps the
+internal masks in a persistent sibling cache at `OUTPUT_DIR.runtime`, outside
+the final Vistar result directory. A repeated run validates and reuses complete
+RGB/mask files, so already prepared samples skip image and mask preprocessing.
+Samples with a valid `pred_rgb` do not require their runtime masks to remain in
+the cache. Set `RUNTIME_DIR=/another/path` to move this cache.
+
+When `RESOLUTION` equals `EVAL_SIZE` (both default to 256), each completed
+DreamCD sample is written directly into `pred_rgb` during sampling. Results are
+therefore visible immediately and are preserved for the next resume run even if
+the full 3388-sample job is interrupted. A differing evaluation size still uses
+the runtime directory for native predictions and resizes them after sampling.
+
+With `WITH_ADAIN=0`, the generated `source_rgb` file is reused as DreamCD's
+inactive `img_B` placeholder; no separate target-style RGB input is written or
+exposed to the inference dataset.
 
 Final outputs use the same SECOND generation directory contract as
 `vistar/eval_flux2_second_gen.py`:
@@ -192,7 +205,6 @@ output_dir/
 `cond_mask*` stores the direction-specific target-class change condition, with
 ID 0 reserved for unchanged pixels, matching Vistar's SECOND generation output
 semantics. DreamCD-only native predictions, masks, patched config, CSV, and
-preview files are kept in a temporary working directory outside `output_dir`.
-Set `RUNTIME_DIR=/path/to/workdir` only when those internal artifacts need to be
-retained for debugging. The generated input manifest is stored inside the result
-directory as `output_dir/manifest.jsonl`.
+preview files are kept in the persistent `OUTPUT_DIR.runtime` sibling directory,
+not inside `output_dir`. The generated input manifest is stored inside the
+result directory as `output_dir/manifest.jsonl`.

@@ -26,7 +26,7 @@ DREAMCD_CONFIG="${DREAMCD_CONFIG:-${DREAMCD_ROOT}/configs/synthesis-wcsdm-second
 BOOTSTRAP_DREAMCD="${BOOTSTRAP_DREAMCD:-1}"
 RESOLUTION="${RESOLUTION:-256}"
 EVAL_SIZE="${EVAL_SIZE:-256}"
-BATCH_SIZE="${BATCH_SIZE:-1}"
+BATCH_SIZE="${BATCH_SIZE:-4}"
 DDIM_STEPS="${DDIM_STEPS:-200}"
 SEED="${SEED:-2025}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
@@ -56,7 +56,9 @@ else
 fi
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dreamcd_second_${SPLIT}_${DIRECTION}_${ADAIN_MODE}_vistar_layout_resize256_steps200_seed2025}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest.jsonl}"
-RUNTIME_DIR="${RUNTIME_DIR:-}"
+# Keep DreamCD's converted class-ID masks outside the final Vistar result
+# directory, but persist them so interrupted runs can skip preprocessing.
+RUNTIME_DIR="${RUNTIME_DIR:-${OUTPUT_DIR}.runtime}"
 
 if _is_truthy "${BOOTSTRAP_DREAMCD}"; then
   PYTHON_BIN="${PYTHON_BIN}" \
@@ -94,7 +96,7 @@ echo "[dreamcd_second_gen] DREAMCD_CKPT=${DREAMCD_CKPT}"
 echo "[dreamcd_second_gen] DREAMCD_VQVAE_CKPT=${DREAMCD_VQVAE_CKPT}"
 echo "[dreamcd_second_gen] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[dreamcd_second_gen] MANIFEST=${MANIFEST}"
-echo "[dreamcd_second_gen] RUNTIME_DIR=${RUNTIME_DIR:-<temporary>}"
+echo "[dreamcd_second_gen] RUNTIME_DIR=${RUNTIME_DIR}"
 echo "[dreamcd_second_gen] resolution=${RESOLUTION} eval_size=${EVAL_SIZE} batch_size=${BATCH_SIZE}"
 echo "[dreamcd_second_gen] ddim_steps=${DDIM_STEPS} seed=${SEED} max_samples=${MAX_SAMPLES} overwrite=${OVERWRITE}"
 echo "[dreamcd_second_gen] with_adain=${WITH_ADAIN} noise_cond=${NOISE_COND} change_background=${CHANGE_BACKGROUND}"
