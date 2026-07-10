@@ -32,8 +32,6 @@ MAX_SAMPLES="${MAX_SAMPLES:-0}"
 MANIFEST_MAX_SAMPLES="${MANIFEST_MAX_SAMPLES:-${MAX_SAMPLES}}"
 OVERWRITE="${OVERWRITE:-0}"
 WITH_ADAIN="${WITH_ADAIN:-1}"
-T1_STYLE_IMAGE="${T1_STYLE_IMAGE:-}"
-T2_STYLE_IMAGE="${T2_STYLE_IMAGE:-}"
 NOISE_COND="${NOISE_COND:-1}"
 CHANGE_BACKGROUND="${CHANGE_BACKGROUND:-1}"
 ONLY_BUILDING="${ONLY_BUILDING:-0}"
@@ -51,10 +49,10 @@ _is_truthy() {
 }
 
 if ! _is_truthy "${WITH_ADAIN}"; then
-  echo "[dreamcd_second_gen] WITH_ADAIN must be 1 for external known-time style inference." >&2
+  echo "[dreamcd_second_gen] WITH_ADAIN must be 1 for same-sample source-style inference." >&2
   exit 1
 fi
-ADAIN_MODE="timeadain"
+ADAIN_MODE="sourceadain"
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dreamcd_second_${SPLIT}_${DIRECTION}_${ADAIN_MODE}_vistar_layout_resize256_steps200_seed2025}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest.jsonl}"
 # Keep DreamCD's converted class-ID masks outside the final Vistar result
@@ -85,19 +83,6 @@ if [[ ! -f "${DREAMCD_VQVAE_CKPT}" ]]; then
   echo "[dreamcd_second_gen] Download weights from https://huggingface.co/tangkaii/DreamCD" >&2
   exit 1
 fi
-if [[ "${DIRECTION}" == "both" || "${DIRECTION}" == "t2_to_t1" ]]; then
-  if [[ ! -f "${T1_STYLE_IMAGE}" ]]; then
-    echo "[dreamcd_second_gen] Missing required external T1_STYLE_IMAGE: ${T1_STYLE_IMAGE:-<unset>}" >&2
-    exit 1
-  fi
-fi
-if [[ "${DIRECTION}" == "both" || "${DIRECTION}" == "t1_to_t2" ]]; then
-  if [[ ! -f "${T2_STYLE_IMAGE}" ]]; then
-    echo "[dreamcd_second_gen] Missing required external T2_STYLE_IMAGE: ${T2_STYLE_IMAGE:-<unset>}" >&2
-    exit 1
-  fi
-fi
-
 mkdir -p "${OUTPUT_DIR}"
 
 echo "[dreamcd_second_gen] SECOND_ROOT=${SECOND_ROOT}"
@@ -113,9 +98,7 @@ echo "[dreamcd_second_gen] RUNTIME_DIR=${RUNTIME_DIR}"
 echo "[dreamcd_second_gen] resolution=${RESOLUTION} eval_size=${EVAL_SIZE} batch_size=${BATCH_SIZE}"
 echo "[dreamcd_second_gen] ddim_steps=${DDIM_STEPS} seed=${SEED} max_samples=${MAX_SAMPLES} overwrite=${OVERWRITE}"
 echo "[dreamcd_second_gen] with_adain=${WITH_ADAIN} noise_cond=${NOISE_COND} change_background=${CHANGE_BACKGROUND}"
-echo "[dreamcd_second_gen] adain_style_source=external_known_time_reference"
-echo "[dreamcd_second_gen] T1_STYLE_IMAGE=${T1_STYLE_IMAGE:-<not needed>}"
-echo "[dreamcd_second_gen] T2_STYLE_IMAGE=${T2_STYLE_IMAGE:-<not needed>}"
+echo "[dreamcd_second_gen] adain_style_source=same_sample_source_image"
 echo "[dreamcd_second_gen] binary_change_mask_policy=prefer_explicit_else_semantic_label_inequality"
 echo "[dreamcd_second_gen] semantic_rgb_mode=${SEMANTIC_RGB_MODE} binary_change_mode=${BINARY_CHANGE_MODE}"
 
@@ -128,8 +111,6 @@ fi
   --second_root "${SECOND_ROOT}" \
   --split "${SPLIT}" \
   --direction "${DIRECTION}" \
-  --t1_style_image "${T1_STYLE_IMAGE}" \
-  --t2_style_image "${T2_STYLE_IMAGE}" \
   --output "${MANIFEST}" \
   "${BUILD_ARGS[@]}"
 

@@ -433,7 +433,7 @@ def main() -> None:
     parser.add_argument("--max_samples", type=int, default=0)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--num_labels", type=int, default=8)
-    _add_bool_arg(parser, "with_adain", True, "use the manifest's external known-time style image for AdaIN")
+    _add_bool_arg(parser, "with_adain", True, "use each sample's source image as its AdaIN style reference")
     _add_bool_arg(parser, "noise_cond", True, "use DreamCD noise conditioning")
     _add_bool_arg(parser, "change_background", True, "let DreamCD synthesize changed background regions")
     parser.add_argument("--only_building", action="store_true")
@@ -521,25 +521,7 @@ def main() -> None:
         target_mask_path = Path(_path_from_row(row, "target_mask"))
         change_mask_value = _path_from_row(row, "change_mask", required=False)
         change_mask_path = Path(change_mask_value) if change_mask_value else None
-        style_image_value = _path_from_row(row, "style_image", required=bool(args.with_adain))
-        style_image_path = Path(style_image_value) if style_image_value else source_image_path
-        style_time = str(row.get("style_time") or "")
-        expected_style_time = "t2" if str(row.get("direction") or "t1_to_t2") == "t1_to_t2" else "t1"
-        if args.with_adain:
-            if not style_image_path.is_file():
-                raise FileNotFoundError(f"known-time AdaIN style image not found: {style_image_path}")
-            if style_time != expected_style_time:
-                raise ValueError(
-                    f"style_time mismatch for {name}: expected {expected_style_time}, got {style_time!r}"
-                )
-            try:
-                same_as_target = os.path.samefile(style_image_path, target_image_path)
-            except OSError:
-                same_as_target = style_image_path.resolve() == target_image_path.resolve()
-            if same_as_target:
-                raise ValueError(
-                    f"Target-style leakage blocked for {name}: AdaIN style image equals real target B"
-                )
+        style_time = "t1" if str(row.get("direction") or "t1_to_t2") == "t1_to_t2" else "t2"
 
         pred_path = dirs["pred_rgb"] / f"{name}_pred_rgb.png"
         # DreamCD natively emits `resolution` square images. When that matches
@@ -561,9 +543,11 @@ def main() -> None:
         # official dataset performs its own 256px resize/crop, so separate
         # temporary RGB copies only add thousands of redundant PNG encodes.
         runtime_source_image = source_rgb_out
-        # AdaIN receives only the explicit external known-time reference. It
-        # never receives the paired real target B used for gt_rgb evaluation.
-        runtime_target_image = style_image_path if args.with_adain else source_rgb_out
+        # Keep AdaIN enabled without target leakage: for every record, img_B is
+        # the same sample's source image. Real paired target B is used only for
+        # gt_rgb evaluation and is never passed to the official dataset.
+        runtime_target_image = source_rgb_out
+        style_image_path = source_rgb_out
         runtime_source_mask = runtime_dir / "mask_A" / f"{name}.png"
         runtime_target_mask = runtime_dir / "mask_B" / f"{name}.png"
         runtime_change_mask = runtime_dir / "bcd_mask" / f"{name}.png"
@@ -646,7 +630,7 @@ def main() -> None:
             "target_mask": str(target_mask_path),
             "style_image": str(style_image_path),
             "style_time": style_time,
-            "adain_style_source": "external_known_time_reference" if args.with_adain else "disabled",
+            "adain_style_source": "same_sample_source_image" if args.with_adain else "disabled",
             "change_mask": change_mask_source,
             "change_mask_policy": change_mask_policy,
             "runtime_source_image": runtime_source_image,
@@ -735,7 +719,7 @@ def main() -> None:
         "classes": classes,
         "model": "DreamCD",
         "with_adain": bool(args.with_adain),
-        "adain_style_source": "external_known_time_reference" if args.with_adain else "disabled",
+        "adain_style_source": "same_sample_source_image" if args.with_adain else "disabled",
         "binary_change_mask_policy": "prefer_explicit_else_semantic_label_inequality",
     }
     with (output_dir / "class_map.json").open("w", encoding="utf-8") as class_map_f:

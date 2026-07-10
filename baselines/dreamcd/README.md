@@ -23,23 +23,23 @@ condition is:
 
 ```text
 source image A + source semantic mask A + target semantic mask B
-+ explicit-or-derived binary change mask + external known-target-time style reference -> synthetic image B
++ explicit-or-derived binary change mask + source-image AdaIN style -> synthetic image B
 ```
 
 The official demo uses the paired real target image B for AdaIN style transfer.
-This wrapper keeps AdaIN enabled but replaces that target with explicit external
-known-time references. `t1_to_t2` uses `T2_STYLE_IMAGE`; `t2_to_t1` uses
-`T1_STYLE_IMAGE`. Both references must live outside `SECOND_ROOT`, and the
-runner rejects any reference path equal to the paired target B. Target B remains
-available only to populate Vistar's `gt_rgb` directory for metric computation.
+This wrapper keeps AdaIN enabled but uses each record's source image instead:
+`t1_to_t2` uses that sample's T1 image, while `t2_to_t1` uses that sample's T2
+image. The paired target B remains available only to populate Vistar's `gt_rgb`
+directory for metric computation and is never passed to the official dataset.
 
 An explicit `bcd_mask`/binary-change-mask folder is preferred. When it is not
 available, the wrapper automatically derives the binary mask from
 `source_mask != target_mask` and records that policy in `prompts.jsonl`.
 
 For a fair report, describe this as a SECOND-trained closed-set DreamCD baseline
-with semantic masks, an explicit binary change mask, and external known-time
-AdaIN style conditioning. It is not the official paired-target AdaIN protocol.
+with semantic masks, an explicit-or-derived binary change mask, and same-sample
+source-image AdaIN conditioning. It is not the official paired-target AdaIN
+protocol.
 
 ## Bootstrap
 
@@ -120,15 +120,13 @@ python tools/build_dreamcd_second_manifest.py \
   --second_root /root/data/SECOND \
   --split test \
   --direction t1_to_t2 \
-  --t2_style_image /root/data/style/dreamcd/t2_reference.png \
   --output /root/data/experiment/dreamcd_second_test_manifest.jsonl
 ```
 
 If the SECOND tree contains `bcd_mask`, `change`, or another recognized binary
 change-mask folder, those masks take precedence. Otherwise the masks are derived
-from paired semantic labels. Time-style reference images must be external
-calibration or reference imagery, not copied targets from the SECOND evaluation
-tree.
+from paired semantic labels. The manifest automatically records the source image
+as the AdaIN style reference for every direction.
 
 ## Run DreamCD
 
@@ -152,15 +150,11 @@ One-command SECOND run:
 ```bash
 SECOND_ROOT=/root/data/SECOND \
 SPLIT=test \
-T1_STYLE_IMAGE=/root/data/style/dreamcd/t1_reference.png \
-T2_STYLE_IMAGE=/root/data/style/dreamcd/t2_reference.png \
 MAX_SAMPLES=5 \
 bash run_bash/dreamcd_second_gen.bash
 
 SECOND_ROOT=/root/data/SECOND \
 SPLIT=test \
-T1_STYLE_IMAGE=/root/data/style/dreamcd/t1_reference.png \
-T2_STYLE_IMAGE=/root/data/style/dreamcd/t2_reference.png \
 bash run_bash/dreamcd_second_gen.bash
 ```
 
@@ -170,8 +164,8 @@ single-split or single-direction run.
 
 Existing `pred_rgb/<name>_pred_rgb.png` files are skipped unless `OVERWRITE=1`
 is set, so interrupted runs can be resumed by rerunning the same command.
-The default output directory includes `timeadain_vistar_layout` to distinguish
-external known-time AdaIN from the official paired-target AdaIN protocol.
+The default output directory includes `sourceadain_vistar_layout` to distinguish
+same-sample source AdaIN from the official paired-target AdaIN protocol.
 
 Before the checkpoint is loaded, the wrapper prepares the Vistar evaluation
 files and DreamCD class-ID masks for every manifest record. Both preprocessing
@@ -188,8 +182,8 @@ therefore visible immediately and are preserved for the next resume run even if
 the full 3388-sample job is interrupted. A differing evaluation size still uses
 the runtime directory for native predictions and resizes them after sampling.
 
-The official runtime `img_B` field points only to the direction-specific external
-known-time reference. It never points to the paired real target B.
+The official runtime `img_B` field points to the same record's source image. It
+never points to the paired real target B.
 
 Final outputs use the same SECOND generation directory contract as
 `vistar/eval_flux2_second_gen.py`:
