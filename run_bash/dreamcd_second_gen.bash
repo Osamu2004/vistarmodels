@@ -8,11 +8,14 @@ export CUDA_VISIBLE_DEVICES
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 
-# SECOND/DreamCD-style dataset root with paired images and paired semantic masks.
+# SECOND/DreamCD-style root. DreamCD requires dense pseudo masks; SECOND
+# label1/label2 are only sparse semantic-change labels and cannot substitute.
 # Recognized layouts include:
 #   img_A/img_B/mask_A/mask_B/bcd_mask
-#   im1/im2/label1/label2/change
+#   im1/im2/label1/label2/mask_A/mask_B/change
 SECOND_ROOT="${SECOND_ROOT:-/root/data/SECOND}"
+PSEUDO_MASK_A_DIR="${PSEUDO_MASK_A_DIR:-}"
+PSEUDO_MASK_B_DIR="${PSEUDO_MASK_B_DIR:-}"
 SPLIT="${SPLIT:-test}"
 DIRECTION="${DIRECTION:-both}"
 
@@ -53,7 +56,7 @@ if ! _is_truthy "${WITH_ADAIN}"; then
   exit 1
 fi
 ADAIN_MODE="sourceadain"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dreamcd_second_${SPLIT}_${DIRECTION}_${ADAIN_MODE}_vistar_layout_resize256_steps200_seed2025}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dreamcd_second_${SPLIT}_${DIRECTION}_${ADAIN_MODE}_vistar_layout_maskcontractv2_resize256_steps200_seed2025}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest.jsonl}"
 # Keep DreamCD's converted class-ID masks outside the final Vistar result
 # directory, but persist them so interrupted runs can skip preprocessing.
@@ -99,12 +102,19 @@ echo "[dreamcd_second_gen] resolution=${RESOLUTION} eval_size=${EVAL_SIZE} batch
 echo "[dreamcd_second_gen] ddim_steps=${DDIM_STEPS} seed=${SEED} max_samples=${MAX_SAMPLES} overwrite=${OVERWRITE}"
 echo "[dreamcd_second_gen] with_adain=${WITH_ADAIN} noise_cond=${NOISE_COND} change_background=${CHANGE_BACKGROUND}"
 echo "[dreamcd_second_gen] adain_style_source=same_sample_source_image"
-echo "[dreamcd_second_gen] binary_change_mask_policy=prefer_explicit_else_semantic_label_inequality"
+echo "[dreamcd_second_gen] binary_change_mask_policy=raw_255_changed_0_unchanged"
 echo "[dreamcd_second_gen] semantic_rgb_mode=${SEMANTIC_RGB_MODE} binary_change_mode=${BINARY_CHANGE_MODE}"
 
 BUILD_ARGS=()
 if [[ "${MANIFEST_MAX_SAMPLES}" != "0" ]]; then
   BUILD_ARGS+=(--max_samples "${MANIFEST_MAX_SAMPLES}")
+fi
+if [[ -n "${PSEUDO_MASK_A_DIR}" || -n "${PSEUDO_MASK_B_DIR}" ]]; then
+  if [[ -z "${PSEUDO_MASK_A_DIR}" || -z "${PSEUDO_MASK_B_DIR}" ]]; then
+    echo "[dreamcd_second_gen] Set PSEUDO_MASK_A_DIR and PSEUDO_MASK_B_DIR together." >&2
+    exit 2
+  fi
+  BUILD_ARGS+=(--pseudo_mask_a_dir "${PSEUDO_MASK_A_DIR}" --pseudo_mask_b_dir "${PSEUDO_MASK_B_DIR}")
 fi
 
 "${PYTHON_BIN}" "${ROOT_DIR}/tools/build_dreamcd_second_manifest.py" \

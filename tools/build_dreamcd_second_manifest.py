@@ -15,8 +15,10 @@ DIRECTIONS = ("t1_to_t2", "t2_to_t1")
 class SecondDirs:
     t1_dir: Path
     t2_dir: Path
-    label1_dir: Path
-    label2_dir: Path
+    pseudo_mask_a_dir: Path
+    pseudo_mask_b_dir: Path
+    label1_dir: Path | None
+    label2_dir: Path | None
     change_dir: Path | None
 
 
@@ -64,7 +66,12 @@ def _first_dir(paths: list[Path]) -> Path | None:
     return None
 
 
-def _resolve_second_dirs(root: Path, split: str) -> SecondDirs:
+def _resolve_second_dirs(
+    root: Path,
+    split: str,
+    pseudo_mask_a_dir: Path | None = None,
+    pseudo_mask_b_dir: Path | None = None,
+) -> SecondDirs:
     t1_dir = _first_dir(
         _candidate_dirs(
             root,
@@ -105,11 +112,27 @@ def _resolve_second_dirs(root: Path, split: str) -> SecondDirs:
             split,
         )
     )
+    # DreamCD's official model consumes *dense pseudo-semantic* maps (its
+    # ``mask_A`` / ``mask_B``), not SECOND's sparse label1/label2 change maps.
+    # Deliberately never fall back from these directories to label1/label2.
+    resolved_pseudo_mask_a_dir = pseudo_mask_a_dir if pseudo_mask_a_dir is not None else _first_dir(
+        _candidate_dirs(
+            root,
+            ("mask_A", "pseudo_mask_A", "pseudo_masks_A", "dreamcd_mask_A", "dreamcd_masks_A"),
+            split,
+        )
+    )
+    resolved_pseudo_mask_b_dir = pseudo_mask_b_dir if pseudo_mask_b_dir is not None else _first_dir(
+        _candidate_dirs(
+            root,
+            ("mask_B", "pseudo_mask_B", "pseudo_masks_B", "dreamcd_mask_B", "dreamcd_masks_B"),
+            split,
+        )
+    )
     label1_dir = _first_dir(
         _candidate_dirs(
             root,
             (
-                "mask_A",
                 "label1",
                 "Label1",
                 "labels1",
@@ -126,7 +149,6 @@ def _resolve_second_dirs(root: Path, split: str) -> SecondDirs:
         _candidate_dirs(
             root,
             (
-                "mask_B",
                 "label2",
                 "Label2",
                 "labels2",
@@ -166,20 +188,25 @@ def _resolve_second_dirs(root: Path, split: str) -> SecondDirs:
         missing.append("T1/img_A")
     if t2_dir is None:
         missing.append("T2/img_B")
-    if label1_dir is None:
-        missing.append("label1/mask_A")
-    if label2_dir is None:
-        missing.append("label2/mask_B")
+    if resolved_pseudo_mask_a_dir is None:
+        missing.append("DreamCD dense pseudo mask_A")
+    if resolved_pseudo_mask_b_dir is None:
+        missing.append("DreamCD dense pseudo mask_B")
+    if (label1_dir is None) != (label2_dir is None):
+        missing.append("both SECOND label1 and label2 (only one was found)")
     if missing:
         raise NotADirectoryError(
             "Cannot find required SECOND/DreamCD folders: "
             + ", ".join(missing)
-            + ". DreamCD needs paired images and paired semantic masks."
+            + ". SECOND label1/label2 are sparse semantic-change maps and cannot replace DreamCD's dense pseudo masks. "
+            "Provide mask_A/mask_B (or --pseudo_mask_a_dir/--pseudo_mask_b_dir)."
         )
 
     return SecondDirs(
         t1_dir=t1_dir,
         t2_dir=t2_dir,
+        pseudo_mask_a_dir=resolved_pseudo_mask_a_dir,
+        pseudo_mask_b_dir=resolved_pseudo_mask_b_dir,
         label1_dir=label1_dir,
         label2_dir=label2_dir,
         change_dir=change_dir,
@@ -223,8 +250,10 @@ def _lookup_path(index: dict[str, Path], stem: str, folder: Path) -> Path:
 def _build_pairs(dirs: SecondDirs) -> list[dict[str, Path]]:
     t1_index = _index_files(dirs.t1_dir, IMAGE_EXTS)
     t2_index = _index_files(dirs.t2_dir, IMAGE_EXTS)
-    label1_index = _index_files(dirs.label1_dir, MASK_EXTS)
-    label2_index = _index_files(dirs.label2_dir, MASK_EXTS)
+    pseudo_a_index = _index_files(dirs.pseudo_mask_a_dir, MASK_EXTS)
+    pseudo_b_index = _index_files(dirs.pseudo_mask_b_dir, MASK_EXTS)
+    label1_index = _index_files(dirs.label1_dir, MASK_EXTS) if dirs.label1_dir is not None else {}
+    label2_index = _index_files(dirs.label2_dir, MASK_EXTS) if dirs.label2_dir is not None else {}
     change_index = _index_files(dirs.change_dir, MASK_EXTS) if dirs.change_dir is not None else {}
 
     pairs: list[dict[str, Path]] = []
@@ -237,9 +266,12 @@ def _build_pairs(dirs: SecondDirs) -> list[dict[str, Path]]:
             "stem": stem,
             "t1": t1_path,
             "t2": _lookup_path(t2_index, t1_path.stem, dirs.t2_dir),
-            "label1": _lookup_path(label1_index, t1_path.stem, dirs.label1_dir),
-            "label2": _lookup_path(label2_index, t1_path.stem, dirs.label2_dir),
+            "pseudo_mask_a": _lookup_path(pseudo_a_index, t1_path.stem, dirs.pseudo_mask_a_dir),
+            "pseudo_mask_b": _lookup_path(pseudo_b_index, t1_path.stem, dirs.pseudo_mask_b_dir),
         }
+        if dirs.label1_dir is not None and dirs.label2_dir is not None:
+            item["label1"] = _lookup_path(label1_index, t1_path.stem, dirs.label1_dir)
+            item["label2"] = _lookup_path(label2_index, t1_path.stem, dirs.label2_dir)
         if dirs.change_dir is not None:
             item["change"] = _lookup_path(change_index, t1_path.stem, dirs.change_dir)
         pairs.append(item)
@@ -264,12 +296,16 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--split", default="test", help="auto, train, test, val, or a custom split directory name")
     parser.add_argument("--direction", choices=["t1_to_t2", "t2_to_t1", "both"], default="both")
+    parser.add_argument("--pseudo_mask_a_dir", default="", help="Override the dense DreamCD mask_A folder.")
+    parser.add_argument("--pseudo_mask_b_dir", default="", help="Override the dense DreamCD mask_B folder.")
     parser.add_argument("--max_samples", type=int, default=0)
     args = parser.parse_args()
 
     root = Path(_normalize_wsl_unc(args.second_root)).expanduser().resolve()
     out_path = Path(_normalize_wsl_unc(args.output)).expanduser().resolve()
-    dirs = _resolve_second_dirs(root, str(args.split))
+    pseudo_mask_a_dir = Path(_normalize_wsl_unc(args.pseudo_mask_a_dir)).expanduser().resolve() if args.pseudo_mask_a_dir else None
+    pseudo_mask_b_dir = Path(_normalize_wsl_unc(args.pseudo_mask_b_dir)).expanduser().resolve() if args.pseudo_mask_b_dir else None
+    dirs = _resolve_second_dirs(root, str(args.split), pseudo_mask_a_dir, pseudo_mask_b_dir)
     selected_directions = _selected_directions(str(args.direction))
 
     pairs = _build_pairs(dirs)
@@ -282,8 +318,10 @@ def main() -> None:
             if direction == "t1_to_t2":
                 source_image = pair["t1"]
                 target_image = pair["t2"]
-                source_mask = pair["label1"]
-                target_mask = pair["label2"]
+                source_mask = pair["pseudo_mask_a"]
+                target_mask = pair["pseudo_mask_b"]
+                source_change_label = pair.get("label1")
+                target_change_label = pair.get("label2")
                 style_time = "t1"
                 prompt = (
                     "Synthesize the post-change remote-sensing image from the pre-change image, "
@@ -292,8 +330,10 @@ def main() -> None:
             else:
                 source_image = pair["t2"]
                 target_image = pair["t1"]
-                source_mask = pair["label2"]
-                target_mask = pair["label1"]
+                source_mask = pair["pseudo_mask_b"]
+                target_mask = pair["pseudo_mask_a"]
+                source_change_label = pair.get("label2")
+                target_change_label = pair.get("label1")
                 style_time = "t2"
                 prompt = (
                     "Synthesize the pre-change remote-sensing image from the post-change image, "
@@ -304,7 +344,7 @@ def main() -> None:
                 "name": f"{pair['t1'].stem}_{direction}",
                 "dataset": "SECOND",
                 "split": str(args.split),
-                "label_mode": "dreamcd_semantic_pair",
+                "model_mask_mode": "dreamcd_dense_pseudo_semantic_pair",
                 "direction": direction,
                 "source_image": str(source_image),
                 "target_image": str(target_image),
@@ -315,11 +355,18 @@ def main() -> None:
                 "adain_style_source": "same_sample_source_image",
                 "prompt": prompt,
             }
+            if source_change_label is not None and target_change_label is not None:
+                row["source_change_label"] = str(source_change_label)
+                row["target_change_label"] = str(target_change_label)
+                row["condition_label_mode"] = "official_second_directional_semantic_change"
             if "change" in pair:
                 row["change_mask"] = str(pair["change"])
                 row["change_mask_source"] = "explicit_bcd_mask"
             else:
-                row["change_mask_source"] = "derived_from_source_target_masks"
+                row["change_mask_source"] = (
+                    "derived_from_target_second_change_label"
+                    if target_change_label is not None else "derived_from_dreamcd_pseudo_semantic_inequality"
+                )
             rows.append(row)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -330,6 +377,8 @@ def main() -> None:
     print(f"[build_dreamcd_second_manifest] second_root={root}")
     print(f"[build_dreamcd_second_manifest] t1_dir={dirs.t1_dir}")
     print(f"[build_dreamcd_second_manifest] t2_dir={dirs.t2_dir}")
+    print(f"[build_dreamcd_second_manifest] pseudo_mask_a_dir={dirs.pseudo_mask_a_dir}")
+    print(f"[build_dreamcd_second_manifest] pseudo_mask_b_dir={dirs.pseudo_mask_b_dir}")
     print(f"[build_dreamcd_second_manifest] label1_dir={dirs.label1_dir}")
     print(f"[build_dreamcd_second_manifest] label2_dir={dirs.label2_dir}")
     print(f"[build_dreamcd_second_manifest] change_dir={dirs.change_dir}")

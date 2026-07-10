@@ -24,6 +24,21 @@ except ImportError as exc:
             "DreamCD environment first, then run tools/check_dreamcd_deps.py."
         ) from exc
 
+try:  # Supports both ``python file.py`` and ``python -m`` invocation.
+    from .mask_contract import (
+        changed_from_dreamcd_raw,
+        derive_dreamcd_raw_from_second_target_change,
+        derive_dreamcd_raw_from_semantic_pair,
+        normalise_binary_change_to_dreamcd_raw,
+    )
+except ImportError:
+    from mask_contract import (  # type: ignore[no-redef]
+        changed_from_dreamcd_raw,
+        derive_dreamcd_raw_from_second_target_change,
+        derive_dreamcd_raw_from_semantic_pair,
+        normalise_binary_change_to_dreamcd_raw,
+    )
+
 
 DREAMCD_PALETTE_VALUES = [
     [128, 0, 0],
@@ -36,6 +51,14 @@ DREAMCD_PALETTE_VALUES = [
     [222, 31, 7],
 ]
 DREAMCD_PALETTE_U8 = np.asarray(DREAMCD_PALETTE_VALUES, dtype=np.uint8) if np is not None else DREAMCD_PALETTE_VALUES
+SECOND_PALETTE_U8 = np.asarray(
+    [[255, 255, 255], [0, 0, 255], [128, 128, 128], [0, 128, 0],
+     [0, 255, 0], [128, 0, 0], [255, 255, 0]],
+    dtype=np.uint8,
+) if np is not None else None
+SECOND_CLASS_NAMES = [
+    "unchanged", "water", "bare_land", "low_vegetation", "tree", "buildings", "playgrounds",
+]
 VISTAR_OUTPUT_DIRS = {
     "source_rgb": "source_rgb",
     "cond_mask": "cond_mask",
@@ -46,12 +69,13 @@ VISTAR_OUTPUT_DIRS = {
     "absdiff": "absdiff",
     "prompt": "prompts",
 }
+DREAMCD_ADAPTER_CONTRACT_VERSION = 2
 
 PATH_ALIASES: dict[str, tuple[str, ...]] = {
     "source_image": ("source_image", "img_A", "image_A", "pre_image", "t1_image", "image1"),
     "target_image": ("target_image", "img_B", "image_B", "post_image", "t2_image", "image2"),
     "style_image": ("style_image", "time_style_image", "adain_style_image"),
-    "source_mask": ("source_mask", "mask_A", "label_A", "pre_mask", "t1_mask", "label1"),
+    "source_mask": ("source_mask", "mask_A", "label_A", "pre_mask", "t1_mask"),
     "target_mask": (
         "target_mask",
         "condition_image",
@@ -59,7 +83,12 @@ PATH_ALIASES: dict[str, tuple[str, ...]] = {
         "label_B",
         "post_mask",
         "t2_mask",
-        "label2",
+    ),
+    "source_change_label": (
+        "source_change_label", "source_semantic_change", "t1_change_label",
+    ),
+    "target_change_label": (
+        "target_change_label", "target_semantic_change", "t2_change_label",
     ),
     "change_mask": ("change_mask", "bcd_mask", "binary_change_mask", "mask_change", "change"),
 }
@@ -157,17 +186,32 @@ def _save_absdiff(pred_path: Path, gt_path: Path, output_path: Path, size: int) 
     Image.fromarray(np.abs(pred - gt).astype(np.uint8), mode="RGB").save(output_path)
 
 
-def _vistar_change_condition(target_ids: np.ndarray, change_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    if target_ids.shape != change_mask.shape:
+def _vistar_second_change_condition(target_change_ids: np.ndarray, raw_change_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Make VISTAR's official SECOND target-class change condition.
+
+    DreamCD's dense pseudo-semantic maps are model-internal and must never be
+    written as SECOND ground-truth conditions.  This output uses the sparse
+    target-time SECOND change labels instead.
+    """
+    if target_change_ids.shape != raw_change_mask.shape:
         raise ValueError(
-            f"target semantic/change mask shape mismatch: {target_ids.shape} vs {change_mask.shape}"
+            f"target semantic/change mask shape mismatch: {target_change_ids.shape} vs {raw_change_mask.shape}"
         )
-    # Vistar reserves id 0 for unchanged pixels. Shift DreamCD semantic ids by one
-    # so every changed target class remains distinguishable in cond_mask_ids.
-    cond_ids = np.where(change_mask == 0, target_ids.astype(np.int64) + 1, 0).astype(np.uint8)
+    if target_change_ids.size and (
+        int(target_change_ids.min()) < 0 or int(target_change_ids.max()) >= len(SECOND_CLASS_NAMES)
+    ):
+        raise ValueError("SECOND target change IDs must lie in [0, 6].")
+    cond_ids = np.where(changed_from_dreamcd_raw(raw_change_mask), target_change_ids, 0).astype(np.uint8)
+    return cond_ids, np.asarray(SECOND_PALETTE_U8, dtype=np.uint8)
+
+
+def _vistar_pseudo_condition(target_ids: np.ndarray, raw_change_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Fallback visualisation for a manually supplied non-SECOND manifest."""
+    if target_ids.shape != raw_change_mask.shape:
+        raise ValueError(f"target semantic/change mask shape mismatch: {target_ids.shape} vs {raw_change_mask.shape}")
+    cond_ids = np.where(changed_from_dreamcd_raw(raw_change_mask), target_ids.astype(np.int64) + 1, 0).astype(np.uint8)
     palette_u8 = np.concatenate(
-        [np.asarray([[255, 255, 255]], dtype=np.uint8), np.asarray(DREAMCD_PALETTE_U8, dtype=np.uint8)],
-        axis=0,
+        [np.asarray([[255, 255, 255]], dtype=np.uint8), np.asarray(DREAMCD_PALETTE_U8, dtype=np.uint8)], axis=0,
     )
     return cond_ids, palette_u8
 
@@ -244,23 +288,7 @@ def _load_semantic_ids(path: Path, *, size: int, num_labels: int, semantic_rgb_m
 def _load_change_mask(path: Path, *, size: int, mode: str) -> np.ndarray:
     mask = Image.open(path)
     arr = np.asarray(mask.convert("L"), dtype=np.uint8)
-    unique = set(int(v) for v in np.unique(arr).tolist())
-
-    if mode == "auto":
-        if unique.issubset({0, 255}):
-            official = np.where(arr == 255, 255, 0)
-        elif unique.issubset({0, 1}):
-            official = np.where(arr == 1, 0, 255)
-        else:
-            official = np.where(arr > 0, 0, 255)
-    elif mode == "white_unchanged":
-        official = np.where(arr >= 128, 255, 0)
-    elif mode == "zero_changed":
-        official = np.where(arr == 0, 0, 255)
-    elif mode == "nonzero_changed":
-        official = np.where(arr != 0, 0, 255)
-    else:
-        raise ValueError(f"Unsupported binary_change_mode={mode!r}")
+    official = normalise_binary_change_to_dreamcd_raw(arr, mode)
 
     image = Image.fromarray(official.astype(np.uint8), mode="L")
     if size > 0 and image.size != (size, size):
@@ -268,10 +296,23 @@ def _load_change_mask(path: Path, *, size: int, mode: str) -> np.ndarray:
     return np.asarray(image, dtype=np.uint8)
 
 
-def _derive_official_change_mask(mask_a: np.ndarray, mask_b: np.ndarray) -> np.ndarray:
-    if mask_a.shape != mask_b.shape:
-        raise ValueError(f"cannot derive change mask from mismatched masks: {mask_a.shape} vs {mask_b.shape}")
-    return np.where(mask_a != mask_b, 0, 255).astype(np.uint8)
+def _load_second_change_ids(path: Path, *, size: int) -> np.ndarray:
+    """Read an official sparse SECOND semantic-change map as IDs 0..6."""
+    mask = Image.open(path)
+    if mask.mode in {"L", "I", "I;16"}:
+        ids = np.asarray(mask, dtype=np.int64)
+    else:
+        rgb = np.asarray(mask.convert("RGB"), dtype=np.uint8)
+        ids = _nearest_palette_ids(rgb, np.asarray(SECOND_PALETTE_U8, dtype=np.uint8)).astype(np.int64)
+    if ids.ndim != 2:
+        raise ValueError(f"SECOND change label must be HxW: {path}")
+    if ids.size and (int(ids.min()) < 0 or int(ids.max()) >= len(SECOND_CLASS_NAMES)):
+        preview = ", ".join(str(int(value)) for value in np.unique(ids)[:20])
+        raise ValueError(f"SECOND change labels must be IDs 0..6, got [{preview}] in {path}")
+    image = Image.fromarray(ids.astype(np.uint8), mode="L")
+    if size > 0 and image.size != (size, size):
+        image = image.resize((size, size), Image.Resampling.NEAREST)
+    return np.asarray(image, dtype=np.uint8)
 
 
 def _install_lightning_compat() -> None:
@@ -448,9 +489,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--binary_change_mode",
-        choices=["auto", "white_unchanged", "zero_changed", "nonzero_changed"],
+        choices=["auto", "white_changed", "white_unchanged", "zero_changed", "nonzero_changed"],
         default="auto",
-        help="normalize input binary change mask to DreamCD convention: 0=changed, 255=unchanged",
+        help="normalize an input binary mask to DreamCD raw convention: 255=changed, 0=unchanged",
     )
     args = parser.parse_args()
 
@@ -478,6 +519,20 @@ def main() -> None:
         raise ValueError(f"manifest has no rows: {manifest}")
 
     dirs = _make_vistar_output_dirs(output_dir)
+    contract_marker_path = output_dir / "dreamcd_adapter_contract.json"
+    contract_marker = {
+        "version": DREAMCD_ADAPTER_CONTRACT_VERSION,
+        "raw_binary_change_mask": "255=changed,0=unchanged",
+        "second_condition": "official_target_directional_change_label",
+    }
+    try:
+        existing_contract_marker = json.loads(contract_marker_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        existing_contract_marker = None
+    # Existing predictions from the previous adapter were conditioned on the
+    # inverted BCD.  A missing/different marker must regenerate them instead of
+    # silently accepting valid PNG files from the wrong experiment.
+    force_contract_regeneration = existing_contract_marker != contract_marker
     temporary_runtime = None
     if args.runtime_dir:
         runtime_dir = _resolve_path(args.runtime_dir)
@@ -495,12 +550,6 @@ def main() -> None:
     all_records: list[dict[str, Any]] = []
     pending_records: list[dict[str, Any]] = []
     used_names: set[str] = set()
-    cached_preprocessing = 0
-    cond_palette_u8 = np.concatenate(
-        [np.asarray([[255, 255, 255]], dtype=np.uint8), np.asarray(DREAMCD_PALETTE_U8, dtype=np.uint8)],
-        axis=0,
-    )
-
     print(
         f"[run_dreamcd_manifest] preparing {len(rows)} manifest records; "
         "RGB evaluation files and DreamCD masks are written before model loading",
@@ -508,6 +557,12 @@ def main() -> None:
     )
     progress = tqdm(rows, desc="Preparing DreamCD inputs", total=len(rows), disable=False)
     for index, row in enumerate(progress):
+        if row.get("model_mask_mode") != "dreamcd_dense_pseudo_semantic_pair":
+            raise ValueError(
+                "DreamCD manifests must declare model_mask_mode='dreamcd_dense_pseudo_semantic_pair'. "
+                "Run tools/build_dreamcd_second_manifest.py to keep sparse SECOND label1/label2 "
+                "separate from DreamCD's dense mask_A/mask_B inputs."
+            )
         raw_name = str(row.get("name") or f"sample_{index:06d}")
         name = _safe_stem(raw_name, index)
         if name in used_names:
@@ -519,6 +574,10 @@ def main() -> None:
         target_image_path = Path(target_image_path_value)
         source_mask_path = Path(_path_from_row(row, "source_mask"))
         target_mask_path = Path(_path_from_row(row, "target_mask"))
+        source_change_label_value = _path_from_row(row, "source_change_label", required=False)
+        target_change_label_value = _path_from_row(row, "target_change_label", required=False)
+        source_change_label_path = Path(source_change_label_value) if source_change_label_value else None
+        target_change_label_path = Path(target_change_label_value) if target_change_label_value else None
         change_mask_value = _path_from_row(row, "change_mask", required=False)
         change_mask_path = Path(change_mask_value) if change_mask_value else None
         style_time = "t1" if str(row.get("direction") or "t1_to_t2") == "t1_to_t2" else "t2"
@@ -553,26 +612,12 @@ def main() -> None:
         runtime_change_mask = runtime_dir / "bcd_mask" / f"{name}.png"
 
         has_valid_prediction = _is_valid_rgb_file(pred_path, int(args.eval_size))
-        status = "skipped_existing" if has_valid_prediction and not args.overwrite else "pending"
-        rgb_cache_valid = _is_valid_rgb_file(source_rgb_out, int(args.eval_size)) and _is_valid_rgb_file(
-            gt_rgb_out, int(args.eval_size)
-        )
-        final_mask_cache_valid = (
-            _is_valid_rgb_file(cond_mask_out, int(args.resolution))
-            and _is_valid_rgb_file(cond_mask_official_out, int(args.resolution))
-            and _is_valid_mask_file(cond_mask_ids_out, int(args.resolution))
-        )
-        runtime_mask_cache_valid = (
-            _is_valid_mask_file(runtime_source_mask, int(args.resolution))
-            and _is_valid_mask_file(runtime_target_mask, int(args.resolution))
-            and _is_valid_mask_file(runtime_change_mask, int(args.resolution))
-        )
+        status = "skipped_existing" if has_valid_prediction and not args.overwrite and not force_contract_regeneration else "pending"
         needs_runtime_masks = status == "pending"
-        can_reuse_preprocessing = (
-            rgb_cache_valid
-            and final_mask_cache_valid
-            and (runtime_mask_cache_valid or not needs_runtime_masks)
-        )
+        # Version 1 of this adapter wrote an inverted raw DreamCD BCD and a
+        # pseudo-semantic VISTAR condition.  Never reuse those valid-looking
+        # PNGs: preprocessing is cheap relative to diffusion sampling and must
+        # rewrite the corrected condition/mask contract at least once.
 
         if not _is_valid_rgb_file(source_rgb_out, int(args.eval_size)):
             source_rgb = _load_rgb(source_image_path, int(args.resolution))
@@ -581,41 +626,55 @@ def main() -> None:
             target_rgb = _load_rgb(target_image_path, int(args.resolution))
             _save_rgb(target_rgb, gt_rgb_out, size=int(args.eval_size))
 
-        if not can_reuse_preprocessing:
-            source_ids = _load_semantic_ids(
-                source_mask_path,
+        source_ids = _load_semantic_ids(
+            source_mask_path,
+            size=int(args.resolution),
+            num_labels=int(args.num_labels),
+            semantic_rgb_mode=str(args.semantic_rgb_mode),
+        )
+        target_ids = _load_semantic_ids(
+            target_mask_path,
+            size=int(args.resolution),
+            num_labels=int(args.num_labels),
+            semantic_rgb_mode=str(args.semantic_rgb_mode),
+        )
+        target_change_ids = (
+            _load_second_change_ids(target_change_label_path, size=int(args.resolution))
+            if target_change_label_path is not None else None
+        )
+        if change_mask_path is not None:
+            change_mask = _load_change_mask(
+                change_mask_path,
                 size=int(args.resolution),
-                num_labels=int(args.num_labels),
-                semantic_rgb_mode=str(args.semantic_rgb_mode),
+                mode=str(args.binary_change_mode),
             )
-            target_ids = _load_semantic_ids(
-                target_mask_path,
-                size=int(args.resolution),
-                num_labels=int(args.num_labels),
-                semantic_rgb_mode=str(args.semantic_rgb_mode),
-            )
-            if change_mask_path is not None:
-                change_mask = _load_change_mask(
-                    change_mask_path,
-                    size=int(args.resolution),
-                    mode=str(args.binary_change_mode),
-                )
-            else:
-                change_mask = _derive_official_change_mask(source_ids, target_ids)
-
-            if needs_runtime_masks:
-                _save_l(source_ids, runtime_source_mask)
-                _save_l(target_ids, runtime_target_mask)
-                _save_l(change_mask, runtime_change_mask)
-            cond_ids, cond_palette_u8 = _vistar_change_condition(target_ids, change_mask)
-            _save_mask_vis(cond_ids, cond_mask_out, cond_palette_u8)
-            _save_mask_vis(cond_ids, cond_mask_official_out, cond_palette_u8)
-            _save_l(cond_ids, cond_mask_ids_out)
+            change_mask_policy = "explicit_bcd_mask"
+        elif target_change_ids is not None:
+            change_mask = derive_dreamcd_raw_from_second_target_change(target_change_ids)
+            change_mask_policy = "derived_from_second_target_change_label"
         else:
-            cached_preprocessing += 1
+            change_mask = derive_dreamcd_raw_from_semantic_pair(source_ids, target_ids)
+            change_mask_policy = "derived_from_dreamcd_pseudo_semantic_inequality"
+
+        if needs_runtime_masks:
+            _save_l(source_ids, runtime_source_mask)
+            _save_l(target_ids, runtime_target_mask)
+            _save_l(change_mask, runtime_change_mask)
+        if target_change_ids is not None:
+            cond_ids, cond_palette_u8 = _vistar_second_change_condition(target_change_ids, change_mask)
+            condition_mode = "official_second_target_change"
+            condition_class_names = SECOND_CLASS_NAMES
+        else:
+            cond_ids, cond_palette_u8 = _vistar_pseudo_condition(target_ids, change_mask)
+            condition_mode = "dreamcd_pseudo_semantic_fallback"
+            condition_class_names = ["unchanged"] + [f"dreamcd_semantic_{idx}" for idx in range(len(DREAMCD_PALETTE_U8))]
+        _save_mask_vis(cond_ids, cond_mask_out, cond_palette_u8)
+        _save_mask_vis(cond_ids, cond_mask_official_out, cond_palette_u8)
+        _save_l(cond_ids, cond_mask_ids_out)
 
         change_mask_source = str(change_mask_path) if change_mask_path is not None else "derived_from_source_target_masks"
-        change_mask_policy = "explicit_bcd_mask" if change_mask_path is not None else "semantic_label_inequality"
+        if target_change_label_path is not None and change_mask_path is None:
+            change_mask_source = str(target_change_label_path)
         prompt_text = str(row.get("prompt") or "DreamCD semantic change image synthesis.")
         if not prompt_out.is_file():
             prompt_out.write_text(prompt_text + "\n", encoding="utf-8")
@@ -628,11 +687,16 @@ def main() -> None:
             "target_image": str(target_image_path),
             "source_mask": str(source_mask_path),
             "target_mask": str(target_mask_path),
+            "source_change_label": str(source_change_label_path) if source_change_label_path is not None else "",
+            "target_change_label": str(target_change_label_path) if target_change_label_path is not None else "",
             "style_image": str(style_image_path),
             "style_time": style_time,
             "adain_style_source": "same_sample_source_image" if args.with_adain else "disabled",
             "change_mask": change_mask_source,
             "change_mask_policy": change_mask_policy,
+            "condition_mode": condition_mode,
+            "condition_class_names": condition_class_names,
+            "condition_palette_u8": cond_palette_u8,
             "runtime_source_image": runtime_source_image,
             "runtime_target_image": runtime_target_image,
             "runtime_source_mask": runtime_source_mask,
@@ -656,7 +720,7 @@ def main() -> None:
 
     print(
         f"[run_dreamcd_manifest] preprocessing complete: "
-        f"records={len(all_records)} cached={cached_preprocessing} pending={len(pending_records)}",
+        f"records={len(all_records)} pending={len(pending_records)}",
         flush=True,
     )
 
@@ -702,7 +766,15 @@ def main() -> None:
     directions = list(
         dict.fromkeys(str(record["row"].get("direction") or "t1_to_t2") for record in all_records)
     )
-    class_names = ["unchanged"] + [f"dreamcd_semantic_{idx}" for idx in range(len(DREAMCD_PALETTE_U8))]
+    condition_modes = {str(record["condition_mode"]) for record in all_records}
+    if len(condition_modes) != 1:
+        raise ValueError(
+            "A DreamCD run cannot mix official SECOND target-change conditions and pseudo-semantic fallbacks. "
+            "Use one manifest type per output directory."
+        )
+    condition_mode = next(iter(condition_modes))
+    class_names = list(all_records[0]["condition_class_names"])
+    cond_palette_u8 = np.asarray(all_records[0]["condition_palette_u8"], dtype=np.uint8)
     classes = [
         {"id": idx, "name": class_names[idx], "rgb": cond_palette_u8[idx].tolist()}
         for idx in range(len(cond_palette_u8))
@@ -712,15 +784,16 @@ def main() -> None:
         "split": str(all_records[0]["row"].get("split") or "unknown"),
         "task": "bidirectional_change_generation" if len(directions) > 1 else f"{directions[0]}_change_generation",
         "directions": directions,
-        "label_mode": "dreamcd_semantic_pair",
-        "eval_palette_mode": "official",
+        "label_mode": condition_mode,
+        "eval_palette_mode": "official" if condition_mode == "official_second_target_change" else "dreamcd_pseudo_not_second",
         "palette_seed": 0,
         "official_palette_for_gt": classes,
         "classes": classes,
         "model": "DreamCD",
+        "adapter_contract_version": DREAMCD_ADAPTER_CONTRACT_VERSION,
         "with_adain": bool(args.with_adain),
         "adain_style_source": "same_sample_source_image" if args.with_adain else "disabled",
-        "binary_change_mask_policy": "prefer_explicit_else_semantic_label_inequality",
+        "binary_change_mask_policy": "raw_255_changed_0_unchanged; prefer explicit, then SECOND target-change label, then pseudo-semantic inequality",
     }
     with (output_dir / "class_map.json").open("w", encoding="utf-8") as class_map_f:
         json.dump(class_map, class_map_f, ensure_ascii=False, indent=2)
@@ -745,11 +818,14 @@ def main() -> None:
                 "target_path": record["target_image"],
                 "source_mask_path": record["source_mask"],
                 "target_mask_path": record["target_mask"],
+                "source_change_label_path": record["source_change_label"],
+                "target_change_label_path": record["target_change_label"],
                 "style_image_path": record["style_image"],
                 "style_time": record["style_time"],
                 "adain_style_source": record["adain_style_source"],
                 "change_path": record["change_mask"],
                 "change_mask_policy": record["change_mask_policy"],
+                "condition_mode": record["condition_mode"],
                 "prompt_raw": record["prompt"],
                 "prompt_effective": record["prompt"],
                 "resize_size": int(args.eval_size),
@@ -784,6 +860,8 @@ def main() -> None:
         if missing:
             preview = "\n".join(str(path) for path in missing[:10])
             raise FileNotFoundError(f"DreamCD missing pred_rgb outputs:\n{preview}")
+
+    contract_marker_path.write_text(json.dumps(contract_marker, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     if temporary_runtime is not None:
         temporary_runtime.cleanup()

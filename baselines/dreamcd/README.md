@@ -22,7 +22,7 @@ not open-set and it is not a text-driven open-vocabulary model. Its inference
 condition is:
 
 ```text
-source image A + source semantic mask A + target semantic mask B
+source image A + dense pseudo-semantic mask A + dense pseudo-semantic mask B
 + explicit-or-derived binary change mask + source-image AdaIN style -> synthetic image B
 ```
 
@@ -32,14 +32,22 @@ This wrapper keeps AdaIN enabled but uses each record's source image instead:
 image. The paired target B remains available only to populate Vistar's `gt_rgb`
 directory for metric computation and is never passed to the official dataset.
 
-An explicit `bcd_mask`/binary-change-mask folder is preferred. When it is not
-available, the wrapper automatically derives the binary mask from
-`source_mask != target_mask` and records that policy in `prompts.jsonl`.
+DreamCD's raw binary-mask contract is **255 = changed, 0 = unchanged**.  This
+is the convention consumed by the official loader and its DDIM source-copy
+mask. An explicit `bcd_mask` is preferred. When it is unavailable, the wrapper
+derives the raw BCD from the sparse SECOND target-change map when available,
+otherwise from `dense_pseudo_mask_A != dense_pseudo_mask_B`.
+
+Important: standard SECOND `label1/label2` are sparse directional *semantic
+change* labels, not dense T1/T2 semantic segmentation masks. They cannot be
+passed as DreamCD's `mask_A/mask_B`. The adapter requires DreamCD-compatible
+dense pseudo masks for model inference, while it uses the SECOND target-change
+label separately to write VISTAR's official `cond_mask_ids`.
 
 For a fair report, describe this as a SECOND-trained closed-set DreamCD baseline
-with semantic masks, an explicit-or-derived binary change mask, and same-sample
-source-image AdaIN conditioning. It is not the official paired-target AdaIN
-protocol.
+with dense pseudo-semantic masks, an explicit-or-derived binary change mask,
+and same-sample source-image AdaIN conditioning. It is not the official
+paired-target AdaIN protocol.
 
 ## Bootstrap
 
@@ -109,10 +117,11 @@ The manifest builder recognizes the official DreamCD example layout:
 img_A/img_B/mask_A/mask_B/bcd_mask
 ```
 
-and common SECOND-style names:
+and a SECOND tree containing *both* its directional labels and DreamCD's
+dense pseudo masks:
 
 ```text
-im1/im2/label1/label2/change
+im1/im2/label1/label2/mask_A/mask_B/change
 ```
 
 ```bash
@@ -123,10 +132,19 @@ python tools/build_dreamcd_second_manifest.py \
   --output /root/data/experiment/dreamcd_second_test_manifest.jsonl
 ```
 
-If the SECOND tree contains `bcd_mask`, `change`, or another recognized binary
-change-mask folder, those masks take precedence. Otherwise the masks are derived
-from paired semantic labels. The manifest automatically records the source image
-as the AdaIN style reference for every direction.
+If the pseudo masks live outside the SECOND root, pass both
+`--pseudo_mask_a_dir` and `--pseudo_mask_b_dir`. A root containing only
+`im1/im2/label1/label2` is deliberately rejected: using sparse change labels as
+full semantic masks silently corrupts DreamCD's condition. If the tree contains
+`bcd_mask`, `change`, or another recognized binary-change folder, it takes
+precedence. The manifest automatically records the source image as the AdaIN
+style reference for every direction.
+
+Validate the official 255=change convention without loading a checkpoint:
+
+```bash
+python tools/check_dreamcd_mask_contract.py --dreamcd_root third_party/DreamCD
+```
 
 ## Run DreamCD
 
@@ -167,14 +185,14 @@ is set, so interrupted runs can be resumed by rerunning the same command.
 The default output directory includes `sourceadain_vistar_layout` to distinguish
 same-sample source AdaIN from the official paired-target AdaIN protocol.
 
-Before the checkpoint is loaded, the wrapper prepares the Vistar evaluation
-files and DreamCD class-ID masks for every manifest record. Both preprocessing
-and official sampling display progress bars. The one-command runner keeps the
-internal masks in a persistent sibling cache at `OUTPUT_DIR.runtime`, outside
-the final Vistar result directory. A repeated run validates and reuses complete
-RGB/mask files, so already prepared samples skip image and mask preprocessing.
-Samples with a valid `pred_rgb` do not require their runtime masks to remain in
-the cache. Set `RUNTIME_DIR=/another/path` to move this cache.
+Before the checkpoint is loaded, the wrapper prepares VISTAR evaluation files
+and DreamCD class-ID masks for every manifest record. Both preprocessing and
+official sampling display progress bars. The one-command runner keeps internal
+masks in a persistent sibling cache at `OUTPUT_DIR.runtime`, outside the final
+VISTAR result directory. Existing prediction images still skip diffusion
+sampling, but mask preprocessing is deliberately regenerated to invalidate the
+old inverted-mask adapter outputs. Set `RUNTIME_DIR=/another/path` to move this
+cache.
 
 When `RESOLUTION` equals `EVAL_SIZE` (both default to 256), each completed
 DreamCD sample is written directly into `pred_rgb` during sampling. Results are
@@ -205,9 +223,9 @@ output_dir/
   prompts.jsonl
 ```
 
-`cond_mask*` stores the direction-specific target-class change condition, with
-ID 0 reserved for unchanged pixels, matching Vistar's SECOND generation output
-semantics. DreamCD-only native predictions, masks, patched config, CSV, and
-preview files are kept in the persistent `OUTPUT_DIR.runtime` sibling directory,
-not inside `output_dir`. The generated input manifest is stored inside the
-result directory as `output_dir/manifest.jsonl`.
+When SECOND directional labels are present, `cond_mask*` stores the official
+target-class semantic change condition with ID 0 reserved for unchanged pixels.
+DreamCD-only native predictions, masks, patched config, CSV, and preview files
+are kept in the persistent `OUTPUT_DIR.runtime` sibling directory, not inside
+`output_dir`. The generated input manifest is stored inside the result directory
+as `output_dir/manifest.jsonl`.
