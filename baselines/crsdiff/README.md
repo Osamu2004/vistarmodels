@@ -134,13 +134,12 @@ Default output:
 The output path intentionally keeps its legacy `val` name so an existing
 val-only CRS-Diff run can be continued without copying or regenerating its
 predictions. LoveDA val samples keep their old names; train samples are prefixed
-with `train_`. With `OVERWRITE=0`, valid val predictions are skipped and only
-missing train predictions are generated.
-
-For the existing CRS-Diff result, run the dedicated continuation script:
+with `train_`. The main bash defaults to `OVERWRITE=0`, so rerunning it
+automatically skips valid val predictions and generates only missing train
+predictions:
 
 ```bash
-bash run_bash/crsdiff_loveda_train_val_continue.bash
+bash run_bash/crsdiff_loveda_gen.bash
 ```
 
 By default the script verifies that the source contains 2,522 train and 1,669
