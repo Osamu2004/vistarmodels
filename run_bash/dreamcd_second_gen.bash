@@ -13,8 +13,8 @@ export TQDM_DISABLE=0
 #   img_A/img_B/mask_A/mask_B/bcd_mask
 #   im1/im2/label1/label2/change
 SECOND_ROOT="${SECOND_ROOT:-/root/data/SECOND}"
-SPLIT="${SPLIT:-auto}"
-DIRECTION="${DIRECTION:-t1_to_t2}"
+SPLIT="${SPLIT:-test}"
+DIRECTION="${DIRECTION:-both}"
 ALLOW_MISSING_CHANGE_MASK="${ALLOW_MISSING_CHANGE_MASK:-1}"
 
 DREAMCD_ROOT="${DREAMCD_ROOT:-${ROOT_DIR}/third_party/DreamCD}"
@@ -53,8 +53,9 @@ if _is_truthy "${WITH_ADAIN}"; then
 else
   ADAIN_MODE="noadain"
 fi
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dreamcd_second_${SPLIT}_${DIRECTION}_${ADAIN_MODE}_resize256_steps200_seed2025}"
-MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_second.jsonl}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dreamcd_second_${SPLIT}_${DIRECTION}_${ADAIN_MODE}_vistar_layout_resize256_steps200_seed2025}"
+MANIFEST="${MANIFEST:-${OUTPUT_DIR}.manifest.jsonl}"
+RUNTIME_DIR="${RUNTIME_DIR:-}"
 
 if _is_truthy "${BOOTSTRAP_DREAMCD}"; then
   PYTHON_BIN="${PYTHON_BIN}" \
@@ -91,6 +92,7 @@ echo "[dreamcd_second_gen] DREAMCD_CKPT=${DREAMCD_CKPT}"
 echo "[dreamcd_second_gen] DREAMCD_VQVAE_CKPT=${DREAMCD_VQVAE_CKPT}"
 echo "[dreamcd_second_gen] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[dreamcd_second_gen] MANIFEST=${MANIFEST}"
+echo "[dreamcd_second_gen] RUNTIME_DIR=${RUNTIME_DIR:-<temporary>}"
 echo "[dreamcd_second_gen] resolution=${RESOLUTION} eval_size=${EVAL_SIZE} batch_size=${BATCH_SIZE}"
 echo "[dreamcd_second_gen] ddim_steps=${DDIM_STEPS} seed=${SEED} max_samples=${MAX_SAMPLES} overwrite=${OVERWRITE}"
 echo "[dreamcd_second_gen] with_adain=${WITH_ADAIN} noise_cond=${NOISE_COND} change_background=${CHANGE_BACKGROUND}"
@@ -114,6 +116,9 @@ fi
 EXTRA_ARGS=()
 if [[ "${MAX_SAMPLES}" != "0" ]]; then
   EXTRA_ARGS+=(--max_samples "${MAX_SAMPLES}")
+fi
+if [[ -n "${RUNTIME_DIR}" ]]; then
+  EXTRA_ARGS+=(--runtime_dir "${RUNTIME_DIR}")
 fi
 if _is_truthy "${OVERWRITE}"; then
   EXTRA_ARGS+=(--overwrite)

@@ -72,7 +72,10 @@ SECOND_ROOT=/root/data/SECOND bash run_bash/dreamcd_second_gen.bash
 
 DreamCD target-B AdaIN is disabled by default, so the real target image is not
 used as an inference style condition. Set `WITH_ADAIN=1` only when intentionally
-reproducing the official demo behavior.
+reproducing the official demo behavior. Its final SECOND result directory uses
+the exact Vistar image-folder contract (`source_rgb`, `cond_mask`,
+`cond_mask_official`, `cond_mask_ids`, `gt_rgb`, `pred_rgb`, `absdiff`, and
+`prompts`); DreamCD runtime artifacts stay outside that directory.
 
 Run PLACE on the same LoveDA generation manifest:
 

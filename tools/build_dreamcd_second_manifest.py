@@ -262,8 +262,8 @@ def main() -> None:
     )
     parser.add_argument("--second_root", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--split", default="auto", help="auto, train, test, val, or a custom split directory name")
-    parser.add_argument("--direction", choices=["t1_to_t2", "t2_to_t1", "both"], default="t1_to_t2")
+    parser.add_argument("--split", default="test", help="auto, train, test, val, or a custom split directory name")
+    parser.add_argument("--direction", choices=["t1_to_t2", "t2_to_t1", "both"], default="both")
     parser.add_argument("--max_samples", type=int, default=0)
     parser.add_argument(
         "--allow_missing_change_mask",
@@ -293,20 +293,31 @@ def main() -> None:
                 target_image = pair["t2"]
                 source_mask = pair["label1"]
                 target_mask = pair["label2"]
+                prompt = (
+                    "Synthesize the post-change remote-sensing image from the pre-change image, "
+                    "post-change semantic mask, and binary change mask."
+                )
             else:
                 source_image = pair["t2"]
                 target_image = pair["t1"]
                 source_mask = pair["label2"]
                 target_mask = pair["label1"]
+                prompt = (
+                    "Synthesize the pre-change remote-sensing image from the post-change image, "
+                    "pre-change semantic mask, and binary change mask."
+                )
 
             row = {
-                "name": f"{pair['stem']}_{direction}",
+                "name": f"{pair['t1'].stem}_{direction}",
+                "dataset": "SECOND",
+                "split": str(args.split),
+                "label_mode": "dreamcd_semantic_pair",
                 "direction": direction,
                 "source_image": str(source_image),
                 "target_image": str(target_image),
                 "source_mask": str(source_mask),
                 "target_mask": str(target_mask),
-                "prompt": "Synthesize the target-time remote-sensing image from the source image, target semantic mask, and binary change mask.",
+                "prompt": prompt,
             }
             if "change" in pair:
                 row["change_mask"] = str(pair["change"])

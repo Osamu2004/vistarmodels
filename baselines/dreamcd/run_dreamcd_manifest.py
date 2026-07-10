@@ -6,6 +6,7 @@ import os
 import random
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,16 @@ DREAMCD_PALETTE_VALUES = [
     [222, 31, 7],
 ]
 DREAMCD_PALETTE_U8 = np.asarray(DREAMCD_PALETTE_VALUES, dtype=np.uint8) if np is not None else DREAMCD_PALETTE_VALUES
+VISTAR_OUTPUT_DIRS = {
+    "source_rgb": "source_rgb",
+    "cond_mask": "cond_mask",
+    "cond_mask_official": "cond_mask_official",
+    "cond_mask_ids": "cond_mask_ids",
+    "gt_rgb": "gt_rgb",
+    "pred_rgb": "pred_rgb",
+    "absdiff": "absdiff",
+    "prompt": "prompts",
+}
 
 PATH_ALIASES: dict[str, tuple[str, ...]] = {
     "source_image": ("source_image", "img_A", "image_A", "pre_image", "t1_image", "image1"),
@@ -132,10 +143,39 @@ def _save_l(mask: np.ndarray, path: Path) -> None:
     Image.fromarray(mask.astype(np.uint8), mode="L").save(path)
 
 
-def _save_mask_vis(mask_ids: np.ndarray, path: Path) -> None:
-    ids = mask_ids.astype(np.int64).clip(0, len(DREAMCD_PALETTE_U8) - 1)
+def _save_mask_vis(mask_ids: np.ndarray, path: Path, palette_u8: np.ndarray) -> None:
+    ids = mask_ids.astype(np.int64).clip(0, len(palette_u8) - 1)
     path.parent.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(DREAMCD_PALETTE_U8[ids], mode="RGB").save(path)
+    Image.fromarray(palette_u8[ids], mode="RGB").save(path)
+
+
+def _save_absdiff(pred_path: Path, gt_path: Path, output_path: Path, size: int) -> None:
+    pred = np.asarray(_load_rgb(pred_path, size), dtype=np.int16)
+    gt = np.asarray(_load_rgb(gt_path, size), dtype=np.int16)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(np.abs(pred - gt).astype(np.uint8), mode="RGB").save(output_path)
+
+
+def _vistar_change_condition(target_ids: np.ndarray, change_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    if target_ids.shape != change_mask.shape:
+        raise ValueError(
+            f"target semantic/change mask shape mismatch: {target_ids.shape} vs {change_mask.shape}"
+        )
+    # Vistar reserves id 0 for unchanged pixels. Shift DreamCD semantic ids by one
+    # so every changed target class remains distinguishable in cond_mask_ids.
+    cond_ids = np.where(change_mask == 0, target_ids.astype(np.int64) + 1, 0).astype(np.uint8)
+    palette_u8 = np.concatenate(
+        [np.asarray([[255, 255, 255]], dtype=np.uint8), np.asarray(DREAMCD_PALETTE_U8, dtype=np.uint8)],
+        axis=0,
+    )
+    return cond_ids, palette_u8
+
+
+def _make_vistar_output_dirs(root: Path) -> dict[str, Path]:
+    dirs = {key: root / dirname for key, dirname in VISTAR_OUTPUT_DIRS.items()}
+    for path in dirs.values():
+        path.mkdir(parents=True, exist_ok=True)
+    return dirs
 
 
 def _is_valid_rgb_file(path: Path, size: int) -> bool:
@@ -253,12 +293,12 @@ def _install_torch_load_compat() -> None:
     torch.load = compat_load  # type: ignore[assignment]
 
 
-def _make_patched_config(config_path: Path, vqvae_ckpt: Path, output_dir: Path) -> Path:
+def _make_patched_config(config_path: Path, vqvae_ckpt: Path, runtime_dir: Path) -> Path:
     from omegaconf import OmegaConf
 
     config = OmegaConf.load(str(config_path))
     config.model.params.first_stage_config.params.ckpt_path = str(vqvae_ckpt)
-    patched_path = output_dir / "runtime" / "dreamcd_config_patched.yaml"
+    patched_path = runtime_dir / "dreamcd_config_patched.yaml"
     patched_path.parent.mkdir(parents=True, exist_ok=True)
     OmegaConf.save(config=config, f=str(patched_path))
     return patched_path
@@ -357,6 +397,11 @@ def main() -> None:
     parser.add_argument("--dreamcd_root", default="third_party/DreamCD")
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output_dir", required=True)
+    parser.add_argument(
+        "--runtime_dir",
+        default="",
+        help="optional DreamCD working directory; defaults to a temporary directory outside output_dir",
+    )
     parser.add_argument("--config", default="", help="defaults to <dreamcd_root>/configs/synthesis-wcsdm-second.yaml")
     parser.add_argument("--ckpt", default="", help="defaults to <dreamcd_root>/checkpoints/second/ldm.ckpt")
     parser.add_argument("--vqvae_ckpt", default="", help="defaults to <dreamcd_root>/checkpoints/second/vqvae.ckpt")
@@ -409,26 +454,20 @@ def main() -> None:
     if not rows:
         raise ValueError(f"manifest has no rows: {manifest}")
 
-    for subdir in (
-        "pred_rgb",
-        "pred_rgb_native",
-        "source_rgb",
-        "gt_rgb",
-        "cond_mask",
-        "source_mask",
-        "target_mask",
-        "change_mask",
-        "runtime/img_A",
-        "runtime/img_B",
-        "runtime/mask_A",
-        "runtime/mask_B",
-        "runtime/bcd_mask",
-    ):
-        (output_dir / subdir).mkdir(parents=True, exist_ok=True)
+    dirs = _make_vistar_output_dirs(output_dir)
+    temporary_runtime = None
+    if args.runtime_dir:
+        runtime_dir = _resolve_path(args.runtime_dir)
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        temporary_runtime = tempfile.TemporaryDirectory(prefix="dreamcd_runtime_")
+        runtime_dir = Path(temporary_runtime.name)
+    for subdir in ("img_A", "img_B", "mask_A", "mask_B", "bcd_mask", "pred_rgb_native", "preview"):
+        (runtime_dir / subdir).mkdir(parents=True, exist_ok=True)
 
-    patched_config = _make_patched_config(config_path, vqvae_ckpt, output_dir)
-    official_csv = output_dir / "runtime" / "dreamcd_sample_list.txt"
-    preview_path = output_dir / "preview"
+    patched_config = _make_patched_config(config_path, vqvae_ckpt, runtime_dir)
+    official_csv = runtime_dir / "dreamcd_sample_list.txt"
+    preview_path = runtime_dir / "preview"
 
     all_records: list[dict[str, Any]] = []
     pending_records: list[dict[str, Any]] = []
@@ -442,37 +481,37 @@ def main() -> None:
         used_names.add(name)
 
         source_image_path = Path(_path_from_row(row, "source_image"))
-        target_image_path_value = _path_from_row(row, "target_image", required=bool(args.with_adain))
-        target_image_path = Path(target_image_path_value) if target_image_path_value else source_image_path
+        target_image_path_value = _path_from_row(row, "target_image")
+        target_image_path = Path(target_image_path_value)
         source_mask_path = Path(_path_from_row(row, "source_mask"))
         target_mask_path = Path(_path_from_row(row, "target_mask"))
         change_mask_value = _path_from_row(row, "change_mask", required=False)
         change_mask_path = Path(change_mask_value) if change_mask_value else None
 
-        pred_path = output_dir / "pred_rgb" / f"{name}_pred_rgb.png"
-        native_path = output_dir / "pred_rgb_native" / f"{name}_pred_rgb_{args.resolution}.png"
-        source_rgb_out = output_dir / "source_rgb" / f"{name}_source_rgb.png"
-        gt_rgb_out = output_dir / "gt_rgb" / f"{name}_gt_rgb.png"
-        cond_mask_out = output_dir / "cond_mask" / f"{name}_cond_mask.png"
-        source_mask_out = output_dir / "source_mask" / f"{name}_source_mask.png"
-        target_mask_out = output_dir / "target_mask" / f"{name}_target_mask.png"
-        change_mask_out = output_dir / "change_mask" / f"{name}_change_mask.png"
+        pred_path = dirs["pred_rgb"] / f"{name}_pred_rgb.png"
+        native_path = runtime_dir / "pred_rgb_native" / f"{name}_pred_rgb_{args.resolution}.png"
+        source_rgb_out = dirs["source_rgb"] / f"{name}_source_rgb.png"
+        gt_rgb_out = dirs["gt_rgb"] / f"{name}_gt_rgb.png"
+        cond_mask_out = dirs["cond_mask"] / f"{name}_cond_mask.png"
+        cond_mask_official_out = dirs["cond_mask_official"] / f"{name}_cond_mask_official.png"
+        cond_mask_ids_out = dirs["cond_mask_ids"] / f"{name}_cond_mask_ids.png"
+        absdiff_out = dirs["absdiff"] / f"{name}_absdiff.png"
+        prompt_out = dirs["prompt"] / f"{name}.txt"
 
-        runtime_source_image = output_dir / "runtime/img_A" / f"{name}.png"
-        runtime_target_image = output_dir / "runtime/img_B" / f"{name}.png"
-        runtime_source_mask = output_dir / "runtime/mask_A" / f"{name}.png"
-        runtime_target_mask = output_dir / "runtime/mask_B" / f"{name}.png"
-        runtime_change_mask = output_dir / "runtime/bcd_mask" / f"{name}.png"
+        runtime_source_image = runtime_dir / "img_A" / f"{name}.png"
+        runtime_target_image = runtime_dir / "img_B" / f"{name}.png"
+        runtime_source_mask = runtime_dir / "mask_A" / f"{name}.png"
+        runtime_target_mask = runtime_dir / "mask_B" / f"{name}.png"
+        runtime_change_mask = runtime_dir / "bcd_mask" / f"{name}.png"
 
         source_rgb = _load_rgb(source_image_path, int(args.resolution))
-        target_rgb = _load_rgb(target_image_path, int(args.resolution)) if target_image_path_value else source_rgb
+        target_rgb = _load_rgb(target_image_path, int(args.resolution))
         runtime_target_rgb = target_rgb if args.with_adain else source_rgb
         _save_rgb(source_rgb, runtime_source_image)
         # Keep real target B out of the official inference input unless AdaIN is explicitly enabled.
         _save_rgb(runtime_target_rgb, runtime_target_image)
         _save_rgb(source_rgb, source_rgb_out, size=int(args.eval_size))
-        if target_image_path_value:
-            _save_rgb(target_rgb, gt_rgb_out, size=int(args.eval_size))
+        _save_rgb(target_rgb, gt_rgb_out, size=int(args.eval_size))
 
         source_ids = _load_semantic_ids(
             source_mask_path,
@@ -500,10 +539,12 @@ def main() -> None:
         _save_l(source_ids, runtime_source_mask)
         _save_l(target_ids, runtime_target_mask)
         _save_l(change_mask, runtime_change_mask)
-        _save_l(source_ids, source_mask_out)
-        _save_l(target_ids, target_mask_out)
-        _save_l(change_mask, change_mask_out)
-        _save_mask_vis(target_ids, cond_mask_out)
+        cond_ids, cond_palette_u8 = _vistar_change_condition(target_ids, change_mask)
+        _save_mask_vis(cond_ids, cond_mask_out, cond_palette_u8)
+        _save_mask_vis(cond_ids, cond_mask_official_out, cond_palette_u8)
+        _save_l(cond_ids, cond_mask_ids_out)
+        prompt_text = str(row.get("prompt") or "DreamCD semantic change image synthesis.")
+        prompt_out.write_text(prompt_text + "\n", encoding="utf-8")
 
         has_valid_prediction = _is_valid_rgb_file(pred_path, int(args.eval_size))
         status = "skipped_existing" if has_valid_prediction and not args.overwrite else "pending"
@@ -512,7 +553,7 @@ def main() -> None:
             "name": name,
             "raw_name": raw_name,
             "source_image": str(source_image_path),
-            "target_image": str(target_image_path) if target_image_path_value else "",
+            "target_image": str(target_image_path),
             "source_mask": str(source_mask_path),
             "target_mask": str(target_mask_path),
             "change_mask": change_mask_source,
@@ -522,11 +563,13 @@ def main() -> None:
             "runtime_target_mask": runtime_target_mask,
             "runtime_change_mask": runtime_change_mask,
             "source_rgb": source_rgb_out,
-            "gt_rgb": gt_rgb_out if target_image_path_value else "",
+            "gt_rgb": gt_rgb_out,
             "cond_mask": cond_mask_out,
-            "source_mask_out": source_mask_out,
-            "target_mask_out": target_mask_out,
-            "change_mask_out": change_mask_out,
+            "cond_mask_official": cond_mask_official_out,
+            "cond_mask_ids": cond_mask_ids_out,
+            "absdiff": absdiff_out,
+            "prompt_path": prompt_out,
+            "prompt": prompt_text,
             "pred_path": pred_path,
             "native_path": native_path,
             "status": status,
@@ -565,33 +608,72 @@ def main() -> None:
     else:
         _write_official_csv([], official_csv)
 
-    resolved_manifest = output_dir / "manifest_resolved.jsonl"
-    with resolved_manifest.open("w", encoding="utf-8") as manifest_f:
+    for record in all_records:
+        pred_path = Path(record["pred_path"])
+        gt_path_value = record["gt_rgb"]
+        if pred_path.is_file() and Path(gt_path_value).is_file():
+            _save_absdiff(pred_path, Path(gt_path_value), Path(record["absdiff"]), int(args.eval_size))
+
+    directions = list(
+        dict.fromkeys(str(record["row"].get("direction") or "t1_to_t2") for record in all_records)
+    )
+    class_names = ["unchanged"] + [f"dreamcd_semantic_{idx}" for idx in range(len(DREAMCD_PALETTE_U8))]
+    classes = [
+        {"id": idx, "name": class_names[idx], "rgb": cond_palette_u8[idx].tolist()}
+        for idx in range(len(cond_palette_u8))
+    ]
+    class_map = {
+        "dataset": "SECOND",
+        "split": str(all_records[0]["row"].get("split") or "unknown"),
+        "task": "bidirectional_change_generation" if len(directions) > 1 else f"{directions[0]}_change_generation",
+        "directions": directions,
+        "label_mode": "dreamcd_semantic_pair",
+        "eval_palette_mode": "official",
+        "palette_seed": 0,
+        "official_palette_for_gt": classes,
+        "classes": classes,
+        "model": "DreamCD",
+        "with_adain": bool(args.with_adain),
+    }
+    with (output_dir / "class_map.json").open("w", encoding="utf-8") as class_map_f:
+        json.dump(class_map, class_map_f, ensure_ascii=False, indent=2)
+
+    for direction in directions:
+        direction_prompt = next(
+            record["prompt"]
+            for record in all_records
+            if str(record["row"].get("direction") or "t1_to_t2") == direction
+        )
+        (output_dir / f"prompt_{direction}_raw.txt").write_text(direction_prompt + "\n", encoding="utf-8")
+        (output_dir / f"prompt_{direction}_effective.txt").write_text(direction_prompt + "\n", encoding="utf-8")
+
+    prompts_manifest = output_dir / "prompts.jsonl"
+    with prompts_manifest.open("w", encoding="utf-8") as manifest_f:
         for record in all_records:
             row = record["row"]
             payload = {
-                **row,
                 "name": record["name"],
-                "raw_name": record["raw_name"],
-                "source_image": record["source_image"],
-                "target_image": record["target_image"],
-                "source_mask": record["source_mask"],
-                "target_mask": record["target_mask"],
-                "change_mask": record["change_mask"],
+                "direction": str(row.get("direction") or "t1_to_t2"),
+                "source_path": record["source_image"],
+                "target_path": record["target_image"],
+                "source_mask_path": record["source_mask"],
+                "target_mask_path": record["target_mask"],
+                "change_path": record["change_mask"],
+                "prompt_raw": record["prompt"],
+                "prompt_effective": record["prompt"],
+                "resize_size": int(args.eval_size),
+                "resumed": record["status"] == "skipped_existing",
                 "source_rgb": str(record["source_rgb"]),
-                "gt_rgb": str(record["gt_rgb"]) if record["gt_rgb"] else "",
                 "cond_mask": str(record["cond_mask"]),
-                "source_mask_out": str(record["source_mask_out"]),
-                "target_mask_out": str(record["target_mask_out"]),
-                "change_mask_out": str(record["change_mask_out"]),
+                "cond_mask_official": str(record["cond_mask_official"]),
+                "cond_mask_ids": str(record["cond_mask_ids"]),
+                "gt_rgb": str(record["gt_rgb"]),
                 "pred_rgb": str(record["pred_path"]),
-                "pred_rgb_native": str(record["native_path"]),
+                "absdiff": str(record["absdiff"]),
                 "dreamcd_root": str(dreamcd_root),
                 "config": str(config_path),
-                "patched_config": str(patched_config),
                 "ckpt": str(ckpt_path),
                 "vqvae_ckpt": str(vqvae_ckpt),
-                "official_csv": str(official_csv),
                 "resolution": int(args.resolution),
                 "eval_size": int(args.eval_size),
                 "batch_size": int(args.batch_size),
@@ -611,6 +693,9 @@ def main() -> None:
         if missing:
             preview = "\n".join(str(path) for path in missing[:10])
             raise FileNotFoundError(f"DreamCD missing pred_rgb outputs:\n{preview}")
+
+    if temporary_runtime is not None:
+        temporary_runtime.cleanup()
 
     print(f"[run_dreamcd_manifest] wrote outputs to {output_dir}")
 

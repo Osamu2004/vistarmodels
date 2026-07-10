@@ -22,9 +22,10 @@ source image A + source semantic mask A + target semantic mask B + binary change
 
 The official code can also use the real target image B for AdaIN style transfer.
 For fair comparison, this wrapper disables that path by default: target B is not
-used as an inference condition or style reference. If target B is present in the
-manifest, it is retained only as `gt_rgb` for metric computation; the runtime
-DreamCD input receives source A as the inactive image-B placeholder.
+used as an inference condition or style reference. The target B path remains
+required only to populate Vistar's `gt_rgb` directory for metric computation;
+the runtime DreamCD input receives source A as the inactive image-B placeholder,
+so real target B is isolated from the model input by default.
 
 Set `WITH_ADAIN=1` in the one-command runner, or pass `--with_adain` directly,
 to explicitly restore the official-demo behavior that uses real target B style
@@ -112,22 +113,38 @@ SPLIT=test \
 bash run_bash/dreamcd_second_gen.bash
 ```
 
+The one-command runner defaults to the Vistar evaluation protocol:
+`SPLIT=test` and `DIRECTION=both`. Override either variable only for a targeted
+single-split or single-direction run.
+
 Existing `pred_rgb/<name>_pred_rgb.png` files are skipped unless `OVERWRITE=1`
 is set, so interrupted runs can be resumed by rerunning the same command.
-The default output directory includes `noadain`; an explicit `WITH_ADAIN=1` run
-uses an `adain` directory instead.
+The default output directory includes `noadain_vistar_layout`; an explicit
+`WITH_ADAIN=1` run uses `adain_vistar_layout` instead.
 
-Outputs are saved in a Vistar-like layout:
+Final outputs use the same SECOND generation directory contract as
+`vistar/eval_flux2_second_gen.py`:
 
 ```text
-pred_rgb/*_pred_rgb.png
-pred_rgb_native/*_pred_rgb_256.png
-source_rgb/*_source_rgb.png
-gt_rgb/*_gt_rgb.png
-cond_mask/*_cond_mask.png
-source_mask/*_source_mask.png
-target_mask/*_target_mask.png
-change_mask/*_change_mask.png
-runtime/dreamcd_sample_list.txt
-manifest_resolved.jsonl
+output_dir/
+  source_rgb/*_source_rgb.png
+  cond_mask/*_cond_mask.png
+  cond_mask_official/*_cond_mask_official.png
+  cond_mask_ids/*_cond_mask_ids.png
+  gt_rgb/*_gt_rgb.png
+  pred_rgb/*_pred_rgb.png
+  absdiff/*_absdiff.png
+  prompts/<name>.txt
+  class_map.json
+  prompt_<direction>_raw.txt
+  prompt_<direction>_effective.txt
+  prompts.jsonl
 ```
+
+`cond_mask*` stores the direction-specific target-class change condition, with
+ID 0 reserved for unchanged pixels, matching Vistar's SECOND generation output
+semantics. DreamCD-only native predictions, masks, patched config, CSV, and
+preview files are kept in a temporary working directory outside `output_dir`.
+Set `RUNTIME_DIR=/path/to/workdir` only when those internal artifacts need to be
+retained for debugging. The generated input manifest is also stored adjacent to
+the result directory rather than inside it.
