@@ -256,6 +256,22 @@ def _selected_directions(value: str) -> list[str]:
     return [value]
 
 
+def _resolve_external_style(path_text: str, *, label: str, second_root: Path) -> Path:
+    if not path_text:
+        raise ValueError(f"{label} is required for time-reference AdaIN")
+    path = Path(_normalize_wsl_unc(path_text)).expanduser().resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"{label} not found: {path}")
+    try:
+        path.relative_to(second_root)
+    except ValueError:
+        return path
+    raise ValueError(
+        f"{label} must be an external known-time reference outside SECOND_ROOT; "
+        f"refusing possible target-data style leakage: {path}"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Build a DreamCD JSONL manifest from a SECOND-style paired image/mask directory."
@@ -265,21 +281,26 @@ def main() -> None:
     parser.add_argument("--split", default="test", help="auto, train, test, val, or a custom split directory name")
     parser.add_argument("--direction", choices=["t1_to_t2", "t2_to_t1", "both"], default="both")
     parser.add_argument("--max_samples", type=int, default=0)
-    parser.add_argument(
-        "--allow_missing_change_mask",
-        action="store_true",
-        help="omit change_mask if no binary mask folder exists; run_dreamcd_manifest.py will derive it from label1/label2",
-    )
+    parser.add_argument("--t1_style_image", default="", help="external known-T1 style reference for t2_to_t1 AdaIN")
+    parser.add_argument("--t2_style_image", default="", help="external known-T2 style reference for t1_to_t2 AdaIN")
     args = parser.parse_args()
 
     root = Path(_normalize_wsl_unc(args.second_root)).expanduser().resolve()
     out_path = Path(_normalize_wsl_unc(args.output)).expanduser().resolve()
     dirs = _resolve_second_dirs(root, str(args.split))
-    if dirs.change_dir is None and not args.allow_missing_change_mask:
-        raise NotADirectoryError(
-            "Cannot find binary change mask folder. Pass --allow_missing_change_mask "
-            "to derive change masks from paired semantic masks during inference."
-        )
+    selected_directions = _selected_directions(str(args.direction))
+    t1_style_image = (
+        _resolve_external_style(str(args.t1_style_image), label="T1 style image", second_root=root)
+        if "t2_to_t1" in selected_directions
+        else None
+    )
+    t2_style_image = (
+        _resolve_external_style(str(args.t2_style_image), label="T2 style image", second_root=root)
+        if "t1_to_t2" in selected_directions
+        else None
+    )
+    if t1_style_image is not None and t2_style_image is not None and t1_style_image == t2_style_image:
+        raise ValueError("T1_STYLE_IMAGE and T2_STYLE_IMAGE must be distinct known-time references")
 
     pairs = _build_pairs(dirs)
     if int(args.max_samples) > 0:
@@ -287,12 +308,14 @@ def main() -> None:
 
     rows = []
     for pair in pairs:
-        for direction in _selected_directions(str(args.direction)):
+        for direction in selected_directions:
             if direction == "t1_to_t2":
                 source_image = pair["t1"]
                 target_image = pair["t2"]
                 source_mask = pair["label1"]
                 target_mask = pair["label2"]
+                style_image = t2_style_image
+                style_time = "t2"
                 prompt = (
                     "Synthesize the post-change remote-sensing image from the pre-change image, "
                     "post-change semantic mask, and binary change mask."
@@ -302,6 +325,8 @@ def main() -> None:
                 target_image = pair["t1"]
                 source_mask = pair["label2"]
                 target_mask = pair["label1"]
+                style_image = t1_style_image
+                style_time = "t1"
                 prompt = (
                     "Synthesize the pre-change remote-sensing image from the post-change image, "
                     "pre-change semantic mask, and binary change mask."
@@ -317,10 +342,16 @@ def main() -> None:
                 "target_image": str(target_image),
                 "source_mask": str(source_mask),
                 "target_mask": str(target_mask),
+                "style_image": str(style_image),
+                "style_time": style_time,
+                "adain_style_source": "external_known_time_reference",
                 "prompt": prompt,
             }
             if "change" in pair:
                 row["change_mask"] = str(pair["change"])
+                row["change_mask_source"] = "explicit_bcd_mask"
+            else:
+                row["change_mask_source"] = "derived_from_source_target_masks"
             rows.append(row)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -334,6 +365,8 @@ def main() -> None:
     print(f"[build_dreamcd_second_manifest] label1_dir={dirs.label1_dir}")
     print(f"[build_dreamcd_second_manifest] label2_dir={dirs.label2_dir}")
     print(f"[build_dreamcd_second_manifest] change_dir={dirs.change_dir}")
+    print(f"[build_dreamcd_second_manifest] t1_style_image={t1_style_image}")
+    print(f"[build_dreamcd_second_manifest] t2_style_image={t2_style_image}")
     print(f"[build_dreamcd_second_manifest] wrote {len(rows)} rows to {out_path}")
 
 

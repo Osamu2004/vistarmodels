@@ -22,22 +22,24 @@ not open-set and it is not a text-driven open-vocabulary model. Its inference
 condition is:
 
 ```text
-source image A + source semantic mask A + target semantic mask B + binary change mask -> synthetic image B
+source image A + source semantic mask A + target semantic mask B
++ explicit-or-derived binary change mask + external known-target-time style reference -> synthetic image B
 ```
 
-The official code can also use the real target image B for AdaIN style transfer.
-For fair comparison, this wrapper disables that path by default: target B is not
-used as an inference condition or style reference. The target B path remains
-required only to populate Vistar's `gt_rgb` directory for metric computation;
-the runtime DreamCD input receives source A as the inactive image-B placeholder,
-so real target B is isolated from the model input by default.
+The official demo uses the paired real target image B for AdaIN style transfer.
+This wrapper keeps AdaIN enabled but replaces that target with explicit external
+known-time references. `t1_to_t2` uses `T2_STYLE_IMAGE`; `t2_to_t1` uses
+`T1_STYLE_IMAGE`. Both references must live outside `SECOND_ROOT`, and the
+runner rejects any reference path equal to the paired target B. Target B remains
+available only to populate Vistar's `gt_rgb` directory for metric computation.
 
-Set `WITH_ADAIN=1` in the one-command runner, or pass `--with_adain` directly,
-to explicitly restore the official-demo behavior that uses real target B style
-information. AdaIN and non-AdaIN runs use separate default output directories.
+An explicit `bcd_mask`/binary-change-mask folder is preferred. When it is not
+available, the wrapper automatically derives the binary mask from
+`source_mask != target_mask` and records that policy in `prompts.jsonl`.
 
-For a fair report, describe DreamCD as a SECOND-trained closed-set baseline with
-semantic-mask and binary-change-mask conditioning.
+For a fair report, describe this as a SECOND-trained closed-set DreamCD baseline
+with semantic masks, an explicit binary change mask, and external known-time
+AdaIN style conditioning. It is not the official paired-target AdaIN protocol.
 
 ## Bootstrap
 
@@ -118,12 +120,15 @@ python tools/build_dreamcd_second_manifest.py \
   --second_root /root/data/SECOND \
   --split test \
   --direction t1_to_t2 \
-  --allow_missing_change_mask \
+  --t2_style_image /root/data/style/dreamcd/t2_reference.png \
   --output /root/data/experiment/dreamcd_second_test_manifest.jsonl
 ```
 
-If no binary change mask exists, `--allow_missing_change_mask` lets the runner
-derive it from `source_mask != target_mask`.
+If the SECOND tree contains `bcd_mask`, `change`, or another recognized binary
+change-mask folder, those masks take precedence. Otherwise the masks are derived
+from paired semantic labels. Time-style reference images must be external
+calibration or reference imagery, not copied targets from the SECOND evaluation
+tree.
 
 ## Run DreamCD
 
@@ -138,7 +143,8 @@ python baselines/dreamcd/run_dreamcd_manifest.py \
   --eval_size 256 \
   --batch_size 4 \
   --ddim_steps 200 \
-  --seed 2025
+  --seed 2025 \
+  --with_adain
 ```
 
 One-command SECOND run:
@@ -146,11 +152,15 @@ One-command SECOND run:
 ```bash
 SECOND_ROOT=/root/data/SECOND \
 SPLIT=test \
+T1_STYLE_IMAGE=/root/data/style/dreamcd/t1_reference.png \
+T2_STYLE_IMAGE=/root/data/style/dreamcd/t2_reference.png \
 MAX_SAMPLES=5 \
 bash run_bash/dreamcd_second_gen.bash
 
 SECOND_ROOT=/root/data/SECOND \
 SPLIT=test \
+T1_STYLE_IMAGE=/root/data/style/dreamcd/t1_reference.png \
+T2_STYLE_IMAGE=/root/data/style/dreamcd/t2_reference.png \
 bash run_bash/dreamcd_second_gen.bash
 ```
 
@@ -160,8 +170,8 @@ single-split or single-direction run.
 
 Existing `pred_rgb/<name>_pred_rgb.png` files are skipped unless `OVERWRITE=1`
 is set, so interrupted runs can be resumed by rerunning the same command.
-The default output directory includes `noadain_vistar_layout`; an explicit
-`WITH_ADAIN=1` run uses `adain_vistar_layout` instead.
+The default output directory includes `timeadain_vistar_layout` to distinguish
+external known-time AdaIN from the official paired-target AdaIN protocol.
 
 Before the checkpoint is loaded, the wrapper prepares the Vistar evaluation
 files and DreamCD class-ID masks for every manifest record. Both preprocessing
@@ -178,9 +188,8 @@ therefore visible immediately and are preserved for the next resume run even if
 the full 3388-sample job is interrupted. A differing evaluation size still uses
 the runtime directory for native predictions and resizes them after sampling.
 
-With `WITH_ADAIN=0`, the generated `source_rgb` file is reused as DreamCD's
-inactive `img_B` placeholder; no separate target-style RGB input is written or
-exposed to the inference dataset.
+The official runtime `img_B` field points only to the direction-specific external
+known-time reference. It never points to the paired real target B.
 
 Final outputs use the same SECOND generation directory contract as
 `vistar/eval_flux2_second_gen.py`:
