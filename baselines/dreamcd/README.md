@@ -48,6 +48,21 @@ bash scripts/bootstrap_dreamcd.sh
 python tools/check_dreamcd_deps.py
 ```
 
+`taming-transformers` must remain an editable source checkout. Its current
+upstream layout can produce a successful but effectively empty wheel under
+modern pip, which leads to `No module named 'taming'`. The pinned editable Git
+entry in `requirements-dreamcd.txt` avoids that failure. If a non-editable copy
+was already installed, repair it with:
+
+```bash
+python -m pip uninstall -y taming-transformers
+python -m pip install --no-deps -e \
+  'git+https://github.com/CompVis/taming-transformers.git@3ba01b241669f5ade541ce990f7650a3b8f65318#egg=taming-transformers'
+```
+
+The requirements file likewise installs the official OpenAI CLIP source rather
+than the unrelated package that can be obtained from `pip install clip`.
+
 `bootstrap_dreamcd.sh` verifies the vendored official source and downloads the
 official SECOND weights from HuggingFace by default. It retains a clone fallback
 only for older checkouts where `third_party/DreamCD` is absent:

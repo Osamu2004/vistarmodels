@@ -153,9 +153,10 @@ def main() -> int:
         try:
             import changeanywhere2_synthesis  # noqa: F401
             import ldm.data.changeanywhere2  # noqa: F401
+            import ldm.models.autoencoder  # noqa: F401
             import scripts.sample_diffusion  # noqa: F401
 
-            print("ok               DreamCD modules     synthesis/dataset/model imports work")
+            print("ok               DreamCD modules     synthesis/dataset/VQ-VAE/model imports work")
         except Exception as exc:
             print(f"MISSING required DreamCD modules     reason={exc}")
             missing_required.append(Dependency("DreamCD modules", "ldm/scripts", True, "official module imports"))
@@ -187,14 +188,32 @@ def main() -> int:
 
     if missing_required:
         print("\nMissing required packages or broken official-module imports.")
+        special_install_names = {"taming-transformers", "clip"}
         pip_missing = [
             dep
             for dep in missing_required
             if dep.pip_name not in {"torch", "torchvision", "DreamCD", "DreamCD modules"}
+            and dep.pip_name not in special_install_names
         ]
         if pip_missing:
             install = " ".join(dep.pip_name for dep in pip_missing)
             print(f"pip install {install}")
+        if any(dep.pip_name == "taming-transformers" for dep in missing_required):
+            print(
+                "The normal taming-transformers wheel can contain no importable `taming` source.\n"
+                "Repair it with the pinned editable official checkout:\n"
+                "python -m pip uninstall -y taming-transformers\n"
+                "python -m pip install --no-deps -e "
+                "'git+https://github.com/CompVis/taming-transformers.git@"
+                "3ba01b241669f5ade541ce990f7650a3b8f65318#egg=taming-transformers'"
+            )
+        if any(dep.pip_name == "clip" for dep in missing_required):
+            print(
+                "Install OpenAI CLIP (not the unrelated PyPI package named `clip`):\n"
+                "python -m pip install --no-deps --force-reinstall "
+                "'git+https://github.com/openai/CLIP.git@"
+                "d05afc436d78f1c48dc0dbf8e5980a9d471f35f6'"
+            )
         if any(dep.pip_name in {"torch", "torchvision"} for dep in missing_required):
             print("Install torch/torchvision from your CUDA-matched PyTorch channel.")
         print("DreamCD's official requirement.txt pins an old CUDA 11.1 stack; prefer a separate conda env.")
@@ -212,9 +231,9 @@ def main() -> int:
         print("For CPU-only static checking, set DREAMCD_REQUIRE_CUDA=0.")
 
     if missing_optional:
-        print("\nOptional packages missing.")
+        print("\nOptional packages missing (not required for SECOND inference).")
         install = " ".join(dep.pip_name for dep in missing_optional)
-        print(f"pip install {install}")
+        print(f"Only for official training/demo tools: pip install {install}")
 
     failed = bool(missing_required or artifact_failures or runtime_failures)
     if failed:
