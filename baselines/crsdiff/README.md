@@ -110,7 +110,7 @@ Existing `pred_rgb/<name>_pred_rgb.png` files are skipped unless `--overwrite`
 is passed. The one-command bash defaults to `BATCH_SIZE=2` and `OVERWRITE=0`,
 so interrupted runs can be resumed by rerunning the same command.
 
-## One-Command LoveDA Generation
+## One-Command LoveDA Train+Val Generation
 
 If you already have the Vistar LoveDA generation eval output, run:
 
@@ -119,10 +119,10 @@ cd /root/code/vistarmodels
 bash run_bash/crsdiff_loveda_gen.bash
 ```
 
-Default input:
+Default input is the merged Vistar LoveDA train+val generation-eval directory:
 
 ```text
-/root/data/experiment/eval_flux2_loveda_val_mask_to_rgb_gen_resize256_checkpoint1_2gpu
+/root/data/experiment/eval_loveda_gen_gen_only_step300000
 ```
 
 Default output:
@@ -130,6 +130,21 @@ Default output:
 ```text
 /root/data/experiment/crsdiff_loveda_val_mask_to_rgb_gen_resize512_steps50_scale7p5_seed0
 ```
+
+The output path intentionally keeps its legacy `val` name so an existing
+val-only CRS-Diff run can be continued without copying or regenerating its
+predictions. LoveDA val samples keep their old names; train samples are prefixed
+with `train_`. With `OVERWRITE=0`, valid val predictions are skipped and only
+missing train predictions are generated.
+
+For the existing CRS-Diff result, run the dedicated continuation script:
+
+```bash
+bash run_bash/crsdiff_loveda_train_val_continue.bash
+```
+
+By default the script verifies that the source contains 2,522 train and 1,669
+val samples. Set `VERIFY_SAMPLE_COUNTS=0` only for a partial smoke test.
 
 Small smoke test:
 

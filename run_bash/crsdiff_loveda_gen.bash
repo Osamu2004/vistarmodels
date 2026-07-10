@@ -8,13 +8,19 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 # Required layout:
 #   ${VISTAR_EVAL_DIR}/cond_mask/*_cond_mask.png
 #   ${VISTAR_EVAL_DIR}/gt_rgb/*_gt_rgb.png
-VISTAR_EVAL_DIR="${VISTAR_EVAL_DIR:-/root/data/experiment/eval_flux2_loveda_val_mask_to_rgb_gen_resize256_checkpoint1_2gpu}"
+# Vistar keeps legacy val names and prefixes train samples with "train_", so a
+# train+val source can safely continue an older val-only baseline output.
+VISTAR_EVAL_DIR="${VISTAR_EVAL_DIR:-/root/data/experiment/eval_loveda_gen_gen_only_step300000}"
 
 CRSDIFF_ROOT="${CRSDIFF_ROOT:-${ROOT_DIR}/third_party/CRS-Diff}"
 CRSDIFF_CKPT="${CRSDIFF_CKPT:-/root/data/weight/crsdiff/last.ckpt}"
 CRSDIFF_CLIP_VERSION="${CRSDIFF_CLIP_VERSION:-openai/clip-vit-large-patch14}"
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/crsdiff_loveda_val_mask_to_rgb_gen_resize512_steps50_scale7p5_seed0}"
-MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_val.jsonl}"
+MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_train_val.jsonl}"
+
+VERIFY_SAMPLE_COUNTS="${VERIFY_SAMPLE_COUNTS:-1}"
+EXPECTED_TRAIN_SAMPLES="${EXPECTED_TRAIN_SAMPLES:-2522}"
+EXPECTED_VAL_SAMPLES="${EXPECTED_VAL_SAMPLES:-1669}"
 
 BOOTSTRAP_CRSDIFF="${BOOTSTRAP_CRSDIFF:-1}"
 CONDITION_SLOT="${CONDITION_SLOT:-seg}"
@@ -46,6 +52,22 @@ if [[ ! -d "${VISTAR_EVAL_DIR}/gt_rgb" ]]; then
   echo "[crsdiff_loveda_gen] Missing GT folder: ${VISTAR_EVAL_DIR}/gt_rgb" >&2
   exit 1
 fi
+
+shopt -s nullglob
+TRAIN_MASKS=("${VISTAR_EVAL_DIR}"/cond_mask/train_*_cond_mask.png)
+ALL_MASKS=("${VISTAR_EVAL_DIR}"/cond_mask/*_cond_mask.png)
+shopt -u nullglob
+TRAIN_SAMPLE_COUNT="${#TRAIN_MASKS[@]}"
+TOTAL_SAMPLE_COUNT="${#ALL_MASKS[@]}"
+VAL_SAMPLE_COUNT="$((TOTAL_SAMPLE_COUNT - TRAIN_SAMPLE_COUNT))"
+
+if [[ "${VERIFY_SAMPLE_COUNTS}" == "1" || "${VERIFY_SAMPLE_COUNTS}" == "true" || "${VERIFY_SAMPLE_COUNTS}" == "yes" ]]; then
+  if [[ "${TRAIN_SAMPLE_COUNT}" -ne "${EXPECTED_TRAIN_SAMPLES}" || "${VAL_SAMPLE_COUNT}" -ne "${EXPECTED_VAL_SAMPLES}" ]]; then
+    echo "[crsdiff_loveda_gen] LoveDA train+val source is incomplete: train=${TRAIN_SAMPLE_COUNT}/${EXPECTED_TRAIN_SAMPLES}, val=${VAL_SAMPLE_COUNT}/${EXPECTED_VAL_SAMPLES}." >&2
+    echo "[crsdiff_loveda_gen] Populate VISTAR_EVAL_DIR with SPLITS=train,val first, or set VERIFY_SAMPLE_COUNTS=0 for a smoke test." >&2
+    exit 1
+  fi
+fi
 if [[ ! -f "${CRSDIFF_CKPT}" ]]; then
   echo "[crsdiff_loveda_gen] Missing CRS-Diff checkpoint: ${CRSDIFF_CKPT}" >&2
   echo "[crsdiff_loveda_gen] Download official weights from https://huggingface.co/Sonetto702/AeroGen/tree/main" >&2
@@ -61,6 +83,7 @@ echo "[crsdiff_loveda_gen] CRSDIFF_CKPT=${CRSDIFF_CKPT}"
 echo "[crsdiff_loveda_gen] CRSDIFF_CLIP_VERSION=${CRSDIFF_CLIP_VERSION}"
 echo "[crsdiff_loveda_gen] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[crsdiff_loveda_gen] MANIFEST=${MANIFEST}"
+echo "[crsdiff_loveda_gen] source_samples=train:${TRAIN_SAMPLE_COUNT} val:${VAL_SAMPLE_COUNT} total:${TOTAL_SAMPLE_COUNT} verify=${VERIFY_SAMPLE_COUNTS}"
 echo "[crsdiff_loveda_gen] condition_slot=${CONDITION_SLOT} resolution=${RESOLUTION} eval_size=${EVAL_SIZE} batch_size=${BATCH_SIZE}"
 echo "[crsdiff_loveda_gen] ddim_steps=${DDIM_STEPS} scale=${SCALE} strength=${STRENGTH} global_strength=${GLOBAL_STRENGTH} eta=${ETA} seed=${SEED}"
 echo "[crsdiff_loveda_gen] max_samples=${MAX_SAMPLES} overwrite=${OVERWRITE}"
