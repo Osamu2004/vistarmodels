@@ -310,6 +310,7 @@ def _run_official_dreamcd(
     config_path: Path,
     ckpt_path: Path,
     data_csv: Path,
+    sample_count: int,
     batch_size: int,
     preview_path: Path,
     seed: int,
@@ -322,6 +323,12 @@ def _run_official_dreamcd(
     with_preview: bool,
     only_building: bool,
 ) -> None:
+    print(
+        f"[run_dreamcd_manifest] loading DreamCD model and starting inference "
+        f"for {sample_count} samples; "
+        "checkpoint loading can take a few minutes",
+        flush=True,
+    )
     if str(dreamcd_root) not in sys.path:
         sys.path.insert(0, str(dreamcd_root))
 
@@ -465,7 +472,7 @@ def main() -> None:
     else:
         temporary_runtime = tempfile.TemporaryDirectory(prefix="dreamcd_runtime_")
         runtime_dir = Path(temporary_runtime.name)
-    for subdir in ("img_A", "img_B", "mask_A", "mask_B", "bcd_mask", "pred_rgb_native", "preview"):
+    for subdir in ("mask_A", "mask_B", "bcd_mask", "pred_rgb_native", "preview"):
         (runtime_dir / subdir).mkdir(parents=True, exist_ok=True)
 
     patched_config = _make_patched_config(config_path, vqvae_ckpt, runtime_dir)
@@ -476,7 +483,13 @@ def main() -> None:
     pending_records: list[dict[str, Any]] = []
     used_names: set[str] = set()
 
-    for index, row in enumerate(tqdm(rows, desc="Preparing DreamCD inputs")):
+    print(
+        f"[run_dreamcd_manifest] preparing {len(rows)} manifest records; "
+        "RGB evaluation files and DreamCD masks are written before model loading",
+        flush=True,
+    )
+    progress = tqdm(rows, desc="Preparing DreamCD inputs", total=len(rows), disable=False)
+    for index, row in enumerate(progress):
         raw_name = str(row.get("name") or f"sample_{index:06d}")
         name = _safe_stem(raw_name, index)
         if name in used_names:
@@ -501,18 +514,20 @@ def main() -> None:
         absdiff_out = dirs["absdiff"] / f"{name}_absdiff.png"
         prompt_out = dirs["prompt"] / f"{name}.txt"
 
-        runtime_source_image = runtime_dir / "img_A" / f"{name}.png"
-        runtime_target_image = runtime_dir / "img_B" / f"{name}.png"
+        # Reuse the Vistar-layout RGB outputs as official DreamCD inputs. The
+        # official dataset performs its own 256px resize/crop, so separate
+        # temporary RGB copies only add thousands of redundant PNG encodes.
+        runtime_source_image = source_rgb_out
+        # With AdaIN disabled, DreamCD never opens img_B. Keep the source path
+        # as the inactive placeholder so real target B is not exposed to the
+        # inference dataset at all.
+        runtime_target_image = gt_rgb_out if args.with_adain else source_rgb_out
         runtime_source_mask = runtime_dir / "mask_A" / f"{name}.png"
         runtime_target_mask = runtime_dir / "mask_B" / f"{name}.png"
         runtime_change_mask = runtime_dir / "bcd_mask" / f"{name}.png"
 
         source_rgb = _load_rgb(source_image_path, int(args.resolution))
         target_rgb = _load_rgb(target_image_path, int(args.resolution))
-        runtime_target_rgb = target_rgb if args.with_adain else source_rgb
-        _save_rgb(source_rgb, runtime_source_image)
-        # Keep real target B out of the official inference input unless AdaIN is explicitly enabled.
-        _save_rgb(runtime_target_rgb, runtime_target_image)
         _save_rgb(source_rgb, source_rgb_out, size=int(args.eval_size))
         _save_rgb(target_rgb, gt_rgb_out, size=int(args.eval_size))
 
@@ -581,6 +596,12 @@ def main() -> None:
             pending_records.append(record)
         all_records.append(record)
 
+    print(
+        f"[run_dreamcd_manifest] preprocessing complete: "
+        f"records={len(all_records)} pending={len(pending_records)}",
+        flush=True,
+    )
+
     if pending_records:
         _write_official_csv(pending_records, official_csv)
         _run_official_dreamcd(
@@ -588,6 +609,7 @@ def main() -> None:
             config_path=patched_config,
             ckpt_path=ckpt_path,
             data_csv=official_csv,
+            sample_count=len(pending_records),
             batch_size=int(args.batch_size),
             preview_path=preview_path,
             seed=int(args.seed),

@@ -163,6 +163,12 @@ is set, so interrupted runs can be resumed by rerunning the same command.
 The default output directory includes `noadain_vistar_layout`; an explicit
 `WITH_ADAIN=1` run uses `adain_vistar_layout` instead.
 
+Before the checkpoint is loaded, the wrapper prepares the Vistar evaluation
+files and DreamCD class-ID masks for every manifest record. Both preprocessing
+and official sampling display progress bars. With `WITH_ADAIN=0`, the generated
+`source_rgb` file is reused as DreamCD's inactive `img_B` placeholder; no
+separate target-style RGB input is written or exposed to the inference dataset.
+
 Final outputs use the same SECOND generation directory contract as
 `vistar/eval_flux2_second_gen.py`:
 

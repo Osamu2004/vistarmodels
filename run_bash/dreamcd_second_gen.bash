@@ -6,7 +6,7 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export CUDA_VISIBLE_DEVICES
 export TOKENIZERS_PARALLELISM=false
-export TQDM_DISABLE=0
+export PYTHONUNBUFFERED=1
 
 # SECOND/DreamCD-style dataset root with paired images and paired semantic masks.
 # Recognized layouts include:
