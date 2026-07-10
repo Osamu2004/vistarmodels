@@ -8,7 +8,7 @@ export CUDA_VISIBLE_DEVICES TOKENIZERS_PARALLELISM=false PYTHONUNBUFFERED=1
 
 SECOND_ROOT="${SECOND_ROOT:-/root/data/SECOND}"
 SPLIT="${SPLIT:-test}"
-DIRECTION="${DIRECTION:-both}"
+DIRECTION="${DIRECTION:-t1_to_t2}"
 RCDGEN_MODEL_ID="${RCDGEN_MODEL_ID:-yilmazkorkmaz/RCDGen}"
 RCDGEN_WEIGHT_ROOT="${RCDGEN_WEIGHT_ROOT:-/root/data/weight/rcdgen}"
 RCDGEN_MODEL_DIR="${RCDGEN_MODEL_DIR:-${RCDGEN_WEIGHT_ROOT}/RCDGen}"
@@ -34,7 +34,7 @@ mkdir -p "${OUTPUT_DIR}"
 
 BUILD_ARGS=()
 if [[ "${MAX_SAMPLES}" != "0" ]]; then BUILD_ARGS+=(--max_samples "${MAX_SAMPLES}"); fi
-"${PYTHON_BIN}" "${ROOT_DIR}/tools/build_dreamcd_second_manifest.py" \
+"${PYTHON_BIN}" "${ROOT_DIR}/tools/build_rcdgen_second_manifest.py" \
   --second_root "${SECOND_ROOT}" --split "${SPLIT}" --direction "${DIRECTION}" \
   --output "${MANIFEST}" "${BUILD_ARGS[@]}"
 

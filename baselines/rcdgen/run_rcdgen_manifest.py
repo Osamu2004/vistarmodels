@@ -141,13 +141,12 @@ def main() -> None:
     for row_index, row in enumerate(tqdm(rows, desc="RCDGen SECOND records")):
         source_path = resolve(str(row["source_image"]))
         target_path = resolve(str(row["target_image"]))
-        target_mask_path = resolve(str(row["target_mask"]))
+        target_change_label_path = resolve(str(row["target_change_label"]))
         source_image = rgb(source_path, args.resolution)
         target_image = rgb(target_path, args.eval_size)
-        target_ids = ids(target_mask_path, args.resolution)
-        source_ids = ids(resolve(str(row["source_mask"])), args.resolution)
-        changed = source_ids != target_ids
-        present = sorted(int(v) for v in np.unique(target_ids[changed]) if int(v) in SECOND_CLASSES and int(v) != 0)
+        target_ids = ids(target_change_label_path, args.resolution)
+        changed = target_ids != 0
+        present = sorted(int(v) for v in np.unique(target_ids) if int(v) in SECOND_CLASSES and int(v) != 0)
         if args.category != "auto":
             matching = [idx for idx, name in SECOND_CLASSES.items() if name == args.category]
             if not matching:
@@ -215,6 +214,7 @@ def main() -> None:
                 "condition_passed_to_model": ["source_rgb", "text_prompt"],
                 "ground_truth_change_mask_passed_to_model": False,
                 "source_image": str(source_path), "target_image": str(target_path),
+                "target_change_label": str(target_change_label_path),
                 "pred_rgb": str(pred_path), "pred_change_mask": str(pred_mask_path),
             })
 

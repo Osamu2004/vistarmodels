@@ -27,6 +27,12 @@ SECOND_ROOT=/root/data/SECOND MAX_SAMPLES=1 bash run_bash/rcdgen_second_gen.bash
 SECOND_ROOT=/root/data/SECOND bash run_bash/rcdgen_second_gen.bash
 ```
 
+The RCDGen builder is independent of DreamCD and accepts the official
+`test/A`, `test/B`, and `test/gt` layout. It does not require DreamCD dense
+`mask_A`/`mask_B` pseudo masks. The default direction is `t1_to_t2`, matching
+the official RCDGen pre-change-to-post-change protocol. Reverse inference is
+available only when a directional `label1` folder exists.
+
 By default, each SECOND record selects one changed target category using a
 record-local seeded RNG. It therefore produces exactly one prediction per
 sample and direction, keeps every GT image once, and is directly usable for
