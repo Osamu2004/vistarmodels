@@ -9,11 +9,14 @@ export TOKENIZERS_PARALLELISM=false
 export HF_HUB_DISABLE_PROGRESS_BARS=0
 export TQDM_DISABLE=0
 
-# The unified 512x512 protocol reads the exact condition and GT files produced
-# by Vistar. REFERENCE_DIR must be an independent training/external RGB pool;
-# TISynth is a mask+text+reference model, so this input cannot be omitted.
-VISTAR_EVAL_DIR="${VISTAR_EVAL_DIR:-/root/data/experiment/eval_loveda_gen_gen_only_step300000}"
-REFERENCE_DIR="${REFERENCE_DIR:-}"
+# Read the official LoveDA tree directly, matching Vistar's own loader:
+#   LoveDA/{Train,Val}/{Urban,Rural}/{images_png,masks_png}
+# TISynth additionally requires a reference RGB. By default it is selected
+# deterministically from LoveDA/Train, with the paired target always excluded.
+LOVEDA_ROOT="${LOVEDA_ROOT:-${DATA_ROOT:-/root/data/LoveDA}}"
+SPLITS="${SPLITS:-train,val}"
+DOMAINS="${DOMAINS:-both}"
+REFERENCE_DIR="${REFERENCE_DIR:-${LOVEDA_ROOT}/Train}"
 
 TISYNTH_ROOT="${TISYNTH_ROOT:-${ROOT_DIR}/third_party/TISynth}"
 TISYNTH_WEIGHT_DIR="${TISYNTH_WEIGHT_DIR:-/root/data/weight/TISynth}"
@@ -37,7 +40,8 @@ PRECISION="${PRECISION:-fp16}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
 OVERWRITE="${OVERWRITE:-0}"
 STRICT_PALETTE="${STRICT_PALETTE:-1}"
-ALLOW_EVAL_GT_REFERENCE_POOL="${ALLOW_EVAL_GT_REFERENCE_POOL:-0}"
+VERIFY_SAMPLE_COUNTS="${VERIFY_SAMPLE_COUNTS:-1}"
+EXPECTED_TOTAL_SAMPLES="${EXPECTED_TOTAL_SAMPLES:-4191}"
 PROMPT_PREFIX="${PROMPT_PREFIX:-a high-resolution remote sensing satellite image}"
 
 # Metrics run in the main Vistar environment. Leave disabled during TISynth
@@ -57,13 +61,8 @@ _truthy() {
 if _truthy "${BOOTSTRAP_TISYNTH}"; then
   TISYNTH_ROOT="${TISYNTH_ROOT}" bash "${ROOT_DIR}/scripts/bootstrap_tisynth.sh"
 fi
-if [[ ! -d "${VISTAR_EVAL_DIR}/cond_mask" || ! -d "${VISTAR_EVAL_DIR}/gt_rgb" ]]; then
-  echo "[tisynth_loveda_gen] VISTAR_EVAL_DIR must contain cond_mask and gt_rgb: ${VISTAR_EVAL_DIR}" >&2
-  exit 1
-fi
-if [[ -z "${REFERENCE_DIR}" ]]; then
-  echo "[tisynth_loveda_gen] REFERENCE_DIR is required." >&2
-  echo "Use an independent LoveDA training/external RGB pool; never use the paired GT itself as reference." >&2
+if [[ ! -d "${LOVEDA_ROOT}" ]]; then
+  echo "[tisynth_loveda_gen] Missing LoveDA dataset root: ${LOVEDA_ROOT}" >&2
   exit 1
 fi
 if [[ ! -d "${REFERENCE_DIR}" ]]; then
@@ -77,7 +76,12 @@ if [[ ! -f "${TISYNTH_CKPT}" ]]; then
 fi
 
 mkdir -p "${OUTPUT_DIR}"
-echo "[tisynth_loveda_gen] VISTAR_EVAL_DIR=${VISTAR_EVAL_DIR}"
+RESUME_EXISTING=1
+if _truthy "${OVERWRITE}"; then
+  RESUME_EXISTING=0
+fi
+echo "[tisynth_loveda_gen] LOVEDA_ROOT=${LOVEDA_ROOT}"
+echo "[tisynth_loveda_gen] SPLITS=${SPLITS} DOMAINS=${DOMAINS}"
 echo "[tisynth_loveda_gen] REFERENCE_DIR=${REFERENCE_DIR} reference_seed=${REFERENCE_SEED}"
 echo "[tisynth_loveda_gen] CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
 echo "[tisynth_loveda_gen] TISYNTH_ROOT=${TISYNTH_ROOT}"
@@ -87,7 +91,8 @@ echo "[tisynth_loveda_gen] TISYNTH_CONFIG=${TISYNTH_CONFIG}"
 echo "[tisynth_loveda_gen] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[tisynth_loveda_gen] resolution=${RESOLUTION} eval_size=${EVAL_SIZE} batch_size=${BATCH_SIZE}"
 echo "[tisynth_loveda_gen] steps=${DDIM_STEPS} cfg=${SCALE} strength=${STRENGTH} eta=${ETA} seed=${SEED} precision=${PRECISION}"
-echo "[tisynth_loveda_gen] resume=$((1-OVERWRITE)) max_samples=${MAX_SAMPLES} strict_palette=${STRICT_PALETTE}"
+echo "[tisynth_loveda_gen] resume_existing=${RESUME_EXISTING} max_samples=${MAX_SAMPLES} strict_palette=${STRICT_PALETTE}"
+echo "[tisynth_loveda_gen] verify_sample_counts=${VERIFY_SAMPLE_COUNTS} expected_total=${EXPECTED_TOTAL_SAMPLES}"
 
 MANIFEST_ARGS=()
 if [[ "${MAX_SAMPLES}" != "0" ]]; then
@@ -96,11 +101,13 @@ fi
 if ! _truthy "${STRICT_PALETTE}"; then
   MANIFEST_ARGS+=(--no-strict_palette)
 fi
-if _truthy "${ALLOW_EVAL_GT_REFERENCE_POOL}"; then
-  MANIFEST_ARGS+=(--allow_eval_gt_reference_pool)
+if _truthy "${VERIFY_SAMPLE_COUNTS}"; then
+  MANIFEST_ARGS+=(--expected_samples "${EXPECTED_TOTAL_SAMPLES}")
 fi
 "${PYTHON_BIN}" "${ROOT_DIR}/tools/build_tisynth_loveda_manifest.py" \
-  --eval_dir "${VISTAR_EVAL_DIR}" \
+  --loveda_root "${LOVEDA_ROOT}" \
+  --splits "${SPLITS}" \
+  --domains "${DOMAINS}" \
   --reference_dir "${REFERENCE_DIR}" \
   --output "${MANIFEST}" \
   --seed "${REFERENCE_SEED}" \

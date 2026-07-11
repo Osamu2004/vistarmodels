@@ -29,6 +29,20 @@ except ImportError as exc:
         ) from exc
 
 
+LOVEDA_PALETTE_U8 = np.asarray(
+    [
+        [0, 0, 0],
+        [255, 255, 255],
+        [255, 0, 0],
+        [0, 0, 255],
+        [255, 255, 0],
+        [0, 255, 0],
+        [0, 255, 255],
+    ],
+    dtype=np.uint8,
+) if np is not None else None
+
+
 def _normalize_wsl_unc(path: str) -> str:
     text = str(path)
     for prefix in ("\\\\wsl.localhost\\", "\\wsl.localhost\\"):
@@ -71,6 +85,33 @@ def _load_rgb(path: Path, size: int, *, nearest: bool = False) -> Image.Image:
         resample = Image.Resampling.NEAREST if nearest else Image.Resampling.BICUBIC
         image = image.resize((size, size), resample)
     return image
+
+
+def _load_loveda_raw_mask(path: Path, size: int, *, reduce_zero_label: bool) -> Image.Image:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    with Image.open(path) as image:
+        array = np.asarray(image)
+    if array.ndim == 2:
+        raw = array.astype(np.int64, copy=False)
+        if reduce_zero_label:
+            ids = np.zeros(raw.shape, dtype=np.int64)
+            valid = (raw >= 1) & (raw <= len(LOVEDA_PALETTE_U8))
+            ids[valid] = raw[valid] - 1
+        else:
+            ids = np.where((raw >= 0) & (raw < len(LOVEDA_PALETTE_U8)), raw, 0)
+    elif array.ndim == 3 and array.shape[2] >= 3:
+        rgb = array[..., :3].astype(np.int32, copy=False)
+        palette = LOVEDA_PALETTE_U8.astype(np.int32)
+        distances = np.sum((rgb[..., None, :] - palette[None, None, :, :]) ** 2, axis=-1)
+        ids = distances.argmin(axis=-1).astype(np.int64)
+    else:
+        raise ValueError(f"Unsupported LoveDA mask shape {array.shape}: {path}")
+    rgb_mask = LOVEDA_PALETTE_U8[ids]
+    output = Image.fromarray(rgb_mask.astype(np.uint8), mode="RGB")
+    if output.size != (size, size):
+        output = output.resize((size, size), Image.Resampling.NEAREST)
+    return output
 
 
 def _save_rgb(image: Image.Image, path: Path, size: int, *, nearest: bool = False) -> None:
@@ -268,10 +309,10 @@ def _batches(rows: list[dict[str, Any]], batch_size: int) -> list[list[dict[str,
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run official TISynth inference from a Vistar JSONL manifest.")
+    parser = argparse.ArgumentParser(description="Run official TISynth inference from a LoveDA JSONL manifest.")
     parser.add_argument("--tisynth_root", default="third_party/TISynth")
     parser.add_argument("--config", default="")
-    parser.add_argument("--ckpt", required=True, help="LoveDA-trained TISynth checkpoint")
+    parser.add_argument("--ckpt", required=True, help="TISynth inference checkpoint")
     parser.add_argument("--clip_version", default="openai/clip-vit-large-patch14")
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output_dir", required=True)
@@ -347,7 +388,14 @@ def main() -> None:
                 cond_out = output_dir / "cond_mask" / f"{name}_cond_mask.png"
                 gt_out = output_dir / "gt_rgb" / f"{name}_gt_rgb.png"
                 ref_out = output_dir / "reference_rgb" / f"{name}_reference_rgb.png"
-                mask = _load_rgb(Path(row["condition_image"]), int(args.resolution), nearest=True)
+                if str(row.get("condition_format", "rgb_palette")) == "loveda_raw":
+                    mask = _load_loveda_raw_mask(
+                        Path(row["condition_image"]),
+                        int(args.resolution),
+                        reduce_zero_label=bool(row.get("reduce_zero_label", True)),
+                    )
+                else:
+                    mask = _load_rgb(Path(row["condition_image"]), int(args.resolution), nearest=True)
                 reference = _load_rgb(Path(row["reference_image"]), int(args.resolution))
                 _save_rgb(mask, cond_out, int(args.eval_size), nearest=True)
                 _save_rgb(reference, ref_out, int(args.eval_size))

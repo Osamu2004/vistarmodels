@@ -70,24 +70,29 @@ python tools/check_tisynth_deps.py
 
 ## 512x512 LoveDA inference
 
-`REFERENCE_DIR` should be an independent training/external RGB pool. A
-reference is selected by a stable SHA-256 mapping and the paired target is
-always excluded. Using the evaluation `gt_rgb` directory as the pool is blocked
-unless `ALLOW_EVAL_GT_REFERENCE_POOL=1` is explicitly set.
+The wrapper reads the official dataset tree directly using the same defaults as
+Vistar: `LOVEDA_ROOT=/root/data/LoveDA`, `SPLITS=train,val`, and
+`DOMAINS=both`. It supports
+`LoveDA/{Train,Val}/{Urban,Rural}/{images_png,masks_png}`, converts the official
+raw IDs `1..7` to class IDs `0..6`, and constructs the official colored mask at
+512x512. No pre-generated Vistar evaluation directory is required.
+
+TISynth also requires a reference RGB image. `REFERENCE_DIR` defaults to
+`$LOVEDA_ROOT/Train`; a reference is selected by a stable SHA-256 mapping and
+the exact paired target is always excluded. Every choice is recorded in the
+manifest.
 
 ```bash
 cd /root/code/vistarmodels
 
 # Five-sample smoke test with the official GID-trained checkpoint.
-VISTAR_EVAL_DIR=/root/data/experiment/eval_loveda_gen_gen_only_step300000 \
-REFERENCE_DIR=/root/data/LoveDA/Train \
+LOVEDA_ROOT=/root/data/LoveDA \
 CUDA_VISIBLE_DEVICES=0 \
 MAX_SAMPLES=5 \
 bash run_bash/tisynth_loveda_gen.bash
 
 # Full run: resume is automatic.
-VISTAR_EVAL_DIR=/root/data/experiment/eval_loveda_gen_gen_only_step300000 \
-REFERENCE_DIR=/root/data/LoveDA/Train \
+LOVEDA_ROOT=/root/data/LoveDA \
 CUDA_VISIBLE_DEVICES=0 \
 bash run_bash/tisynth_loveda_gen.bash
 ```
