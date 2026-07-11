@@ -17,4 +17,4 @@ fi
 
 echo "[bootstrap_tisynth] using vendored official source: ${TISYNTH_ROOT}"
 echo "[bootstrap_tisynth] pinned upstream revision: ${EXPECTED_REVISION}"
-echo "[bootstrap_tisynth] official release only includes GID_model.ckpt; a LoveDA-trained checkpoint is required for the LoveDA table."
+echo "[bootstrap_tisynth] zero-shot protocol: use the official GID_model.ckpt directly on LoveDA."

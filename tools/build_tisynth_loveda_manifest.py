@@ -324,7 +324,12 @@ def main() -> None:
     if not reference_dir.is_dir():
         raise NotADirectoryError(f"Missing TISynth reference folder: {reference_dir}")
 
+    print(f"[build_tisynth_loveda_manifest] scanning reference images: {reference_dir}", flush=True)
     references = _discover_images(reference_dir)
+    print(
+        f"[build_tisynth_loveda_manifest] found {len(references)} reference images; pairing LoveDA samples",
+        flush=True,
+    )
     reference_digest_cache: dict[Path, str] = {}
     rows: list[dict[str, Any]] = []
     source_rows: list[dict[str, Any]] = []
@@ -372,6 +377,11 @@ def main() -> None:
             )
 
     discovered_samples = len(source_rows)
+    print(
+        f"[build_tisynth_loveda_manifest] discovered {discovered_samples} paired samples; "
+        "validating masks and selecting deterministic references",
+        flush=True,
+    )
     if int(args.expected_samples) > 0 and discovered_samples != int(args.expected_samples):
         raise ValueError(
             f"LoveDA source count mismatch: discovered={discovered_samples}, "
