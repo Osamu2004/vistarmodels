@@ -21,15 +21,20 @@ EVAL_SIZE="${EVAL_SIZE:-256}"
 NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-50}"
 GUIDANCE_SCALE="${GUIDANCE_SCALE:-30.0}"
 GUIDANCE_TAG="${GUIDANCE_SCALE/./p}"
+STRENGTH="${STRENGTH:-1.0}"
+STRENGTH_TAG="${STRENGTH/./p}"
 MAX_SEQUENCE_LENGTH="${MAX_SEQUENCE_LENGTH:-512}"
 SEED="${SEED:-42}"
+PROMPT_MODE="${PROMPT_MODE:-fill_target}"
 DTYPE="${DTYPE:-bf16}"
 CPU_OFFLOAD="${CPU_OFFLOAD:-1}"
 VAE_TILING="${VAE_TILING:-0}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
+ONLY_CHANGED="${ONLY_CHANGED:-0}"
+SAVE_MODEL_INPUTS="${SAVE_MODEL_INPUTS:-0}"
 OVERWRITE="${OVERWRITE:-0}"
 BOOTSTRAP_FLUX1_FILL="${BOOTSTRAP_FLUX1_FILL:-1}"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/flux1_fill_second_${SPLIT}_${DIRECTION}_oneclass_targetmask_source_binarymask_text_resize${RESOLUTION}_eval${EVAL_SIZE}_steps${NUM_INFERENCE_STEPS}_cfg${GUIDANCE_TAG}_seed${SEED}_selectionseed${SELECTION_SEED}_1gpu}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/flux1_fill_second_${SPLIT}_${DIRECTION}_oneclass_targetmask_source_binarymask_prompt${PROMPT_MODE}_resize${RESOLUTION}_eval${EVAL_SIZE}_steps${NUM_INFERENCE_STEPS}_cfg${GUIDANCE_TAG}_strength${STRENGTH_TAG}_seed${SEED}_selectionseed${SELECTION_SEED}_1gpu}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest.jsonl}"
 
 if [[ ! -f "${CLASS_SELECTION_FILE}" ]]; then
@@ -51,7 +56,13 @@ if [[ "${MAX_SAMPLES}" != "0" ]]; then BUILD_ARGS+=(--max_samples "${MAX_SAMPLES
 
 RUN_ARGS=()
 if [[ "${MAX_SAMPLES}" != "0" ]]; then RUN_ARGS+=(--max_samples "${MAX_SAMPLES}"); fi
+if [[ "${ONLY_CHANGED}" == "1" || "${ONLY_CHANGED}" == "true" || "${ONLY_CHANGED}" == "yes" ]]; then
+  RUN_ARGS+=(--only_changed)
+fi
 if [[ "${OVERWRITE}" == "1" ]]; then RUN_ARGS+=(--overwrite); fi
+if [[ "${SAVE_MODEL_INPUTS}" == "1" || "${SAVE_MODEL_INPUTS}" == "true" || "${SAVE_MODEL_INPUTS}" == "yes" ]]; then
+  RUN_ARGS+=(--save_model_inputs)
+fi
 case "${CPU_OFFLOAD,,}" in
   0|false|no|n|off) RUN_ARGS+=(--no-cpu_offload) ;;
   *) RUN_ARGS+=(--cpu_offload) ;;
@@ -64,6 +75,7 @@ fi
   --manifest "${MANIFEST}" --output_dir "${OUTPUT_DIR}" --model "${FLUX1_FILL_MODEL_DIR}" \
   --resolution "${RESOLUTION}" --eval_size "${EVAL_SIZE}" \
   --num_inference_steps "${NUM_INFERENCE_STEPS}" --guidance_scale "${GUIDANCE_SCALE}" \
-  --max_sequence_length "${MAX_SEQUENCE_LENGTH}" --seed "${SEED}" --dtype "${DTYPE}" "${RUN_ARGS[@]}"
+  --strength "${STRENGTH}" --max_sequence_length "${MAX_SEQUENCE_LENGTH}" --seed "${SEED}" \
+  --prompt_mode "${PROMPT_MODE}" --dtype "${DTYPE}" "${RUN_ARGS[@]}"
 
 echo "[flux1_fill_second_gen] done: ${OUTPUT_DIR}"
