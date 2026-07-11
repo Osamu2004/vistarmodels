@@ -106,7 +106,10 @@ Defaults match the official inference implementation's effective settings:
 official-script issues relevant to fair evaluation: the parsed CFG value was
 ignored in favor of a hard-coded 9; batch resume checked only the last sample;
 and output was JPEG. This adapter uses the requested CFG, checks every sample,
-and saves lossless PNGs.
+and saves lossless PNGs. It displays a persistent total-sample bar and a
+50-step DDIM bar for the current batch. On restart, every decodable 512x512
+`pred_rgb/<name>_pred_rgb.png` is counted as complete before model loading;
+missing, truncated, or wrong-size PNGs are regenerated automatically.
 
 Output contract:
 

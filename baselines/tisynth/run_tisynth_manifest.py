@@ -264,6 +264,7 @@ def _generate(
     seed: int,
     precision: str,
     device: torch.device,
+    step_callback: Any | None = None,
 ) -> list[Image.Image]:
     batch_size = len(names)
     shape = (4, resolution // 8, resolution // 8)
@@ -290,6 +291,7 @@ def _generate(
             batch_size,
             shape,
             conditioning=cond,
+            callback=step_callback,
             verbose=False,
             eta=float(eta),
             x_T=x_t,
@@ -306,6 +308,42 @@ def _generate(
 
 def _batches(rows: list[dict[str, Any]], batch_size: int) -> list[list[dict[str, Any]]]:
     return [rows[start : start + batch_size] for start in range(0, len(rows), batch_size)]
+
+
+def _output_paths(output_dir: Path, row: dict[str, Any], resolution: int) -> dict[str, Any]:
+    name = str(row.get("name") or Path(row["condition_image"]).stem)
+    return {
+        "name": name,
+        "pred_path": output_dir / "pred_rgb" / f"{name}_pred_rgb.png",
+        "native_path": output_dir / "pred_rgb_native" / f"{name}_pred_rgb_{resolution}.png",
+        "cond_out": output_dir / "cond_mask" / f"{name}_cond_mask.png",
+        "gt_out": output_dir / "gt_rgb" / f"{name}_gt_rgb.png",
+        "ref_out": output_dir / "reference_rgb" / f"{name}_reference_rgb.png",
+    }
+
+
+def _resolved_record(
+    *,
+    row: dict[str, Any],
+    paths: dict[str, Any],
+    args: argparse.Namespace,
+    status: str,
+) -> dict[str, Any]:
+    return {
+        **row,
+        "name": paths["name"],
+        "pred_rgb": str(paths["pred_path"]),
+        "pred_rgb_native": str(paths["native_path"]),
+        "sample_seed": _sample_seed(int(args.seed), str(paths["name"])),
+        "resolution": int(args.resolution),
+        "eval_size": int(args.eval_size),
+        "ddim_steps": int(args.ddim_steps),
+        "scale": float(args.scale),
+        "strength": float(args.strength),
+        "eta": float(args.eta),
+        "precision": str(args.precision),
+        "status": status,
+    }
 
 
 def main() -> None:
@@ -366,28 +404,57 @@ def main() -> None:
         json.dumps(run_config, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    _seed_everything(int(args.seed))
-    device = torch.device("cuda")
-    model, sampler = _load_model(
-        root=root,
-        config_path=config_path,
-        checkpoint=checkpoint,
-        clip_version=_normalize_wsl_unc(args.clip_version),
-        device=device,
+    completed: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    pending_rows: list[dict[str, Any]] = []
+    for row in tqdm(rows, desc="Resume preflight", unit="image", dynamic_ncols=True):
+        paths = _output_paths(output_dir, row, int(args.resolution))
+        if not args.overwrite and _is_valid_rgb_file(paths["pred_path"], int(args.eval_size)):
+            completed.append((row, paths))
+        else:
+            pending_rows.append(row)
+    print(
+        f"[run_tisynth_manifest] resume preflight: total={len(rows)} "
+        f"completed={len(completed)} pending={len(pending_rows)} overwrite={int(bool(args.overwrite))}",
+        flush=True,
     )
 
     resolved_path = output_dir / "manifest_resolved.jsonl"
     with resolved_path.open("w", encoding="utf-8") as resolved:
-        for row_batch in tqdm(_batches(rows, max(1, int(args.batch_size))), desc="TISynth inference batches"):
+        for row, paths in completed:
+            resolved.write(
+                json.dumps(
+                    _resolved_record(row=row, paths=paths, args=args, status="skipped_existing"),
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+        resolved.flush()
+        if not pending_rows:
+            print(f"[run_tisynth_manifest] all {len(rows)} predictions already exist; nothing to generate.")
+            return
+
+        _seed_everything(int(args.seed))
+        device = torch.device("cuda")
+        model, sampler = _load_model(
+            root=root,
+            config_path=config_path,
+            checkpoint=checkpoint,
+            clip_version=_normalize_wsl_unc(args.clip_version),
+            device=device,
+        )
+
+        sample_progress = tqdm(
+            total=len(rows),
+            initial=len(completed),
+            desc="TISynth samples",
+            unit="image",
+            dynamic_ncols=True,
+            position=0,
+        )
+        for row_batch in _batches(pending_rows, max(1, int(args.batch_size))):
             records: list[dict[str, Any]] = []
-            pending: list[dict[str, Any]] = []
             for row in row_batch:
-                name = str(row.get("name") or Path(row["condition_image"]).stem)
-                pred_path = output_dir / "pred_rgb" / f"{name}_pred_rgb.png"
-                native_path = output_dir / "pred_rgb_native" / f"{name}_pred_rgb_{args.resolution}.png"
-                cond_out = output_dir / "cond_mask" / f"{name}_cond_mask.png"
-                gt_out = output_dir / "gt_rgb" / f"{name}_gt_rgb.png"
-                ref_out = output_dir / "reference_rgb" / f"{name}_reference_rgb.png"
+                paths = _output_paths(output_dir, row, int(args.resolution))
                 if str(row.get("condition_format", "rgb_palette")) == "loveda_raw":
                     mask = _load_loveda_raw_mask(
                         Path(row["condition_image"]),
@@ -397,33 +464,34 @@ def main() -> None:
                 else:
                     mask = _load_rgb(Path(row["condition_image"]), int(args.resolution), nearest=True)
                 reference = _load_rgb(Path(row["reference_image"]), int(args.resolution))
-                _save_rgb(mask, cond_out, int(args.eval_size), nearest=True)
-                _save_rgb(reference, ref_out, int(args.eval_size))
+                _save_rgb(mask, paths["cond_out"], int(args.eval_size), nearest=True)
+                _save_rgb(reference, paths["ref_out"], int(args.eval_size))
                 if row.get("target_image"):
                     target = _load_rgb(Path(row["target_image"]), int(args.eval_size))
-                    _save_rgb(target, gt_out, int(args.eval_size))
-                valid = _is_valid_rgb_file(pred_path, int(args.eval_size))
+                    _save_rgb(target, paths["gt_out"], int(args.eval_size))
                 record = {
                     "row": row,
-                    "name": name,
+                    **paths,
                     "mask": mask,
                     "reference": reference,
-                    "pred_path": pred_path,
-                    "native_path": native_path,
-                    "status": "skipped_existing" if valid and not args.overwrite else "pending",
                 }
                 records.append(record)
-                if record["status"] == "pending":
-                    pending.append(record)
 
-            if pending:
+            with tqdm(
+                total=int(args.ddim_steps),
+                desc=f"DDIM steps ({len(records)} image{'s' if len(records) != 1 else ''})",
+                unit="step",
+                dynamic_ncols=True,
+                position=1,
+                leave=False,
+            ) as step_progress:
                 images = _generate(
                     model=model,
                     sampler=sampler,
-                    names=[record["name"] for record in pending],
-                    masks=[record["mask"] for record in pending],
-                    references=[record["reference"] for record in pending],
-                    prompts=[str(record["row"].get("prompt") or "") for record in pending],
+                    names=[record["name"] for record in records],
+                    masks=[record["mask"] for record in records],
+                    references=[record["reference"] for record in records],
+                    prompts=[str(record["row"].get("prompt") or "") for record in records],
                     resolution=int(args.resolution),
                     steps=int(args.ddim_steps),
                     scale=float(args.scale),
@@ -432,34 +500,25 @@ def main() -> None:
                     seed=int(args.seed),
                     precision=str(args.precision),
                     device=device,
+                    step_callback=lambda _step: step_progress.update(1),
                 )
-                for record, image in zip(pending, images):
-                    _save_rgb(image, record["native_path"], int(args.resolution))
-                    _save_rgb(image, record["pred_path"], int(args.eval_size))
-                    record["status"] = "generated"
 
-            for record in records:
+            for record, image in zip(records, images):
+                _save_rgb(image, record["native_path"], int(args.resolution))
+                _save_rgb(image, record["pred_path"], int(args.eval_size))
                 resolved.write(
                     json.dumps(
-                        {
-                            **record["row"],
-                            "name": record["name"],
-                            "pred_rgb": str(record["pred_path"]),
-                            "pred_rgb_native": str(record["native_path"]),
-                            "sample_seed": _sample_seed(int(args.seed), record["name"]),
-                            "resolution": int(args.resolution),
-                            "eval_size": int(args.eval_size),
-                            "ddim_steps": int(args.ddim_steps),
-                            "scale": float(args.scale),
-                            "strength": float(args.strength),
-                            "eta": float(args.eta),
-                            "precision": str(args.precision),
-                            "status": record["status"],
-                        },
+                        _resolved_record(
+                            row=record["row"], paths=record, args=args, status="generated"
+                        ),
                         ensure_ascii=False,
                     )
                     + "\n"
                 )
+                resolved.flush()
+                sample_progress.update(1)
+                sample_progress.set_postfix(completed=sample_progress.n, pending=len(rows) - sample_progress.n)
+        sample_progress.close()
     print(f"[run_tisynth_manifest] wrote outputs to: {output_dir}")
 
 

@@ -18,3 +18,10 @@ Local integration code lives outside this directory under:
 - `run_bash/tisynth_loveda_gen.bash`
 - `run_bash/tisynth_loveda_train.bash`
 - `tools/build_tisynth_loveda_manifest.py`
+
+One minimal local compatibility patch is kept in
+`cldm/ddim_hacked_ssl.py`: its existing `verbose` argument now also controls
+the two unconditional print statements and the internal tqdm bar, and is
+forwarded to `ddim_sampling`. This lets the Vistar wrapper expose one stable
+sample bar plus one callback-driven DDIM-step bar without duplicated output;
+the sampling math is unchanged.
