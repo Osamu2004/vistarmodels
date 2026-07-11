@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import random
 import re
 import sys
 from pathlib import Path
@@ -24,17 +23,29 @@ except ImportError as exc:
 
 
 SECOND_CLASSES = {
-    0: "non-change",
-    1: "low vegetation",
+    0: "unchanged",
+    1: "water",
+    2: "bare land",
+    3: "low vegetation",
+    4: "tree",
+    5: "buildings",
+    6: "playgrounds",
+}
+# Canonical names above must match Vistar's shared JSONL.  RCDGen was trained
+# with these category strings, so retain its native prompt vocabulary while
+# keeping the class-id contract unchanged.
+RCDGEN_PROMPT_CLASSES = {
+    0: "unchanged",
+    1: "water bodies",
     2: "non-vegetated ground surface",
-    3: "tree",
-    4: "water bodies",
+    3: "low vegetation",
+    4: "tree",
     5: "building",
     6: "playground",
 }
 SECOND_PALETTE = np.asarray(
-    [[255, 255, 255], [0, 128, 0], [128, 128, 128], [0, 255, 0],
-     [0, 0, 255], [128, 0, 0], [255, 0, 0]],
+    [[255, 255, 255], [0, 0, 255], [128, 128, 128], [0, 128, 0],
+     [0, 255, 0], [128, 0, 0], [255, 255, 0]],
     dtype=np.uint8,
 ) if np is not None else None
 OUTPUT_DIRS = (
@@ -89,6 +100,17 @@ def valid(path: Path, size: int) -> bool:
         return False
 
 
+def binary_visual(mask_ids: np.ndarray) -> Image.Image:
+    return Image.fromarray(
+        np.where(mask_ids[..., None] > 0, [255, 255, 255], [0, 0, 0]).astype(np.uint8),
+        "RGB",
+    )
+
+
+def official_visual(mask_ids: np.ndarray) -> Image.Image:
+    return Image.fromarray(SECOND_PALETTE[mask_ids.clip(0, len(SECOND_CLASSES) - 1)], "RGB")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run official RCDGen on a SECOND JSONL manifest.")
     parser.add_argument("--manifest", required=True)
@@ -101,21 +123,9 @@ def main() -> None:
     parser.add_argument("--guidance_scale", type=float, default=7.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max_samples", type=int, default=0)
-    parser.add_argument(
-        "--category_policy",
-        choices=["random", "all"],
-        default="random",
-        help="random selects one reproducible changed target class per record; all expands every class",
-    )
-    parser.add_argument(
-        "--category",
-        default="auto",
-        help="auto uses category_policy; otherwise force one official SECOND class name",
-    )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
-    random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     if not torch.cuda.is_available():
@@ -141,90 +151,86 @@ def main() -> None:
     for row_index, row in enumerate(tqdm(rows, desc="RCDGen SECOND records")):
         source_path = resolve(str(row["source_image"]))
         target_path = resolve(str(row["target_image"]))
-        target_change_label_path = resolve(str(row["target_change_label"]))
+        selected_mask_path = resolve(str(row["selected_semantic_change_mask"]))
+        class_selection_file = resolve(str(row["class_selection_file"]))
+        selected_class_id = int(row["selected_class_id"])
+        selected_class_name = str(row["selected_class_name"])
+        if selected_class_id not in SECOND_CLASSES or selected_class_name != SECOND_CLASSES[selected_class_id]:
+            raise ValueError(f"Invalid shared class selection in manifest row: {row}")
         source_image = rgb(source_path, args.resolution)
         target_image = rgb(target_path, args.eval_size)
-        target_ids = ids(target_change_label_path, args.resolution)
-        changed = target_ids != 0
-        present = sorted(int(v) for v in np.unique(target_ids) if int(v) in SECOND_CLASSES and int(v) != 0)
-        if args.category != "auto":
-            matching = [idx for idx, name in SECOND_CLASSES.items() if name == args.category]
-            if not matching:
-                raise ValueError(
-                    f"unsupported --category={args.category!r}; expected auto or one of "
-                    f"{sorted(SECOND_CLASSES.values())}"
-                )
-            selected = matching
-            selection_policy = "fixed"
-        elif args.category_policy == "all":
-            selected = present or [0]
-            selection_policy = "all_present_target_classes"
+        selected_ids = ids(selected_mask_path, args.resolution)
+        if selected_class_id > 0 and not bool((selected_ids == selected_class_id).any()):
+            raise ValueError(
+                f"Selected class {selected_class_id} disappeared after resize for manifest row {row['name']!r}. "
+                "Rebuild the manifest from the unchanged shared protocol."
+            )
+        row_name = str(row.get("name", f"sample_{row_index:06d}"))
+        base = safe_name(row_name)
+        prompt = f"change in {RCDGEN_PROMPT_CLASSES[selected_class_id]}"
+        pred_path = dirs["pred_rgb"] / f"{base}_pred_rgb.png"
+        pred_mask_path = dirs["pred_change_mask"] / f"{base}_pred_change_mask.png"
+        if valid(pred_path, args.eval_size) and valid(pred_mask_path, args.eval_size) and not args.overwrite:
+            status = "skipped_existing"
+        elif selected_class_id == 0:
+            # The protocol represents a no-change pair with class 0.  Asking a
+            # change generator to invent a class here would invalidate its GT.
+            save(source_image.resize((args.eval_size, args.eval_size), Image.Resampling.BICUBIC), pred_path)
+            save(Image.new("L", (args.eval_size, args.eval_size), color=0), pred_mask_path)
+            status = "source_copy_no_change"
         else:
-            # Use a record-local RNG so selection is reproducible and does not
-            # depend on resume state or the number of preceding model calls.
-            selector = random.Random(args.seed + row_index * 1009)
-            selected = [selector.choice(present)] if present else [0]
-            selection_policy = "seeded_random_present_target_class"
+            draw_seed = int(dict(row.get("class_selection_record", {})).get("draw_seed", 0))
+            generator = torch.Generator("cuda").manual_seed((int(args.seed) + draw_seed) % (2**63 - 1))
+            result = pipe(
+                prompt,
+                image=source_image,
+                num_inference_steps=args.num_inference_steps,
+                image_guidance_scale=args.image_guidance_scale,
+                guidance_scale=args.guidance_scale,
+                generator=generator,
+            ).images
+            pred = result[0][0].convert("RGB").resize((args.eval_size, args.eval_size), Image.Resampling.BICUBIC)
+            pred_mask = result[1][0].convert("L").resize((args.eval_size, args.eval_size), Image.Resampling.NEAREST)
+            save(pred, pred_path)
+            save(pred_mask, pred_mask_path)
+            status = "generated"
 
-        for class_id in selected:
-            category = SECOND_CLASSES[class_id]
-            row_name = str(row.get("name", f"sample_{row_index:06d}"))
-            base = safe_name(f"{row_name}_{category}" if args.category_policy == "all" else row_name)
-            prompt = f"change in {category}"
-            pred_path = dirs["pred_rgb"] / f"{base}_pred_rgb.png"
-            pred_mask_path = dirs["pred_change_mask"] / f"{base}_pred_change_mask.png"
-            if valid(pred_path, args.eval_size) and valid(pred_mask_path, args.eval_size) and not args.overwrite:
-                status = "skipped_existing"
-            else:
-                generator = torch.Generator("cuda").manual_seed(args.seed + row_index * 100 + class_id)
-                result = pipe(
-                    prompt,
-                    image=source_image,
-                    num_inference_steps=args.num_inference_steps,
-                    image_guidance_scale=args.image_guidance_scale,
-                    guidance_scale=args.guidance_scale,
-                    generator=generator,
-                ).images
-                pred = result[0][0].convert("RGB").resize((args.eval_size, args.eval_size), Image.Resampling.BICUBIC)
-                pred_mask = result[1][0].convert("L").resize((args.eval_size, args.eval_size), Image.Resampling.NEAREST)
-                save(pred, pred_path)
-                save(pred_mask, pred_mask_path)
-                status = "generated"
-
-            source_out = dirs["source_rgb"] / f"{base}_source_rgb.png"
-            gt_out = dirs["gt_rgb"] / f"{base}_gt_rgb.png"
-            cond_ids = np.where(changed & (target_ids == class_id), class_id, 0).astype(np.uint8)
-            cond_l = Image.fromarray(cond_ids, "L").resize((args.eval_size, args.eval_size), Image.Resampling.NEAREST)
-            cond_vis = Image.fromarray(np.where(np.asarray(cond_l)[..., None] > 0, [255, 0, 0], [255, 255, 255]).astype(np.uint8), "RGB")
-            save(source_image.resize((args.eval_size, args.eval_size), Image.Resampling.BICUBIC), source_out)
-            save(target_image, gt_out)
-            save(cond_l, dirs["cond_mask_ids"] / f"{base}_cond_mask_ids.png")
-            save(cond_vis, dirs["cond_mask"] / f"{base}_cond_mask.png")
-            save(cond_vis, dirs["cond_mask_official"] / f"{base}_cond_mask_official.png")
-            pred = Image.open(pred_path).convert("RGB")
-            diff = np.abs(np.asarray(pred, dtype=np.int16) - np.asarray(target_image, dtype=np.int16)).astype(np.uint8)
-            save(Image.fromarray(diff, "RGB"), dirs["absdiff"] / f"{base}_absdiff.png")
-            (dirs["prompts"] / f"{base}.txt").write_text(prompt + "\n", encoding="utf-8")
-            metadata.append({
-                "name": base, "status": status, "dataset": "SECOND", "direction": row.get("direction"),
-                "category": category, "class_id": class_id, "prompt": prompt,
-                "category_selection_policy": selection_policy,
-                "available_changed_target_classes": [SECOND_CLASSES[idx] for idx in present],
-                "selection_seed": args.seed + row_index * 1009,
-                "condition_passed_to_model": ["source_rgb", "text_prompt"],
-                "ground_truth_change_mask_passed_to_model": False,
-                "source_image": str(source_path), "target_image": str(target_path),
-                "target_change_label": str(target_change_label_path),
-                "pred_rgb": str(pred_path), "pred_change_mask": str(pred_mask_path),
-            })
+        source_out = dirs["source_rgb"] / f"{base}_source_rgb.png"
+        gt_out = dirs["gt_rgb"] / f"{base}_gt_rgb.png"
+        cond_l = Image.fromarray(selected_ids.astype(np.uint8), "L").resize((args.eval_size, args.eval_size), Image.Resampling.NEAREST)
+        cond_ids = np.asarray(cond_l, dtype=np.uint8)
+        save(source_image.resize((args.eval_size, args.eval_size), Image.Resampling.BICUBIC), source_out)
+        save(target_image, gt_out)
+        save(cond_l, dirs["cond_mask_ids"] / f"{base}_cond_mask_ids.png")
+        save(binary_visual(cond_ids), dirs["cond_mask"] / f"{base}_cond_mask.png")
+        save(official_visual(cond_ids), dirs["cond_mask_official"] / f"{base}_cond_mask_official.png")
+        pred = Image.open(pred_path).convert("RGB")
+        diff = np.abs(np.asarray(pred, dtype=np.int16) - np.asarray(target_image, dtype=np.int16)).astype(np.uint8)
+        save(Image.fromarray(diff, "RGB"), dirs["absdiff"] / f"{base}_absdiff.png")
+        (dirs["prompts"] / f"{base}.txt").write_text(prompt + "\n", encoding="utf-8")
+        selection_record = dict(row.get("class_selection_record", {}))
+        metadata.append({
+            "name": base, "status": status, "dataset": "SECOND", "direction": row.get("direction"),
+            "category": selected_class_name, "prompt_category": RCDGEN_PROMPT_CLASSES[selected_class_id],
+            "class_id": selected_class_id, "prompt": prompt,
+            "category_selection_policy": "shared_second_oneclass_targetmask_v1",
+            "class_selection_file": str(class_selection_file),
+            "class_selection_record": selection_record,
+            "available_changed_target_classes": selection_record.get("available_target_classes", []),
+            "condition_passed_to_model": ["source_rgb", "text_prompt"],
+            "ground_truth_change_mask_passed_to_model": False,
+            "source_image": str(source_path), "target_image": str(target_path),
+            "target_change_label": str(row["target_change_label"]),
+            "selected_semantic_change_mask": str(selected_mask_path),
+            "pred_rgb": str(pred_path), "pred_change_mask": str(pred_mask_path),
+        })
 
     with metadata_path.open("w", encoding="utf-8") as handle:
         for item in metadata:
             handle.write(json.dumps(item, ensure_ascii=False) + "\n")
     (output / "class_map.json").write_text(json.dumps(SECOND_CLASSES, indent=2), encoding="utf-8")
     print(
-        f"[run_rcdgen_manifest] wrote {len(metadata)} category-conditioned outputs to {output}; "
-        f"category_policy={args.category_policy}"
+        f"[run_rcdgen_manifest] wrote {len(metadata)} shared-protocol category-conditioned outputs to {output}"
     )
 
 

@@ -1,0 +1,10 @@
+# Install a CUDA-matched PyTorch build separately; do not let pip replace it.
+accelerate>=0.33.0
+diffusers>=0.32.0,<0.40.0
+huggingface-hub>=0.24.0,<1.0
+numpy
+pillow
+safetensors>=0.4.5
+sentencepiece>=0.2.0
+transformers>=4.44.0
+tqdm>=4.66.0

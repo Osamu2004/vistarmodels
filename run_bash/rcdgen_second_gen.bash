@@ -6,13 +6,17 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export CUDA_VISIBLE_DEVICES TOKENIZERS_PARALLELISM=false PYTHONUNBUFFERED=1
 
-SECOND_ROOT="${SECOND_ROOT:-/root/data/SECOND}"
+SECOND_ROOT="${SECOND_ROOT:-/root/data/second_dataset}"
 SPLIT="${SPLIT:-test}"
 DIRECTION="${DIRECTION:-both}"
+SELECTION_SEED="${SELECTION_SEED:-42}"
+LABEL_PAIR_MODE="${LABEL_PAIR_MODE:-auto}"
+CLASS_SELECTION_DIR="${CLASS_SELECTION_DIR:-/root/data/experiment/protocols}"
+CLASS_SELECTION_FILE="${CLASS_SELECTION_FILE:-${CLASS_SELECTION_DIR}/second_${SPLIT}_oneclass_targetmask_both_resize256_seed${SELECTION_SEED}_labelpair${LABEL_PAIR_MODE}.jsonl}"
 RCDGEN_MODEL_ID="${RCDGEN_MODEL_ID:-yilmazkorkmaz/RCDGen}"
 RCDGEN_WEIGHT_ROOT="${RCDGEN_WEIGHT_ROOT:-/root/data/weight/rcdgen}"
 RCDGEN_MODEL_DIR="${RCDGEN_MODEL_DIR:-${RCDGEN_WEIGHT_ROOT}/RCDGen}"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rcdgen_second_${SPLIT}_${DIRECTION}_oneclass_random_source_text_resize512_eval256_steps100_seed42}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rcdgen_second_${SPLIT}_${DIRECTION}_oneclass_targetmask_source_text_resize512_eval256_steps100_seed42_selectionseed${SELECTION_SEED}}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest.jsonl}"
 BOOTSTRAP_RCDGEN="${BOOTSTRAP_RCDGEN:-1}"
 RESOLUTION="${RESOLUTION:-512}"
@@ -22,9 +26,13 @@ IMAGE_GUIDANCE_SCALE="${IMAGE_GUIDANCE_SCALE:-1.5}"
 GUIDANCE_SCALE="${GUIDANCE_SCALE:-7.0}"
 SEED="${SEED:-42}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
-CATEGORY_POLICY="${CATEGORY_POLICY:-random}"
-CATEGORY="${CATEGORY:-auto}"
 OVERWRITE="${OVERWRITE:-0}"
+
+if [[ ! -f "${CLASS_SELECTION_FILE}" ]]; then
+  echo "[rcdgen_second_gen] missing shared CLASS_SELECTION_FILE: ${CLASS_SELECTION_FILE}" >&2
+  echo "Create it once with Vistar run_bash/seg/eval_flux2_second_oneclass_binarymask_gen.bash." >&2
+  exit 2
+fi
 
 if [[ "${BOOTSTRAP_RCDGEN}" == "1" ]]; then
   RCDGEN_MODEL_ID="${RCDGEN_MODEL_ID}" RCDGEN_MODEL_DIR="${RCDGEN_MODEL_DIR}" \
@@ -36,7 +44,7 @@ BUILD_ARGS=()
 if [[ "${MAX_SAMPLES}" != "0" ]]; then BUILD_ARGS+=(--max_samples "${MAX_SAMPLES}"); fi
 "${PYTHON_BIN}" "${ROOT_DIR}/tools/build_rcdgen_second_manifest.py" \
   --second_root "${SECOND_ROOT}" --split "${SPLIT}" --direction "${DIRECTION}" \
-  --output "${MANIFEST}" "${BUILD_ARGS[@]}"
+  --class_selection_file "${CLASS_SELECTION_FILE}" --output "${MANIFEST}" "${BUILD_ARGS[@]}"
 
 RUN_ARGS=()
 if [[ "${MAX_SAMPLES}" != "0" ]]; then RUN_ARGS+=(--max_samples "${MAX_SAMPLES}"); fi
@@ -46,6 +54,6 @@ if [[ "${OVERWRITE}" == "1" ]]; then RUN_ARGS+=(--overwrite); fi
   --resolution "${RESOLUTION}" --eval_size "${EVAL_SIZE}" \
   --num_inference_steps "${NUM_INFERENCE_STEPS}" \
   --image_guidance_scale "${IMAGE_GUIDANCE_SCALE}" --guidance_scale "${GUIDANCE_SCALE}" \
-  --seed "${SEED}" --category_policy "${CATEGORY_POLICY}" --category "${CATEGORY}" "${RUN_ARGS[@]}"
+  --seed "${SEED}" "${RUN_ARGS[@]}"
 
 echo "[rcdgen_second_gen] done: ${OUTPUT_DIR}"

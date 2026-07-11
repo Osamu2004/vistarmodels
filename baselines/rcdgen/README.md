@@ -23,23 +23,27 @@ Diffusers 0.31.0 and downloads/resumes the complete Hugging Face snapshot from
 Smoke test and full run:
 
 ```bash
-SECOND_ROOT=/root/data/SECOND MAX_SAMPLES=1 bash run_bash/rcdgen_second_gen.bash
-SECOND_ROOT=/root/data/SECOND bash run_bash/rcdgen_second_gen.bash
+SECOND_ROOT=/root/data/second_dataset \
+CLASS_SELECTION_FILE=/root/data/experiment/protocols/second_test_oneclass_targetmask_both_resize256_seed42_labelpairauto.jsonl \
+MAX_SAMPLES=1 bash run_bash/rcdgen_second_gen.bash
+SECOND_ROOT=/root/data/second_dataset \
+CLASS_SELECTION_FILE=/root/data/experiment/protocols/second_test_oneclass_targetmask_both_resize256_seed42_labelpairauto.jsonl \
+bash run_bash/rcdgen_second_gen.bash
 ```
 
-The RCDGen builder is independent of DreamCD and accepts the official
-`test/A`, `test/B`, and `test/gt` layout. It does not require DreamCD dense
-`mask_A`/`mask_B` pseudo masks. The default protocol runs both directions:
-`t1_to_t2` selects a target category from `label2`, while `t2_to_t1` selects
-one from `label1`. For a reduced dataset copy containing only `A/B/gt`, set
-`DIRECTION=t1_to_t2`, because reverse inference requires directional `label1`.
+RCDGen uses the exact `CLASS_SELECTION_FILE` created by Vistar's
+`eval_flux2_second_oneclass_binarymask_gen.bash`; it never makes an independent
+random class choice. The builder requires official directional `label1` and
+`label2` folders, revalidates each selected class after the record's original
+label preprocessing and resize, and materializes the matching selected-class
+masks next to `manifest.jsonl`. Thus `name + direction` has the same target
+class for Flux2, RCDGen, and future Vistar-model baselines. A reduced `A/B/gt`
+copy cannot be used for this shared directional semantic protocol.
 
-By default, each SECOND record selects one changed target category using a
-record-local seeded RNG. It therefore produces exactly one prediction per
-sample and direction, keeps every GT image once, and is directly usable for
-FID and paired metrics. Set `CATEGORY_POLICY=all` only for the expanded
-per-category qualitative protocol. Final outputs follow the Vistar SECOND
-layout and additionally contain `pred_change_mask/`.
+The shared protocol produces exactly one prediction per sample and direction,
+keeps every GT image once, and is directly usable for FID and paired metrics.
+Final outputs follow the Vistar SECOND layout and additionally contain
+`pred_change_mask/`.
 The `cond_mask*` files are retained only for evaluation/alignment and are never
 passed into RCDGen. This protocol should not be described as spatially
 mask-conditioned generation.
