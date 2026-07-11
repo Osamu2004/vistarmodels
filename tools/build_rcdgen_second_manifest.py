@@ -176,10 +176,17 @@ def target_change_ids(target: np.ndarray, other: np.ndarray, label_pair_mode: st
 
 
 def resized_ids(ids: np.ndarray, size: int) -> np.ndarray:
-    image = Image.fromarray(ids.astype(np.uint8), "L")
-    if image.size != (size, size):
-        image = image.resize((size, size), Image.Resampling.NEAREST)
-    return np.asarray(image, dtype=np.uint8)
+    """Match Vistar's _resize_mask_hw exactly, including nearest indices.
+
+    PIL and ``torch.nn.functional.interpolate(mode='nearest')`` choose
+    different source pixels for downsampling.  The class-selection JSONL was
+    created by Vistar with the latter, so using PIL here can erase a thin
+    class and falsely reject an otherwise valid shared record.
+    """
+    height, width = ids.shape
+    source_y = np.floor(np.arange(size, dtype=np.float64) * height / size).astype(np.int64)
+    source_x = np.floor(np.arange(size, dtype=np.float64) * width / size).astype(np.int64)
+    return ids[source_y[:, None], source_x[None, :]].astype(np.uint8, copy=False)
 
 
 def write_mask(mask: np.ndarray, path: Path) -> None:
