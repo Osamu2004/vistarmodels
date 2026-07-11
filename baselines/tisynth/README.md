@@ -88,14 +88,20 @@ cd /root/code/vistarmodels
 # Five-sample smoke test with the official GID-trained checkpoint.
 LOVEDA_ROOT=/root/data/LoveDA \
 CUDA_VISIBLE_DEVICES=0 \
+BATCH_SIZE=2 \
 MAX_SAMPLES=5 \
 bash run_bash/tisynth_loveda_gen.bash
 
 # Full run: resume is automatic.
 LOVEDA_ROOT=/root/data/LoveDA \
 CUDA_VISIBLE_DEVICES=0 \
+BATCH_SIZE=2 \
 bash run_bash/tisynth_loveda_gen.bash
 ```
+
+The default inference batch size is 2. On a larger-memory GPU, set
+`BATCH_SIZE=4`; if CUDA runs out of memory, rerun with `BATCH_SIZE=2` or 1.
+Per-sample latent seeds and resume keys do not change with batch size.
 
 Under this protocol, omit `TISYNTH_CKPT`; it defaults to
 `/root/data/weight/TISynth/GID_model.ckpt`. Set it explicitly only when running
