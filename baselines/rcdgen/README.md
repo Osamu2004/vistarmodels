@@ -44,6 +44,10 @@ The shared protocol produces exactly one prediction per sample and direction,
 keeps every GT image once, and is directly usable for FID and paired metrics.
 Final outputs follow the Vistar SECOND layout and additionally contain
 `pred_change_mask/`.
+The default launcher uses two data-parallel GPUs (`GPU_IDS=0,1`,
+`NPROC_PER_NODE=2`). Each GPU owns disjoint manifest rows; it does not split a
+single diffusion model across cards. Override both variables together for a
+different GPU count.
 The `cond_mask*` files are retained only for evaluation/alignment and are never
 passed into RCDGen. This protocol should not be described as spatially
 mask-conditioned generation.

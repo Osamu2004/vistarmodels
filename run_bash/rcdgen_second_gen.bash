@@ -3,7 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
-CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+GPU_IDS="${GPU_IDS:-${CUDA_VISIBLE_DEVICES:-0,1}}"
+NPROC_PER_NODE="${NPROC_PER_NODE:-2}"
+CUDA_VISIBLE_DEVICES="${GPU_IDS}"
 export CUDA_VISIBLE_DEVICES TOKENIZERS_PARALLELISM=false PYTHONUNBUFFERED=1
 
 SECOND_ROOT="${SECOND_ROOT:-/root/data/second_dataset}"
@@ -49,11 +51,14 @@ if [[ "${MAX_SAMPLES}" != "0" ]]; then BUILD_ARGS+=(--max_samples "${MAX_SAMPLES
 RUN_ARGS=()
 if [[ "${MAX_SAMPLES}" != "0" ]]; then RUN_ARGS+=(--max_samples "${MAX_SAMPLES}"); fi
 if [[ "${OVERWRITE}" == "1" ]]; then RUN_ARGS+=(--overwrite); fi
-"${PYTHON_BIN}" "${ROOT_DIR}/baselines/rcdgen/run_rcdgen_manifest.py" \
+torchrun --standalone --nproc_per_node="${NPROC_PER_NODE}" --no-python \
+  "${PYTHON_BIN}" -u "${ROOT_DIR}/baselines/rcdgen/run_rcdgen_manifest.py" \
   --manifest "${MANIFEST}" --output_dir "${OUTPUT_DIR}" --model "${RCDGEN_MODEL_DIR}" \
   --resolution "${RESOLUTION}" --eval_size "${EVAL_SIZE}" \
   --num_inference_steps "${NUM_INFERENCE_STEPS}" \
   --image_guidance_scale "${IMAGE_GUIDANCE_SCALE}" --guidance_scale "${GUIDANCE_SCALE}" \
   --seed "${SEED}" "${RUN_ARGS[@]}"
+
+"${PYTHON_BIN}" "${ROOT_DIR}/tools/merge_ranked_jsonl.py" --directory "${OUTPUT_DIR}"
 
 echo "[rcdgen_second_gen] done: ${OUTPUT_DIR}"

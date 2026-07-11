@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -123,6 +124,9 @@ def main() -> None:
     parser.add_argument("--guidance_scale", type=float, default=7.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max_samples", type=int, default=0)
+    parser.add_argument("--local_rank", type=int, default=int(os.environ.get("LOCAL_RANK", "0")))
+    parser.add_argument("--rank", type=int, default=int(os.environ.get("RANK", "0")))
+    parser.add_argument("--world_size", type=int, default=int(os.environ.get("WORLD_SIZE", "1")))
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -130,6 +134,16 @@ def main() -> None:
     torch.manual_seed(args.seed)
     if not torch.cuda.is_available():
         raise RuntimeError("RCDGen inference requires CUDA")
+    if args.world_size < 1 or not 0 <= args.rank < args.world_size:
+        raise ValueError(f"Invalid distributed shard: rank={args.rank}, world_size={args.world_size}")
+    if not 0 <= args.local_rank < torch.cuda.device_count():
+        raise RuntimeError(
+            f"local_rank={args.local_rank} has no visible CUDA device; "
+            f"CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')!r}, "
+            f"visible_count={torch.cuda.device_count()}"
+        )
+    torch.cuda.set_device(args.local_rank)
+    device = f"cuda:{args.local_rank}"
 
     from diffusers import UNet2DConditionModel
     from diffusers.pipelines.stable_diffusion.RCDGenSDPipeline import StableDiffusionInstructPix2PixPipeline
@@ -137,18 +151,25 @@ def main() -> None:
     model = args.model
     pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(model, torch_dtype=torch.float16)
     pipe.unet = UNet2DConditionModel.from_pretrained(model, subfolder="unet_ema", torch_dtype=torch.float16)
-    pipe = pipe.to("cuda")
+    pipe = pipe.to(device)
     pipe.set_progress_bar_config(disable=False)
 
     output = resolve(args.output_dir)
     dirs = {name: output / name for name in OUTPUT_DIRS}
     for path in dirs.values():
         path.mkdir(parents=True, exist_ok=True)
-    rows = load_rows(resolve(args.manifest), args.max_samples)
-    metadata_path = output / "prompts.jsonl"
+    all_rows = load_rows(resolve(args.manifest), args.max_samples)
+    rows = all_rows[args.rank::args.world_size]
+    metadata_path = output / f"prompts_rank{args.rank:02d}.jsonl"
     metadata: list[dict[str, Any]] = []
+    print(
+        f"[run_rcdgen_manifest] rank={args.rank}/{args.world_size} device={device} "
+        f"records={len(rows)}/{len(all_rows)}"
+    )
 
-    for row_index, row in enumerate(tqdm(rows, desc="RCDGen SECOND records")):
+    for row_index, row in enumerate(
+        tqdm(rows, desc=f"RCDGen SECOND rank {args.rank}", disable=args.rank != 0)
+    ):
         source_path = resolve(str(row["source_image"]))
         target_path = resolve(str(row["target_image"]))
         selected_mask_path = resolve(str(row["selected_semantic_change_mask"]))
@@ -180,7 +201,7 @@ def main() -> None:
             status = "source_copy_no_change"
         else:
             draw_seed = int(dict(row.get("class_selection_record", {})).get("draw_seed", 0))
-            generator = torch.Generator("cuda").manual_seed((int(args.seed) + draw_seed) % (2**63 - 1))
+            generator = torch.Generator(device).manual_seed((int(args.seed) + draw_seed) % (2**63 - 1))
             result = pipe(
                 prompt,
                 image=source_image,
@@ -228,9 +249,10 @@ def main() -> None:
     with metadata_path.open("w", encoding="utf-8") as handle:
         for item in metadata:
             handle.write(json.dumps(item, ensure_ascii=False) + "\n")
-    (output / "class_map.json").write_text(json.dumps(SECOND_CLASSES, indent=2), encoding="utf-8")
+    if args.rank == 0:
+        (output / "class_map.json").write_text(json.dumps(SECOND_CLASSES, indent=2), encoding="utf-8")
     print(
-        f"[run_rcdgen_manifest] wrote {len(metadata)} shared-protocol category-conditioned outputs to {output}"
+        f"[run_rcdgen_manifest] rank={args.rank} wrote {len(metadata)} shared-protocol outputs to {output}"
     )
 
 
