@@ -4,7 +4,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 TISYNTH_ROOT="${TISYNTH_ROOT:-${ROOT_DIR}/third_party/TISynth}"
-TISYNTH_PRETRAIN="${TISYNTH_PRETRAIN:-/root/data/weight/tisynth/controlnet1.5.ckpt}"
+TISYNTH_WEIGHT_DIR="${TISYNTH_WEIGHT_DIR:-/root/data/weight/TISynth}"
+TISYNTH_MODELS_DIR="${TISYNTH_MODELS_DIR:-}"
+if [[ -z "${TISYNTH_MODELS_DIR}" ]]; then
+  if [[ -d "${TISYNTH_WEIGHT_DIR}/TISynth_models" ]]; then
+    TISYNTH_MODELS_DIR="${TISYNTH_WEIGHT_DIR}/TISynth_models"
+  else
+    TISYNTH_MODELS_DIR="${TISYNTH_WEIGHT_DIR}"
+  fi
+fi
+TISYNTH_PRETRAIN="${TISYNTH_PRETRAIN:-${TISYNTH_MODELS_DIR}/controlnet1.5.ckpt}"
 TISYNTH_CLIP_VERSION="${TISYNTH_CLIP_VERSION:-openai/clip-vit-large-patch14}"
 
 # These directories must have the same cond_mask/gt_rgb contract as Vistar.

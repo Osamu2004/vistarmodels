@@ -41,7 +41,7 @@ Prepare disjoint Vistar-style training and validation directories, each with
 ```bash
 TRAIN_SOURCE_DIR=/root/data/experiment/loveda_train_512 \
 VAL_SOURCE_DIR=/root/data/experiment/loveda_val_512 \
-TISYNTH_PRETRAIN=/root/data/weight/tisynth/controlnet1.5.ckpt \
+TISYNTH_PRETRAIN=/root/data/weight/TISynth/controlnet1.5.ckpt \
 GPU_IDS=0, \
 MAX_STEPS=100000 \
 bash run_bash/tisynth_loveda_train.bash
@@ -79,7 +79,7 @@ cd /root/code/vistarmodels
 
 VISTAR_EVAL_DIR=/root/data/experiment/eval_loveda_gen_gen_only_step300000 \
 REFERENCE_DIR=/root/data/LoveDA/Train \
-TISYNTH_CKPT=/root/data/weight/tisynth/loveda/TISynth_LoveDA.ckpt \
+TISYNTH_CKPT=/root/data/weight/TISynth/loveda/TISynth_LoveDA.ckpt \
 CUDA_VISIBLE_DEVICES=0 \
 MAX_SAMPLES=5 \
 bash run_bash/tisynth_loveda_gen.bash
@@ -87,7 +87,7 @@ bash run_bash/tisynth_loveda_gen.bash
 # Full run: resume is automatic.
 VISTAR_EVAL_DIR=/root/data/experiment/eval_loveda_gen_gen_only_step300000 \
 REFERENCE_DIR=/root/data/LoveDA/Train \
-TISYNTH_CKPT=/root/data/weight/tisynth/loveda/TISynth_LoveDA.ckpt \
+TISYNTH_CKPT=/root/data/weight/TISynth/loveda/TISynth_LoveDA.ckpt \
 CUDA_VISIBLE_DEVICES=0 \
 bash run_bash/tisynth_loveda_gen.bash
 ```
