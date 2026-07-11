@@ -20,19 +20,20 @@ TISynth is reference-conditioned. Its inference inputs are:
 The paired GT is saved only for evaluation and is never passed to the model.
 The manifest records the exact reference image and seed for every sample.
 
-## Important checkpoint limitation
+## Checkpoint protocol
 
 The authors' public Google Drive archive contains `controlnet1.5.ckpt` and a
-`GID_model.ckpt`. It does **not** contain a LoveDA-trained TISynth checkpoint.
-For a table row labelled “TISynth on LoveDA”, train TISynth on the approved
-LoveDA training split using the official `train.sh`/`main.py`, then set
-`TISYNTH_CKPT` to that checkpoint. Running the GID checkpoint on LoveDA is a
-zero-shot transfer experiment and must be labelled as such.
+`GID_model.ckpt`. Vistar's comparison protocol evaluates externally trained
+models directly on LoveDA, so the default inference checkpoint is the official
+GID-trained `GID_model.ckpt`; no LoveDA fine-tuning is performed. The generated
+run directory explicitly contains `gid_zeroshot` to preserve this provenance.
+`controlnet1.5.ckpt` is only the initialization weight used when training a new
+TISynth model and is not the inference checkpoint.
 
 Official weights archive:
 https://drive.google.com/file/d/15i-beG-7b5lLL_pJXSI7mVT4zokNBJib/view
 
-## Train the missing LoveDA checkpoint
+## Optional LoveDA training (not used by the zero-shot table protocol)
 
 Prepare disjoint Vistar-style training and validation directories, each with
 `cond_mask` and `gt_rgb`, then initialize from the official
@@ -77,9 +78,9 @@ unless `ALLOW_EVAL_GT_REFERENCE_POOL=1` is explicitly set.
 ```bash
 cd /root/code/vistarmodels
 
+# Five-sample smoke test with the official GID-trained checkpoint.
 VISTAR_EVAL_DIR=/root/data/experiment/eval_loveda_gen_gen_only_step300000 \
 REFERENCE_DIR=/root/data/LoveDA/Train \
-TISYNTH_CKPT=/root/data/weight/TISynth/loveda/TISynth_LoveDA.ckpt \
 CUDA_VISIBLE_DEVICES=0 \
 MAX_SAMPLES=5 \
 bash run_bash/tisynth_loveda_gen.bash
@@ -87,10 +88,13 @@ bash run_bash/tisynth_loveda_gen.bash
 # Full run: resume is automatic.
 VISTAR_EVAL_DIR=/root/data/experiment/eval_loveda_gen_gen_only_step300000 \
 REFERENCE_DIR=/root/data/LoveDA/Train \
-TISYNTH_CKPT=/root/data/weight/TISynth/loveda/TISynth_LoveDA.ckpt \
 CUDA_VISIBLE_DEVICES=0 \
 bash run_bash/tisynth_loveda_gen.bash
 ```
+
+Under this protocol, omit `TISYNTH_CKPT`; it defaults to
+`/root/data/weight/TISynth/GID_model.ckpt`. Set it explicitly only when running
+a separately named fine-tuned experiment.
 
 Defaults match the official inference implementation's effective settings:
 512x512, DDIM 50 steps, CFG 9, strength 1, eta 0. The wrapper fixes three
@@ -123,7 +127,7 @@ conda activate vistar_flux
 cd /root/code/vistar
 GPU_ID=0 INPUT_SIZE=512 \
 bash run_bash/seg/compute_saved_loveda_gen_metrics.bash \
-  /root/data/experiment/tisynth_loveda_mask_to_rgb_gen_resize512_steps50_cfg9p0_seed0_refseed0
+  /root/data/experiment/tisynth_gid_zeroshot_loveda_mask_to_rgb_gen_resize512_steps50_cfg9p0_seed0_refseed0
 ```
 
 The resulting `metrics.json` includes paired PSNR/SSIM/LPIPS and the same

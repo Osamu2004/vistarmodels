@@ -17,10 +17,10 @@ REFERENCE_DIR="${REFERENCE_DIR:-}"
 
 TISYNTH_ROOT="${TISYNTH_ROOT:-${ROOT_DIR}/third_party/TISynth}"
 TISYNTH_WEIGHT_DIR="${TISYNTH_WEIGHT_DIR:-/root/data/weight/TISynth}"
-TISYNTH_CKPT="${TISYNTH_CKPT:-${TISYNTH_WEIGHT_DIR}/loveda/TISynth_LoveDA.ckpt}"
+TISYNTH_CKPT="${TISYNTH_CKPT:-${TISYNTH_WEIGHT_DIR}/GID_model.ckpt}"
 TISYNTH_CONFIG="${TISYNTH_CONFIG:-${TISYNTH_ROOT}/models/cldm_ssl_v15_aia_v0_augmentation.yaml}"
 TISYNTH_CLIP_VERSION="${TISYNTH_CLIP_VERSION:-openai/clip-vit-large-patch14}"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/tisynth_loveda_mask_to_rgb_gen_resize512_steps50_cfg9p0_seed0_refseed0}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/tisynth_gid_zeroshot_loveda_mask_to_rgb_gen_resize512_steps50_cfg9p0_seed0_refseed0}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_tisynth.jsonl}"
 
 BOOTSTRAP_TISYNTH="${BOOTSTRAP_TISYNTH:-1}"
@@ -71,8 +71,8 @@ if [[ ! -d "${REFERENCE_DIR}" ]]; then
   exit 1
 fi
 if [[ ! -f "${TISYNTH_CKPT}" ]]; then
-  echo "[tisynth_loveda_gen] Missing LoveDA-trained checkpoint: ${TISYNTH_CKPT}" >&2
-  echo "The official download contains only GID_model.ckpt; do not report it as a LoveDA-trained baseline." >&2
+  echo "[tisynth_loveda_gen] Missing TISynth inference checkpoint: ${TISYNTH_CKPT}" >&2
+  echo "The default zero-shot protocol expects ${TISYNTH_WEIGHT_DIR}/GID_model.ckpt." >&2
   exit 1
 fi
 
