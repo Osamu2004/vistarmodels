@@ -70,6 +70,25 @@ MAX_SAMPLES=5 bash run_bash/seg2any_loveda_gen.bash
 bash run_bash/seg2any_loveda_gen.bash
 ```
 
+The default run now follows Vistar's unified LoveDA generation protocol and
+uses both `Train` and `Val` (`SPLITS=train,val`). It reads the combined Vistar
+condition/GT directory:
+
+```text
+/root/data/experiment/eval_loveda_gen_gen_only_step300000
+```
+
+Training samples use `train_<domain>_<id>` names, while validation samples keep
+the legacy `<domain>_<id>` names. The generated manifest records the recovered
+split for every sample and fails early if either requested split is absent.
+To run only the validation set, use:
+
+```bash
+SPLITS=val SPLIT_TAG=val REQUIRE_SPLITS=1 \
+  VISTAR_EVAL_DIR=/path/to/vistar_loveda_eval \
+  bash run_bash/seg2any_loveda_gen.bash
+```
+
 Resume is enabled by default. Existing valid
 `pred_rgb/<name>_pred_rgb.png` files are skipped unless `OVERWRITE=1` is set.
 If an interrupted run leaves a corrupt or wrong-size prediction, it is

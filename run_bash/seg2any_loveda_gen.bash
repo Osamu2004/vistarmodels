@@ -13,7 +13,11 @@ export TQDM_DISABLE=0
 # Required layout:
 #   ${VISTAR_EVAL_DIR}/cond_mask/*_cond_mask.png
 #   ${VISTAR_EVAL_DIR}/gt_rgb/*_gt_rgb.png
-VISTAR_EVAL_DIR="${VISTAR_EVAL_DIR:-/root/data/experiment/eval_flux2_loveda_val_mask_to_rgb_gen_resize256_checkpoint1_2gpu}"
+VISTAR_EVAL_DIR="${VISTAR_EVAL_DIR:-/root/data/experiment/eval_loveda_gen_gen_only_step300000}"
+SPLITS="${SPLITS:-train,val}"
+SPLIT_TAG="${SPLIT_TAG:-${SPLITS//,/_}}"
+SPLIT_TAG="${SPLIT_TAG//+/_}"
+REQUIRE_SPLITS="${REQUIRE_SPLITS:-1}"
 
 SEG2ANY_ROOT="${SEG2ANY_ROOT:-${ROOT_DIR}/third_party/Seg2Any}"
 AUTO_DOWNLOAD_WEIGHTS="${AUTO_DOWNLOAD_WEIGHTS:-1}"
@@ -23,8 +27,8 @@ SEG2ANY_FLUX1_REPO="${SEG2ANY_FLUX1_REPO:-black-forest-labs/FLUX.1-dev}"
 SEG2ANY_FLUX1_LOCAL_DIR="${SEG2ANY_FLUX1_LOCAL_DIR:-/root/data/weight/flux1/FLUX.1-dev}"
 SEG2ANY_FLUX1_MODEL="${SEG2ANY_FLUX1_MODEL:-${SEG2ANY_FLUX1_LOCAL_DIR}}"
 SEG2ANY_LORA_CKPT="${SEG2ANY_LORA_CKPT:-/root/data/weight/seg2any/sacap_1m/seg2any/checkpoint-20000}"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/seg2any_loveda_val_mask_to_rgb_gen_resize256_steps32_cfg3p5_seed0}"
-MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_val.jsonl}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/seg2any_loveda_${SPLIT_TAG}_mask_to_rgb_gen_resize256_steps32_cfg3p5_seed0}"
+MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest_loveda_${SPLIT_TAG}.jsonl}"
 
 BOOTSTRAP_SEG2ANY="${BOOTSTRAP_SEG2ANY:-1}"
 RESOLUTION="${RESOLUTION:-256}"
@@ -142,6 +146,7 @@ _ensure_flux1_model
 mkdir -p "${OUTPUT_DIR}"
 
 echo "[seg2any_loveda_gen] VISTAR_EVAL_DIR=${VISTAR_EVAL_DIR}"
+echo "[seg2any_loveda_gen] SPLITS=${SPLITS} require_splits=${REQUIRE_SPLITS}"
 echo "[seg2any_loveda_gen] CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
 echo "[seg2any_loveda_gen] SEG2ANY_ROOT=${SEG2ANY_ROOT}"
 echo "[seg2any_loveda_gen] AUTO_DOWNLOAD_WEIGHTS=${AUTO_DOWNLOAD_WEIGHTS}"
@@ -157,10 +162,18 @@ echo "[seg2any_loveda_gen] attention_mask_method=${ATTENTION_MASK_METHOD} hard_a
 echo "[seg2any_loveda_gen] dtype=${DTYPE} seed=${SEED} max_samples=${MAX_SAMPLES} overwrite=${OVERWRITE}"
 echo "[seg2any_loveda_gen] prompt=${PROMPT}"
 
-"${PYTHON_BIN}" "${ROOT_DIR}/tools/build_manifest_from_vistar_eval.py" \
-  --eval_dir "${VISTAR_EVAL_DIR}" \
-  --output "${MANIFEST}" \
+MANIFEST_ARGS=(
+  --eval_dir "${VISTAR_EVAL_DIR}"
+  --output "${MANIFEST}"
   --prompt "${PROMPT}"
+  --splits "${SPLITS}"
+)
+if _is_truthy "${REQUIRE_SPLITS}"; then
+  MANIFEST_ARGS+=(--require_splits)
+fi
+
+"${PYTHON_BIN}" "${ROOT_DIR}/tools/build_manifest_from_vistar_eval.py" \
+  "${MANIFEST_ARGS[@]}"
 
 EXTRA_ARGS=()
 if [[ "${MAX_SAMPLES}" != "0" ]]; then
