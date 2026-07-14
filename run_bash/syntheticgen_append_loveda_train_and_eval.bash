@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VISTAR_CODE="${VISTAR_CODE:-${ROOT_DIR}/../vistar}"
 LOVEDA_ROOT="${LOVEDA_ROOT:-/root/data/LoveDA}"
+SYNTHETICGEN_OFFICIAL_DIR="${ROOT_DIR}/third_party/SyntheticGen"
+SYNTHETICGEN_OFFICIAL_REPO="${SYNTHETICGEN_OFFICIAL_REPO:-https://github.com/Buddhi19/SyntheticGen.git}"
+AUTO_FETCH_SYNTHETICGEN_SOURCE="${AUTO_FETCH_SYNTHETICGEN_SOURCE:-1}"
 
 # Existing completed Val output. Train predictions are appended here.
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/syntheticgen_loveda_val_512_exactmask_seed42}"
@@ -52,6 +55,36 @@ echo "[syntheticgen_train_append] VISTAR_CODE=${VISTAR_CODE}"
 echo "[syntheticgen_train_append] LOVEDA_ROOT=${LOVEDA_ROOT}"
 echo "[syntheticgen_train_append] TRAIN_VIEW=${TRAIN_VIEW}"
 echo "[syntheticgen_train_append] OUTPUT_DIR=${OUTPUT_DIR}"
+echo "[syntheticgen_train_append] SYNTHETICGEN_OFFICIAL_DIR=${SYNTHETICGEN_OFFICIAL_DIR}"
+
+SYNTHETICGEN_SAMPLE_PAIR="${SYNTHETICGEN_OFFICIAL_DIR}/src/scripts/sample_pair.py"
+if [[ ! -f "${SYNTHETICGEN_SAMPLE_PAIR}" ]]; then
+  if _truthy "${AUTO_FETCH_SYNTHETICGEN_SOURCE}"; then
+    if [[ -e "${SYNTHETICGEN_OFFICIAL_DIR}" ]]; then
+      echo "[syntheticgen_train_append] SyntheticGen source directory exists but is incomplete: ${SYNTHETICGEN_OFFICIAL_DIR}" >&2
+      echo "[syntheticgen_train_append] Missing required file: ${SYNTHETICGEN_SAMPLE_PAIR}" >&2
+      echo "[syntheticgen_train_append] Move or repair that directory, then rerun. Do not install the unrelated PyPI package named 'src'." >&2
+      exit 1
+    fi
+    echo "[syntheticgen_train_append] Official SyntheticGen source is missing; cloning it now"
+    mkdir -p "$(dirname "${SYNTHETICGEN_OFFICIAL_DIR}")"
+    git clone --depth 1 "${SYNTHETICGEN_OFFICIAL_REPO}" "${SYNTHETICGEN_OFFICIAL_DIR}"
+  else
+    echo "[syntheticgen_train_append] Missing official SyntheticGen source: ${SYNTHETICGEN_SAMPLE_PAIR}" >&2
+    echo "[syntheticgen_train_append] Set AUTO_FETCH_SYNTHETICGEN_SOURCE=1 or clone ${SYNTHETICGEN_OFFICIAL_REPO} into ${SYNTHETICGEN_OFFICIAL_DIR}." >&2
+    exit 1
+  fi
+fi
+
+if [[ ! -f "${SYNTHETICGEN_SAMPLE_PAIR}" ]]; then
+  echo "[syntheticgen_train_append] Official clone completed but ${SYNTHETICGEN_SAMPLE_PAIR} is still missing." >&2
+  exit 1
+fi
+
+echo "[syntheticgen_train_append] Verifying official SyntheticGen Python import"
+PYTHONPATH="${SYNTHETICGEN_OFFICIAL_DIR}:${PYTHONPATH:-}" \
+"${SYNTHETICGEN_PYTHON_BIN}" -c \
+  'from src.scripts.sample_pair import build_context, generate_with_context; print("[syntheticgen_train_append] SyntheticGen import OK")'
 
 cd "${VISTAR_CODE}"
 PYTHONPATH="${VISTAR_CODE}:${PYTHONPATH:-}" \
