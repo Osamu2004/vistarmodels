@@ -156,7 +156,7 @@ def main() -> None:
     parser.add_argument("--layout_ckpt", default="")
     parser.add_argument("--controlnet_ckpt", default="")
     parser.add_argument("--base_model", required=True)
-    parser.add_argument("--batch_size", type=int, default=2)
+    parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--layout_size", type=int, default=256)
     parser.add_argument("--resolution", type=int, default=512)
     parser.add_argument("--eval_size", type=int, default=512)
