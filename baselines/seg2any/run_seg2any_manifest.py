@@ -170,6 +170,15 @@ def _draw_binary_contour(mask: np.ndarray, thickness: int) -> np.ndarray:
     boundary[:, :-1] |= mask_bool[:, :-1] != mask_bool[:, 1:]
     boundary[:, 1:] |= mask_bool[:, 1:] != mask_bool[:, :-1]
     boundary &= mask_bool
+    if not boundary.any():
+        ys, xs = np.where(mask_bool)
+        if ys.size:
+            y0, y1 = int(ys.min()), int(ys.max())
+            x0, x1 = int(xs.min()), int(xs.max())
+            boundary[y0 : y1 + 1, x0] = True
+            boundary[y0 : y1 + 1, x1] = True
+            boundary[y0, x0 : x1 + 1] = True
+            boundary[y1, x0 : x1 + 1] = True
     radius = max(0, int(thickness) - 1)
     if radius <= 0:
         return boundary
