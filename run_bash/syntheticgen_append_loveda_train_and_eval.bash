@@ -7,7 +7,7 @@ LOVEDA_ROOT="${LOVEDA_ROOT:-/root/data/LoveDA}"
 
 # Existing completed Val output. Train predictions are appended here.
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/syntheticgen_loveda_val_512_exactmask_seed42}"
-TRAIN_VIEW="${TRAIN_VIEW:-/root/data/experiment/vistar_loveda_train_512_for_syntheticgen}"
+TRAIN_VIEW="${TRAIN_VIEW:-/root/data/experiment/vistar_loveda_train_512_minimal_for_syntheticgen}"
 
 VISTAR_PYTHON_BIN="${VISTAR_PYTHON_BIN:-python}"
 SYNTHETICGEN_PYTHON_BIN="${SYNTHETICGEN_PYTHON_BIN:-python}"
@@ -45,9 +45,7 @@ fi
 
 mkdir -p \
   "${TRAIN_VIEW}/cond_mask" \
-  "${TRAIN_VIEW}/cond_mask_official" \
-  "${TRAIN_VIEW}/gt_rgb" \
-  "${TRAIN_VIEW}/gt_mask"
+  "${TRAIN_VIEW}/gt_rgb"
 
 echo "[syntheticgen_train_append] Preparing LoveDA Train with Vistar's 512x512 preprocessing"
 echo "[syntheticgen_train_append] VISTAR_CODE=${VISTAR_CODE}"
@@ -61,12 +59,14 @@ PYTHONPATH="${VISTAR_CODE}:${PYTHONPATH:-}" \
 from pathlib import Path
 import sys
 
+from PIL import Image
+from tqdm import tqdm
+
 from eval_flux2_loveda import (
     LOVEDA_OFFICIAL_PALETTE_U8,
     _find_mask_path,
     _list_images,
     _resolve_loveda_split_dirs,
-    _save_mask,
     _save_palette_mask,
     _save_rgb_tensor,
 )
@@ -78,20 +78,48 @@ expected = int(sys.argv[3])
 
 dirs = {
     "cond_mask": output / "cond_mask",
-    "cond_mask_official": output / "cond_mask_official",
     "gt_rgb": output / "gt_rgb",
-    "gt_mask": output / "gt_mask",
 }
 for path in dirs.values():
     path.mkdir(parents=True, exist_ok=True)
 
-count = 0
+def valid_512(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        with Image.open(path) as image:
+            return image.size == (512, 512)
+    except Exception:
+        return False
+
+
+pairs = []
 domain_counts = {}
 for split, domain, image_dir, mask_dir in _resolve_loveda_split_dirs(
     data_root, domains="both", splits="train"
 ):
     for image_path in _list_images(image_dir):
-        mask_path = _find_mask_path(mask_dir, image_path)
+        pairs.append((split, domain, image_path, _find_mask_path(mask_dir, image_path)))
+        domain_counts[domain] = domain_counts.get(domain, 0) + 1
+
+if len(pairs) != expected:
+    raise RuntimeError(f"expected {expected} LoveDA Train samples, found {len(pairs)}")
+
+written = 0
+reused = 0
+for split, domain, image_path, mask_path in tqdm(
+    pairs,
+    total=len(pairs),
+    desc="Prepare LoveDA Train 512",
+    unit="pair",
+    dynamic_ncols=True,
+):
+        name = _record_name(split, domain, image_path)
+        gt_path = dirs["gt_rgb"] / f"{name}_gt_rgb.png"
+        cond_path = dirs["cond_mask"] / f"{name}_cond_mask.png"
+        if valid_512(gt_path) and valid_512(cond_path):
+            reused += 1
+            continue
         image, mask, _ = _load_resized_loveda_pair(
             image_path=image_path,
             mask_path=mask_path,
@@ -99,26 +127,20 @@ for split, domain, image_dir, mask_dir in _resolve_loveda_split_dirs(
             ignore_index=255,
             reduce_zero_label=True,
         )
-        name = _record_name(split, domain, image_path)
-        _save_rgb_tensor(image, dirs["gt_rgb"] / f"{name}_gt_rgb.png")
-        _save_mask(mask, dirs["gt_mask"] / f"{name}_gt_mask.png", ignore_index=255)
+        _save_rgb_tensor(image, gt_path)
         _save_palette_mask(
             mask,
-            dirs["cond_mask"] / f"{name}_cond_mask.png",
+            cond_path,
             LOVEDA_OFFICIAL_PALETTE_U8,
         )
-        _save_palette_mask(
-            mask,
-            dirs["cond_mask_official"] / f"{name}_cond_mask_official.png",
-            LOVEDA_OFFICIAL_PALETTE_U8,
-        )
-        count += 1
-        domain_counts[domain] = domain_counts.get(domain, 0) + 1
+        written += 1
 
-print(f"[syntheticgen_train_append] prepared_train={count}")
+prepared = written + reused
+print(f"[syntheticgen_train_append] prepared_train={prepared}")
+print(f"[syntheticgen_train_append] written={written} reused={reused}")
 print(f"[syntheticgen_train_append] domain_counts={domain_counts}")
-if count != expected:
-    raise RuntimeError(f"expected {expected} LoveDA Train samples, prepared {count}")
+if prepared != expected:
+    raise RuntimeError(f"expected {expected} prepared Train pairs, found {prepared}")
 PY
 
 echo "[syntheticgen_train_append] Starting SyntheticGen Train generation"
