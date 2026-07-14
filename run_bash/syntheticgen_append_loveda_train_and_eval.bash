@@ -18,6 +18,20 @@ CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export CUDA_VISIBLE_DEVICES
 
 SEED="${SEED:-42}"
+BATCH_SIZE="${BATCH_SIZE:-2}"
+RESOLUTION="${RESOLUTION:-512}"
+EVAL_SIZE="${EVAL_SIZE:-512}"
+STEPS="${STEPS:-50}"
+GUIDANCE_SCALE="${GUIDANCE_SCALE:-1.0}"
+GUIDANCE_RESCALE="${GUIDANCE_RESCALE:-0.0}"
+CONTROL_SCALE="${CONTROL_SCALE:-1.0}"
+DTYPE="${DTYPE:-fp16}"
+SYNTHETICGEN_DEVICE="${SYNTHETICGEN_DEVICE:-cuda:0}"
+WEIGHT_ROOT="${WEIGHT_ROOT:-/root/data/weight/syntheticgen}"
+LAYOUT_CKPT="${LAYOUT_CKPT:-${WEIGHT_ROOT}/layout/checkpoint-79000}"
+CONTROLNET_CKPT="${CONTROLNET_CKPT:-${WEIGHT_ROOT}/controlnet/checkpoint-112000}"
+BASE_MODEL="${BASE_MODEL:-/root/data/weight/stable-diffusion-v1-5}"
+OVERWRITE="${OVERWRITE:-0}"
 EXPECTED_TRAIN_SAMPLES="${EXPECTED_TRAIN_SAMPLES:-2522}"
 EXPECTED_VAL_SAMPLES="${EXPECTED_VAL_SAMPLES:-1669}"
 EXPECTED_TOTAL_SAMPLES="${EXPECTED_TOTAL_SAMPLES:-4191}"
@@ -56,6 +70,7 @@ echo "[syntheticgen_train_append] LOVEDA_ROOT=${LOVEDA_ROOT}"
 echo "[syntheticgen_train_append] TRAIN_VIEW=${TRAIN_VIEW}"
 echo "[syntheticgen_train_append] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[syntheticgen_train_append] SYNTHETICGEN_OFFICIAL_DIR=${SYNTHETICGEN_OFFICIAL_DIR}"
+echo "[syntheticgen_train_append] BATCH_SIZE=${BATCH_SIZE} CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
 
 SYNTHETICGEN_SAMPLE_PAIR="${SYNTHETICGEN_OFFICIAL_DIR}/src/scripts/sample_pair.py"
 if [[ ! -f "${SYNTHETICGEN_SAMPLE_PAIR}" ]]; then
@@ -84,7 +99,7 @@ fi
 echo "[syntheticgen_train_append] Verifying official SyntheticGen Python import"
 PYTHONPATH="${SYNTHETICGEN_OFFICIAL_DIR}:${PYTHONPATH:-}" \
 "${SYNTHETICGEN_PYTHON_BIN}" -c \
-  'from src.scripts.sample_pair import build_context, generate_with_context; print("[syntheticgen_train_append] SyntheticGen import OK")'
+  'from src.scripts.sample_pair import build_context, parse_args; print("[syntheticgen_train_append] SyntheticGen import OK")'
 
 cd "${VISTAR_CODE}"
 PYTHONPATH="${VISTAR_CODE}:${PYTHONPATH:-}" \
@@ -178,14 +193,30 @@ PY
 
 echo "[syntheticgen_train_append] Starting SyntheticGen Train generation"
 cd "${ROOT_DIR}"
-PYTHON_BIN="${SYNTHETICGEN_PYTHON_BIN}" \
-CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES}" \
-VISTAR_EVAL_DIR="${TRAIN_VIEW}" \
-OUTPUT_DIR="${OUTPUT_DIR}" \
-VERIFY_SAMPLE_COUNTS=0 \
-SEED="${SEED}" \
-OVERWRITE=0 \
-bash "${ROOT_DIR}/run_bash/syntheticgen_loveda_gen.bash"
+GEN_ARGS=()
+if _truthy "${OVERWRITE}"; then
+  GEN_ARGS+=(--overwrite)
+fi
+"${SYNTHETICGEN_PYTHON_BIN}" -u \
+  "${ROOT_DIR}/baselines/syntheticgen/run_syntheticgen_heterogeneous_batch.py" \
+  --eval_dir "${TRAIN_VIEW}" \
+  --output_dir "${OUTPUT_DIR}" \
+  --official_dir "${SYNTHETICGEN_OFFICIAL_DIR}" \
+  --weight_dir "${WEIGHT_ROOT}" \
+  --layout_ckpt "${LAYOUT_CKPT}" \
+  --controlnet_ckpt "${CONTROLNET_CKPT}" \
+  --base_model "${BASE_MODEL}" \
+  --batch_size "${BATCH_SIZE}" \
+  --resolution "${RESOLUTION}" \
+  --eval_size "${EVAL_SIZE}" \
+  --steps "${STEPS}" \
+  --guidance_scale "${GUIDANCE_SCALE}" \
+  --guidance_rescale "${GUIDANCE_RESCALE}" \
+  --control_scale "${CONTROL_SCALE}" \
+  --seed "${SEED}" \
+  --dtype "${DTYPE}" \
+  --device "${SYNTHETICGEN_DEVICE}" \
+  "${GEN_ARGS[@]}"
 
 TRAIN_COUNT="$(find "${OUTPUT_DIR}/pred_rgb" -maxdepth 1 -type f -name 'Train_*_pred_rgb.png' | wc -l | tr -d ' ')"
 TOTAL_COUNT="$(find "${OUTPUT_DIR}/pred_rgb" -maxdepth 1 -type f -name '*_pred_rgb.png' | wc -l | tr -d ' ')"
