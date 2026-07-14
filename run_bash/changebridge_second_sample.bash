@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-python}"
+CHANGEBRIDGE_ROOT="${CHANGEBRIDGE_ROOT:-${ROOT_DIR}/third_party/ChangeBridge}"
+CONFIG="${CONFIG:?set CONFIG to the patched ChangeBridge YAML}"
+MODEL_CKPT="${MODEL_CKPT:?set MODEL_CKPT to a trained ChangeBridge checkpoint}"
+MANIFEST="${MANIFEST:?set MANIFEST to the Vistar SECOND manifest}"
+RAW_OUTPUT_DIR="${RAW_OUTPUT_DIR:-/root/data/experiment/changebridge_second_raw}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/changebridge_second_eval}"
+GPU_IDS="${GPU_IDS:-0}"
+bash "${ROOT_DIR}/scripts/bootstrap_changebridge.sh"
+cd "${CHANGEBRIDGE_ROOT}"
+"${PYTHON_BIN}" main.py --config "${CONFIG}" --gpu_ids "${GPU_IDS}" --resume_model "${MODEL_CKPT}" --result_path "${RAW_OUTPUT_DIR}"
+cd "${ROOT_DIR}"
+"${PYTHON_BIN}" tools/collect_changebridge_outputs.py --manifest "${MANIFEST}" --prediction_dir "${RAW_OUTPUT_DIR}" --output_dir "${OUTPUT_DIR}"

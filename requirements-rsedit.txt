@@ -1,0 +1,9 @@
+torch>=2.1
+diffusers>=0.31
+transformers>=4.44
+accelerate>=0.33
+huggingface-hub>=0.24
+safetensors>=0.4
+pillow>=10
+numpy>=1.24
+tqdm>=4.66
