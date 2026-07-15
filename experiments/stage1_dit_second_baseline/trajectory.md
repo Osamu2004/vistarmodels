@@ -81,3 +81,33 @@ deterministic and inexpensive relative to model training, a path-only manifest
 plus online canonicalization avoids redundant dataset copies while preserving
 the controlled input tensor contract. The CUDA smoke/resume and metric gates
 remain open.
+
+## Attempt 3 — One-command guarded launch
+
+**Hypothesis**: A single launcher that performs environment checks, pinned-source
+bootstrap, online manifest creation, smoke/resume validation, and full training
+in a fixed order will reduce manual path/configuration errors without weakening
+the Stage 1 gate.
+
+**Code Changes**: Added `dit_b2_second_oneclick.bash`. It defaults to the user's
+WSL SECOND/VAE paths and two GPUs, verifies the active Python and VAE layout,
+bootstraps pinned DiT, rebuilds only missing/non-online manifests, runs optimizer
+steps 1--2 and resumes to step 3, then starts or resumes the 300K full run. It
+exposes smoke-only/full-only, manifest rebuild, dependency installation, batch,
+worker, GPU, output, and dry-run controls.
+
+**Configuration**: Same model and training configuration as Attempts 1--2. The
+one-click orchestration defaults to both smoke and full stages; full training
+starts only if every preceding command exits successfully.
+
+**Result**: Bash syntax and whitespace checks pass. A no-GPU orchestration test
+with the synthetic native SECOND tree successfully validated paths, reused the
+pinned official source, created a four-row online manifest with zero PNG copies,
+counted its records, and exited cleanly with smoke/full disabled. A full dry-run
+expanded the two-step smoke, step-three resume, and 300K full commands with the
+expected two-GPU/global-batch settings and forwarded training overrides.
+
+**Analysis**: Static orchestration hypothesis confirmed. The launcher changes
+orchestration only and does not alter model inputs, loss, optimizer, EMA, or
+sampling protocol. The actual CUDA smoke/resume and full-training gates remain
+open.

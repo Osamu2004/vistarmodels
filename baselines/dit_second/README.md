@@ -41,6 +41,21 @@ bash run_bash/dit_b2_second_prepare.bash
 
 ## Train on two GPUs
 
+The recommended one-command entry automatically bootstraps DiT, creates or
+reuses the online train manifest, runs the two-step/resume smoke test, and then
+starts the resumable 300K training run:
+
+```bash
+bash run_bash/dit_b2_second_oneclick.bash
+```
+
+Its defaults match the WSL host paths used for this baseline. Set
+`RUN_FULL=0` for smoke-only, `RUN_SMOKE=0` to skip an already completed smoke
+test, `REBUILD_MANIFEST=1` to recreate the path-only manifest, or
+`INSTALL_DEPS=1` to install `requirements-dit.txt` before launch.
+
+The lower-level training entry remains available:
+
 ```bash
 VAE_MODEL=/root/data/weight/stable-diffusion-v1-5 \
 GPU_IDS=0,1 NPROC_PER_NODE=2 \
