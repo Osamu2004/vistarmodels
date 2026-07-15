@@ -1,0 +1,7 @@
+# Install torch and torchvision separately for the CUDA version on the target host.
+diffusers>=0.30.3,<0.40.0
+numpy>=1.24
+pillow>=9.5
+timm>=0.6.12,<2.0
+tqdm>=4.65
+transformers>=4.38
