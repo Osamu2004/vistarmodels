@@ -21,7 +21,7 @@ fi
 DIT_ROOT="${DIT_ROOT:-${ROOT_DIR}/third_party/DiT}"
 VAE_MODEL="${VAE_MODEL:?set VAE_MODEL to a local Stable Diffusion 1.5 Diffusers snapshot}"
 CHECKPOINT="${CHECKPOINT:?set CHECKPOINT to a trained DiT-B/2 checkpoint}"
-MANIFEST="${MANIFEST:-/data/vistar/runs/paper_baselines/data/second/test.jsonl}"
+MANIFEST="${MANIFEST:-/root/data/experiment/dit_b2_second_data/second/test.jsonl}"
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dit_b2_second_source_mask_test_256_steps250_seed42}"
 GPU_IDS="${GPU_IDS:-0}"
 

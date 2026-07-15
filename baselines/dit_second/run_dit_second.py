@@ -16,7 +16,15 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import functional as TF
 from tqdm import tqdm
 
-from common import ConditionedDiT, SecondManifestDataset, decode, encode, resolve_path
+from common import (
+    ConditionedDiT,
+    SecondManifestDataset,
+    decode,
+    encode,
+    load_second_ids,
+    resolve_path,
+    second_ids_to_rgb,
+)
 
 
 OUTPUT_FOLDERS = (
@@ -118,15 +126,22 @@ def save_contract_row(output: Path, row: dict[str, Any], pred: Image.Image) -> N
     official_path = output / "cond_mask_official" / f"{name}_cond_mask_official.png"
     save_resized(row["source_image"], source_path, pred.size)
     save_resized(row["target_image"], target_path, pred.size)
-    save_resized(row["target_mask_ids"], ids_path, pred.size, mode="L", nearest=True)
-    save_resized(
-        row["target_mask_rgb"],
-        official_path,
-        pred.size,
-        mode="RGB",
-        nearest=True,
-    )
-    ids = np.asarray(Image.open(ids_path).convert("L"))
+    if row.get("target_mask_ids") and row.get("target_mask_rgb"):
+        save_resized(row["target_mask_ids"], ids_path, pred.size, mode="L", nearest=True)
+        save_resized(
+            row["target_mask_rgb"],
+            official_path,
+            pred.size,
+            mode="RGB",
+            nearest=True,
+        )
+        ids = np.asarray(Image.open(ids_path).convert("L"))
+    else:
+        if not row.get("target_mask_source"):
+            raise ValueError(f"sample {name} has no online or prepared target mask")
+        ids = load_second_ids(row["target_mask_source"], pred.size[0])
+        Image.fromarray(ids, mode="L").save(ids_path)
+        Image.fromarray(second_ids_to_rgb(ids), mode="RGB").save(official_path)
     binary = np.repeat(((ids > 0) * 255).astype(np.uint8)[..., None], 3, axis=2)
     Image.fromarray(binary, mode="RGB").save(output / "cond_mask" / f"{name}_cond_mask.png")
     gt = np.asarray(Image.open(target_path).convert("RGB"), dtype=np.int16)

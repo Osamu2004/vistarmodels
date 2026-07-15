@@ -21,6 +21,7 @@ fi
 LOVEDA_ROOT="${LOVEDA_ROOT:-/data/vistar/datasets/atomic/loveda/source_data}"
 SECOND_ROOT="${SECOND_ROOT:-/root/data/second_dataset}"
 SECOND_SPLITS="${SECOND_SPLITS:-train,test}"
+SECOND_STORAGE="${SECOND_STORAGE:-materialized}"
 OUTPUT_DIR="${OUTPUT_DIR:-/data/vistar/runs/paper_baselines/data}"
 
 echo "[paper_baselines_prepare_data] python=${PYTHON_BIN}"
@@ -29,4 +30,5 @@ echo "[paper_baselines_prepare_data] python=${PYTHON_BIN}"
   --loveda_root "${LOVEDA_ROOT}" \
   --second_root "${SECOND_ROOT}" \
   --second_splits "${SECOND_SPLITS}" \
+  --second_storage "${SECOND_STORAGE}" \
   --output "${OUTPUT_DIR}" "${@}"

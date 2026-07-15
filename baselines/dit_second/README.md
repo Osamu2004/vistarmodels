@@ -20,15 +20,23 @@ dropout and no classifier-free guidance is used.
 python -m pip install -r requirements-dit.txt
 bash scripts/bootstrap_dit.sh
 SECOND_ROOT=/root/data/second_dataset SECOND_SPLITS=train \
-OUTPUT_DIR=/data/vistar/runs/paper_baselines/data \
-bash run_bash/paper_baselines_prepare_data.bash --dataset second
+bash run_bash/dit_b2_second_prepare.bash
 ```
 
-The preparation command materializes both temporal directions. Its default
-training manifest is:
+The DiT preparation command writes only a lightweight bidirectional JSONL. It
+does not copy or resize the source/target RGB images. Raw SECOND labels are
+decoded, resized with nearest-neighbor interpolation, and rendered with the
+canonical palette online in each DataLoader worker. The default manifest is:
 
 ```text
-/data/vistar/runs/paper_baselines/data/second/train.jsonl
+/root/data/experiment/dit_b2_second_data/second/train.jsonl
+```
+
+To prepare the test manifest later without deleting the train manifest:
+
+```bash
+SECOND_ROOT=/root/data/second_dataset SECOND_SPLITS=test \
+bash run_bash/dit_b2_second_prepare.bash
 ```
 
 ## Train on two GPUs

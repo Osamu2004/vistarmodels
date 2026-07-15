@@ -236,7 +236,13 @@ def resolve_scene_path(source: Path, value: str) -> Path:
     return path.resolve() if path.is_absolute() else (source / path).resolve()
 
 
-def prepare_second(source: Path, output: Path, size: int, splits: tuple[str, ...]) -> dict:
+def prepare_second(
+    source: Path,
+    output: Path,
+    size: int,
+    splits: tuple[str, ...],
+    storage: str,
+) -> dict:
     summary: dict[str, int] = {}
     for split in splits:
         csv_path = source / f"{split}.csv"
@@ -255,32 +261,47 @@ def prepare_second(source: Path, output: Path, size: int, splits: tuple[str, ...
                 ("t2_to_t1", "image_t2", "image_t1", "label_t1"),
             ):
                 name = f"{scene_id}_{direction}"
-                item_root = output / "second" / split
-                source_out = item_root / "source_rgb" / f"{name}.png"
-                target_out = item_root / "target_rgb" / f"{name}.png"
-                ids_out = item_root / "target_mask_ids" / f"{name}.png"
-                rgb_out = item_root / "target_mask_rgb" / f"{name}.png"
                 source_path = resolve_scene_path(source, scene[source_key])
                 target_path = resolve_scene_path(source, scene[target_key])
                 label_path = resolve_scene_path(source, scene[label_key])
-                save_rgb(Image.open(source_path), source_out, size)
-                save_rgb(Image.open(target_path), target_out, size)
-                ids = save_second_ids(label_path, ids_out, size)
-                colorize(ids, SECOND_PALETTE, rgb_out)
+                ids = load_second_ids(label_path, size)
                 class_ids = sorted(int(x) for x in np.unique(ids) if int(x) > 0)
-                rows.append({
+                row = {
                     "name": name,
                     "dataset": "SECOND",
                     "split": split,
                     "source_format": source_format,
+                    "storage": storage,
                     "direction": direction,
-                    "source_image": str(source_out),
-                    "target_image": str(target_out),
-                    "target_mask_ids": str(ids_out),
-                    "target_mask_rgb": str(rgb_out),
                     "changed_class_ids": class_ids,
                     "prompt": f"A realistic {size} by {size} remote sensing image matching the target semantic change mask.",
-                })
+                }
+                if storage == "online":
+                    row.update({
+                        "source_image": str(source_path),
+                        "target_image": str(target_path),
+                        "target_mask_source": str(label_path),
+                        "target_mask_encoding": "second_ids_or_palette_rgb",
+                        "online_image_size": size,
+                    })
+                else:
+                    item_root = output / "second" / split
+                    source_out = item_root / "source_rgb" / f"{name}.png"
+                    target_out = item_root / "target_rgb" / f"{name}.png"
+                    ids_out = item_root / "target_mask_ids" / f"{name}.png"
+                    rgb_out = item_root / "target_mask_rgb" / f"{name}.png"
+                    save_rgb(Image.open(source_path), source_out, size)
+                    save_rgb(Image.open(target_path), target_out, size)
+                    ids_out.parent.mkdir(parents=True, exist_ok=True)
+                    Image.fromarray(ids, mode="L").save(ids_out)
+                    colorize(ids, SECOND_PALETTE, rgb_out)
+                    row.update({
+                        "source_image": str(source_out),
+                        "target_image": str(target_out),
+                        "target_mask_ids": str(ids_out),
+                        "target_mask_rgb": str(rgb_out),
+                    })
+                rows.append(row)
         write_jsonl(output / "second" / f"{split}.jsonl", rows)
         summary[f"second_{split}"] = len(rows)
     return summary
@@ -298,6 +319,12 @@ def main() -> None:
         default=os.environ.get("SECOND_SPLITS", "train,test"),
         help="Comma-separated SECOND splits to prepare, e.g. train or train,test",
     )
+    parser.add_argument(
+        "--second_storage",
+        choices=("materialized", "online"),
+        default=os.environ.get("SECOND_STORAGE", "materialized"),
+        help="materialized writes resized RGB/masks; online writes only raw paths in JSONL",
+    )
     parser.add_argument("--dataset", choices=["all", "loveda", "second"], default="all")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
@@ -313,7 +340,15 @@ def main() -> None:
         second_splits = tuple(value.strip().lower() for value in args.second_splits.split(",") if value.strip())
         if not second_splits or any(value not in {"train", "test", "val"} for value in second_splits):
             raise ValueError(f"invalid --second_splits value: {args.second_splits!r}")
-        summary.update(prepare_second(resolve(args.second_root), output, args.second_size, second_splits))
+        summary.update(
+            prepare_second(
+                resolve(args.second_root),
+                output,
+                args.second_size,
+                second_splits,
+                args.second_storage,
+            )
+        )
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2))
 

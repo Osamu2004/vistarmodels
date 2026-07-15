@@ -48,3 +48,36 @@ followed by a resume test from `checkpoint-0000002.pt`; only then should the
 change mask. If Table 4 is later changed to a shared one-class condition
 protocol, the train and test manifests must both be regenerated under that same
 policy rather than altering only inference.
+
+## Attempt 2 — Online native SECOND conversion
+
+**Hypothesis**: Keeping source/target RGB and semantic labels at their native
+SECOND paths while performing resize, label decoding, and palette rendering in
+DataLoader workers should produce exactly the same tensors as the materialized
+cache without duplicating the dataset on disk.
+
+**Code Changes**: Added an online manifest mode with raw source, target, and
+direction-specific target-label paths; extended the DiT dataset to decode
+grayscale IDs or known RGB palettes online; added online inference export of
+canonical ID/RGB masks; introduced `dit_b2_second_prepare.bash`; and changed the
+DiT train/test manifest defaults to `/root/data/experiment/dit_b2_second_data`.
+The shared preparation path retains its original materialized mode for
+ControlNet, SPADE, OASIS, and other consumers.
+
+**Configuration**: Same directional protocol and 256x256 training resolution as
+Attempt 1. Online mode performs bicubic source/target resize, nearest-neighbor
+label resize, IDs 0--6 validation, and canonical SECOND palette rendering per
+sample. The manifest itself is the only persistent prepared dataset artifact.
+
+**Result**: A synthetic two-scene native SECOND tree produced four bidirectional
+online rows and zero copied PNGs. A batch loaded from online paths had source
+and mask shapes `[2,3,64,64]`; its mask tensor was exactly equal to the legacy
+materialized-mode tensor. Online inference export reconstructed a complete
+Table 4 output record with canonical `cond_mask_ids` and RGB mask. Python
+compilation, Bash syntax, and whitespace checks pass.
+
+**Analysis**: Hypothesis confirmed. **[Reusable]** When preprocessing is fully
+deterministic and inexpensive relative to model training, a path-only manifest
+plus online canonicalization avoids redundant dataset copies while preserving
+the controlled input tensor contract. The CUDA smoke/resume and metric gates
+remain open.

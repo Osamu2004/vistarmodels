@@ -20,7 +20,7 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
 fi
 DIT_ROOT="${DIT_ROOT:-${ROOT_DIR}/third_party/DiT}"
 VAE_MODEL="${VAE_MODEL:?set VAE_MODEL to a local Stable Diffusion 1.5 Diffusers snapshot}"
-MANIFEST="${MANIFEST:-/data/vistar/runs/paper_baselines/data/second/train.jsonl}"
+MANIFEST="${MANIFEST:-/root/data/experiment/dit_b2_second_data/second/train.jsonl}"
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dit_b2_second_source_mask_256_seed42}"
 GPU_IDS="${GPU_IDS:-0,1}"
 NPROC_PER_NODE="${NPROC_PER_NODE:-2}"

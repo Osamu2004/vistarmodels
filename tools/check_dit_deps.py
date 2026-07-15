@@ -57,10 +57,16 @@ def main() -> None:
         rows = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip()]
         if not rows:
             raise ValueError(f"manifest is empty: {manifest}")
-        required = {"name", "source_image", "target_image", "target_mask_ids", "target_mask_rgb"}
+        required = {"name", "source_image", "target_image"}
         missing = required - rows[0].keys()
         if missing:
             raise ValueError(f"manifest first row is missing fields: {sorted(missing)}")
+        has_prepared_mask = all(rows[0].get(key) for key in ("target_mask_ids", "target_mask_rgb"))
+        has_online_mask = bool(rows[0].get("target_mask_source"))
+        if not has_prepared_mask and not has_online_mask:
+            raise ValueError(
+                "manifest first row must provide target_mask_source or both target_mask_ids/target_mask_rgb"
+            )
     else:
         rows = []
 

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 from PIL import Image
 from torch import nn
@@ -14,14 +15,36 @@ from torch.utils.data import Dataset
 from torchvision.transforms import functional as TF
 
 
-REQUIRED_MANIFEST_KEYS = (
-    "name",
-    "source_image",
-    "target_image",
-    "target_mask_ids",
-    "target_mask_rgb",
-)
+REQUIRED_MANIFEST_KEYS = ("name", "source_image", "target_image")
+PREPARED_MASK_KEYS = ("target_mask_ids", "target_mask_rgb")
+ONLINE_MASK_KEY = "target_mask_source"
 SD_VAE_SCALE = 0.18215
+SECOND_PALETTE_U8 = np.asarray(
+    [
+        [255, 255, 255],
+        [0, 0, 255],
+        [128, 128, 128],
+        [0, 128, 0],
+        [0, 255, 0],
+        [128, 0, 0],
+        [255, 255, 0],
+    ],
+    dtype=np.uint8,
+)
+SECOND_RGB_LABEL_COLORS = {
+    (255, 255, 255): 0,
+    (0, 0, 0): 0,
+    (0, 0, 255): 1,
+    (128, 128, 128): 2,
+    (159, 129, 183): 2,
+    (192, 192, 192): 2,
+    (0, 128, 0): 3,
+    (0, 255, 0): 4,
+    (128, 0, 0): 5,
+    (255, 0, 0): 6,
+    (165, 0, 165): 6,
+    (255, 255, 0): 6,
+}
 
 
 def resolve_path(value: str | Path) -> Path:
@@ -53,12 +76,21 @@ def read_manifest(manifest: str | Path, verify_files: bool = True) -> list[dict[
         missing = [key for key in REQUIRED_MANIFEST_KEYS if not row.get(key)]
         if missing:
             raise ValueError(f"{path}:{line_number} is missing required fields: {missing}")
+        has_prepared_mask = all(row.get(key) for key in PREPARED_MASK_KEYS)
+        has_online_mask = bool(row.get(ONLINE_MASK_KEY))
+        if not has_prepared_mask and not has_online_mask:
+            raise ValueError(
+                f"{path}:{line_number} must provide either {list(PREPARED_MASK_KEYS)} "
+                f"or {ONLINE_MASK_KEY!r}"
+            )
         name = str(row["name"])
         if name in names:
             raise ValueError(f"duplicate sample name in {path}:{line_number}: {name}")
         names.add(name)
         if verify_files:
-            for key in REQUIRED_MANIFEST_KEYS[1:]:
+            file_keys = list(REQUIRED_MANIFEST_KEYS[1:])
+            file_keys.extend(PREPARED_MASK_KEYS if has_prepared_mask else (ONLINE_MASK_KEY,))
+            for key in file_keys:
                 candidate = resolve_path(row[key])
                 if not candidate.is_file():
                     raise FileNotFoundError(f"{path}:{line_number} field {key} does not exist: {candidate}")
@@ -74,6 +106,47 @@ def load_rgb(path: str | Path, image_size: int, *, is_mask: bool = False) -> tor
         resample = Image.Resampling.NEAREST if is_mask else Image.Resampling.BICUBIC
         image = image.resize((image_size, image_size), resample)
     return TF.normalize(TF.to_tensor(image), (0.5,) * 3, (0.5,) * 3)
+
+
+def load_second_ids(path: str | Path, image_size: int) -> np.ndarray:
+    source = resolve_path(path)
+    image = Image.open(source)
+    array = np.asarray(image)
+    if array.ndim == 2:
+        ids = array.astype(np.uint8)
+    else:
+        rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+        channels_equal = np.array_equal(rgb[..., 0], rgb[..., 1]) and np.array_equal(rgb[..., 0], rgb[..., 2])
+        if channels_equal and int(rgb[..., 0].max()) <= 6:
+            ids = rgb[..., 0].copy()
+        else:
+            ids = np.full(rgb.shape[:2], 255, dtype=np.uint8)
+            for color, class_id in SECOND_RGB_LABEL_COLORS.items():
+                ids[np.all(rgb == np.asarray(color, dtype=np.uint8), axis=-1)] = class_id
+            if np.any(ids == 255):
+                unknown = np.unique(rgb[ids == 255].reshape(-1, 3), axis=0)
+                preview = [tuple(int(channel) for channel in color) for color in unknown[:10]]
+                raise ValueError(f"{source} contains unknown SECOND RGB label colors: {preview}")
+    unknown_ids = sorted(int(value) for value in np.unique(ids) if int(value) > 6)
+    if unknown_ids:
+        raise ValueError(f"{source} contains invalid SECOND class IDs: {unknown_ids}")
+    if ids.shape != (image_size, image_size):
+        ids = np.asarray(
+            Image.fromarray(ids, mode="L").resize((image_size, image_size), Image.Resampling.NEAREST),
+            dtype=np.uint8,
+        )
+    return ids
+
+
+def second_ids_to_rgb(ids: np.ndarray) -> np.ndarray:
+    if ids.ndim != 2:
+        raise ValueError(f"SECOND ID mask must be HxW, got {ids.shape}")
+    return SECOND_PALETTE_U8[np.clip(ids, 0, len(SECOND_PALETTE_U8) - 1)]
+
+
+def load_online_mask_rgb(path: str | Path, image_size: int) -> torch.Tensor:
+    rgb = second_ids_to_rgb(load_second_ids(path, image_size))
+    return TF.normalize(TF.to_tensor(Image.fromarray(rgb, mode="RGB")), (0.5,) * 3, (0.5,) * 3)
 
 
 class SecondManifestDataset(Dataset):
@@ -105,7 +178,10 @@ class SecondManifestDataset(Dataset):
         row = self.rows[index]
         target = load_rgb(row["target_image"], self.image_size)
         source = load_rgb(row["source_image"], self.image_size)
-        mask = load_rgb(row["target_mask_rgb"], self.image_size, is_mask=True)
+        if row.get("target_mask_rgb"):
+            mask = load_rgb(row["target_mask_rgb"], self.image_size, is_mask=True)
+        else:
+            mask = load_online_mask_rgb(row[ONLINE_MASK_KEY], self.image_size)
 
         # Apply geometry jointly so the source, condition, and target stay registered.
         if self.hflip_prob and random.random() < self.hflip_prob:
