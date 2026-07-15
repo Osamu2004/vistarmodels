@@ -2,7 +2,22 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON_BIN="${PYTHON_BIN:-${ROOT_DIR}/.venv/bin/python}"
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+  if [[ -x "${ROOT_DIR}/.venv/bin/python" ]]; then
+    PYTHON_BIN="${ROOT_DIR}/.venv/bin/python"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python)"
+  elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3)"
+  else
+    echo "[dit_b2_second_train] no Python interpreter found" >&2
+    exit 2
+  fi
+fi
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  echo "[dit_b2_second_train] Python is not executable: ${PYTHON_BIN}" >&2
+  exit 2
+fi
 DIT_ROOT="${DIT_ROOT:-${ROOT_DIR}/third_party/DiT}"
 VAE_MODEL="${VAE_MODEL:?set VAE_MODEL to a local Stable Diffusion 1.5 Diffusers snapshot}"
 MANIFEST="${MANIFEST:-/data/vistar/runs/paper_baselines/data/second/train.jsonl}"
@@ -22,6 +37,7 @@ export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:T
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 
 echo "[dit_b2_second_train] dit_root=${DIT_ROOT}"
+echo "[dit_b2_second_train] python=${PYTHON_BIN}"
 echo "[dit_b2_second_train] manifest=${MANIFEST}"
 echo "[dit_b2_second_train] vae=${VAE_MODEL}"
 echo "[dit_b2_second_train] output=${OUTPUT_DIR}"
