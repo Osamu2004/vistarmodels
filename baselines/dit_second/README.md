@@ -19,7 +19,7 @@ dropout and no classifier-free guidance is used.
 ```bash
 python -m pip install -r requirements-dit.txt
 bash scripts/bootstrap_dit.sh
-SECOND_ROOT=/root/data/second_semantic_manifest \
+SECOND_ROOT=/root/data/second_dataset SECOND_SPLITS=train \
 OUTPUT_DIR=/data/vistar/runs/paper_baselines/data \
 bash run_bash/paper_baselines_prepare_data.bash --dataset second
 ```
