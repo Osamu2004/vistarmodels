@@ -62,8 +62,8 @@ GPU_IDS=0,1 NPROC_PER_NODE=2 \
 bash run_bash/dit_b2_second_train.bash
 ```
 
-Defaults are 256x256, per-GPU batch 2, gradient accumulation 4, global batch
-16 on two GPUs, AdamW at 1e-4, no weight decay, EMA 0.9999, bf16, horizontal
+Defaults are 256x256, per-GPU batch 4, no gradient accumulation, and global
+batch 8 on two GPUs. Training uses AdamW at 1e-4, no weight decay, EMA 0.9999, bf16, horizontal
 flip probability 0.5, and 300K optimizer updates. `RESUME=auto` loads the
 largest `checkpoint-*.pt` in the output directory. Every run writes
 `train_config.json`, `train_log.jsonl`, `latest.json`, and complete model/EMA/

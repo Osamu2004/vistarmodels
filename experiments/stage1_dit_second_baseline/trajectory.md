@@ -23,8 +23,8 @@ collator, and RGB semantic masks use nearest-neighbor resizing.
 **Configuration**: Official DiT-B/2, 256x256 RGB images and masks, SD 1.5 VAE,
 12-channel patch input (4 noisy target + 4 source + 4 mask), eight-channel
 epsilon/sigma output, dummy one-class embedding without dropout, AdamW at
-`1e-4`, zero weight decay, EMA `0.9999`, per-GPU batch 2, two GPUs, gradient
-accumulation 4 (global batch 16), bf16, random horizontal flip `p=0.5`, seed 42,
+`1e-4`, zero weight decay, EMA `0.9999`, per-GPU batch 4, two GPUs, no gradient
+accumulation (global batch 8), bf16, random horizontal flip `p=0.5`, seed 42,
 300K optimizer updates. Inference defaults to EMA, 250 diffusion steps, no CFG,
 and deterministic per-sample noise.
 

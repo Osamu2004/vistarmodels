@@ -42,8 +42,8 @@ DIT_ROOT="${DIT_ROOT:-${ROOT_DIR}/third_party/DiT}"
 GPU_IDS="${GPU_IDS:-0,1}"
 NPROC_PER_NODE="${NPROC_PER_NODE:-2}"
 MASTER_PORT="${MASTER_PORT:-29631}"
-PER_GPU_BATCH="${PER_GPU_BATCH:-2}"
-GRAD_ACCUM="${GRAD_ACCUM:-4}"
+PER_GPU_BATCH="${PER_GPU_BATCH:-4}"
+GRAD_ACCUM="${GRAD_ACCUM:-1}"
 FULL_NUM_WORKERS="${NUM_WORKERS:-8}"
 FULL_MAX_STEPS="${MAX_STEPS:-300000}"
 FULL_OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dit_b2_second_source_mask_256_seed42}"
@@ -166,15 +166,15 @@ _train() {
 
 if _truthy "${RUN_SMOKE}"; then
   echo "[dit_b2_second_oneclick] stage=smoke_first two optimizer steps"
-  _train "${SMOKE_OUTPUT_DIR}" 2 0 auto --save_every 1 --log_every 1 "${@}"
+  _train "${SMOKE_OUTPUT_DIR}" 2 0 auto --save_every 1 --log_every 1 ${@+"$@"}
   echo "[dit_b2_second_oneclick] stage=smoke_resume resume to optimizer step three"
-  _train "${SMOKE_OUTPUT_DIR}" 3 0 auto --save_every 1 --log_every 1 "${@}"
+  _train "${SMOKE_OUTPUT_DIR}" 3 0 auto --save_every 1 --log_every 1 ${@+"$@"}
   echo "[dit_b2_second_oneclick] smoke/resume complete"
 fi
 
 if _truthy "${RUN_FULL}"; then
   echo "[dit_b2_second_oneclick] stage=full output=${FULL_OUTPUT_DIR}"
-  _train "${FULL_OUTPUT_DIR}" "${FULL_MAX_STEPS}" "${FULL_NUM_WORKERS}" "${FULL_RESUME}" "${@}"
+  _train "${FULL_OUTPUT_DIR}" "${FULL_MAX_STEPS}" "${FULL_NUM_WORKERS}" "${FULL_RESUME}" ${@+"$@"}
 fi
 
 echo "[dit_b2_second_oneclick] done"
