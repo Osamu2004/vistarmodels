@@ -150,3 +150,35 @@ path exactly as requested. The next gate is to resume from the latest retained
 checkpoint, verify `dist_backend=gloo` in both launch output and
 `train_config.json`, and confirm progress through at least the next periodic
 checkpoint.
+
+## Attempt 5 — Single-GPU continuation with fewer workers
+
+**Hypothesis**: Continuing the existing full-state run on one GPU avoids all
+inter-GPU gradient collectives, while a global batch of 4 follows the user's
+updated batch decision and two DataLoader workers reduce host-side contention.
+
+**Code Changes**: Both launchers now default to GPU 0, one process, per-GPU
+batch 4, no gradient accumulation, two workers, and `RESUME=auto`. The one-click
+launcher skips the already completed smoke stage by default and enters the full
+continuation directly. Checkpoints now record world size and global batch. For
+older checkpoints, the trainer infers saved world size from the number of RNG
+states and converts `next_batch_in_epoch` through the saved globally processed
+sample count before applying it to the one-GPU DataLoader.
+
+**Configuration**: DiT-B/2 and all model/loss/optimizer settings remain
+unchanged. The continuation uses one GPU, micro-batch 4, accumulation 1, global
+batch 4, two workers, bf16, 300K target optimizer steps, and the existing
+`/root/data/experiment/dit_b2_second_source_mask_256_seed42` output directory.
+
+**Result**: Local Python byte-compilation, Bash syntax checks, whitespace
+checks, and a one-click dry-run pass. The dry-run expands GPU 0, one process,
+micro-batch 4, accumulation 1, global batch 4, two workers, `RESUME=auto`, no
+smoke stage, and the existing 300K full-run output directory. CUDA continuation
+from the remote checkpoint remains pending.
+
+**Analysis**: The converted batch offset preserves the number of samples
+consumed within the saved epoch, but the requested global batch changes from 8
+to 4 after resume. Changing worker count also changes worker-local random
+augmentation streams, so the continuation preserves checkpoint state and data
+position rather than the previous optimization regime or bitwise-identical
+sample augmentations.

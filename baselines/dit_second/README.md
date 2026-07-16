@@ -39,39 +39,47 @@ SECOND_ROOT=/root/data/second_dataset SECOND_SPLITS=test \
 bash run_bash/dit_b2_second_prepare.bash
 ```
 
-## Train on two GPUs
+## Resume training on one GPU
 
 The recommended one-command entry automatically bootstraps DiT, creates or
-reuses the online train manifest, runs the two-step/resume smoke test, and then
-starts the resumable 300K training run:
+reuses the online train manifest, and resumes the 300K training run from the
+newest full-state checkpoint in the output directory:
 
 ```bash
 bash run_bash/dit_b2_second_oneclick.bash
 ```
 
-Its defaults match the WSL host paths used for this baseline. Set
-`RUN_FULL=0` for smoke-only, `RUN_SMOKE=0` to skip an already completed smoke
-test, `REBUILD_MANIFEST=1` to recreate the path-only manifest, or
+Its defaults match the WSL host paths used for this baseline. The completed
+smoke test is skipped by default; set `RUN_SMOKE=1 RUN_FULL=0` to rerun it,
+`REBUILD_MANIFEST=1` to recreate the path-only manifest, or
 `INSTALL_DEPS=1` to install `requirements-dit.txt` before launch.
 
 The lower-level training entry remains available:
 
 ```bash
 VAE_MODEL=/root/data/weight/stable-diffusion-v1-5 \
-GPU_IDS=0,1 NPROC_PER_NODE=2 \
+GPU_IDS=0 NPROC_PER_NODE=1 RESUME=auto \
 bash run_bash/dit_b2_second_train.bash
 ```
 
-Defaults are 256x256, per-GPU batch 4, no gradient accumulation, and global
-batch 8 on two GPUs. Training uses AdamW at 1e-4, no weight decay, EMA 0.9999, bf16, horizontal
+Defaults are 256x256, single-GPU batch 4, no gradient accumulation, global batch
+4, and two DataLoader workers. Training uses AdamW at 1e-4, no weight decay,
+EMA 0.9999, bf16, horizontal
 flip probability 0.5, and 300K optimizer updates. `RESUME=auto` loads the
 largest `checkpoint-*.pt` in the output directory. Every run writes
 `train_config.json`, `train_log.jsonl`, `latest.json`, and complete model/EMA/
 optimizer/scheduler/scaler/RNG checkpoints.
 
-Distributed training uses the Gloo process-group backend, matching VISTAR.
-The launcher rejects non-Gloo backends so a resumed run cannot silently fall
-back to NCCL.
+If a checkpoint was written by the previous two-GPU run, resume converts its
+saved `next_batch_in_epoch` using the number of globally processed samples so
+that the single-GPU loader starts at the corresponding epoch position. Model,
+EMA, optimizer, scheduler, scaler, optimizer step, and the available rank-0 RNG
+state are restored. Reducing the worker count changes worker-local augmentation
+RNG streams, so bitwise-identical data augmentation is not guaranteed.
+
+Multi-GPU training uses the Gloo process-group backend, matching VISTAR. With
+the new single-GPU default no gradient collective is initialized; the launcher
+still rejects non-Gloo overrides for a consistent interface.
 
 By default only the newest three periodic checkpoints are retained; set
 `--keep_last 0` to keep every checkpoint.

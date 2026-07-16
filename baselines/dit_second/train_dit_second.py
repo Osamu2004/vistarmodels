@@ -43,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_grad_norm", type=float, default=0.0, help="0 disables clipping")
     parser.add_argument("--ema_decay", type=float, default=0.9999)
     parser.add_argument("--precision", choices=("bf16", "fp16", "fp32"), default="bf16")
-    parser.add_argument("--num_workers", type=int, default=8)
+    parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--hflip_prob", type=float, default=0.5)
     parser.add_argument("--vflip_prob", type=float, default=0.0)
     parser.add_argument("--save_every", type=int, default=10000, help="Optimizer-step interval")
@@ -230,6 +230,8 @@ def save_checkpoint(
             "step": optimizer_step,
             "epoch": epoch,
             "next_batch_in_epoch": next_batch_in_epoch,
+            "world_size": world_size,
+            "global_batch_size": args.batch_size * world_size * args.grad_accum,
             "rng_states": all_rng_states,
             "args": vars(args),
         }
@@ -332,6 +334,7 @@ def main() -> None:
         optimizer_step = 0
         start_epoch = 0
         start_batch = 0
+        resume_position: dict[str, int] | None = None
         resume_path = resolve_resume(args.resume, output)
         if resume_path is not None:
             payload = torch_load(resume_path)
@@ -350,14 +353,43 @@ def main() -> None:
                 scheduler.load_state_dict(payload["lr_scheduler"])
             optimizer_step = int(payload.get("optimizer_step", payload.get("step", 0)))
             start_epoch = int(payload.get("epoch", 0))
-            start_batch = int(payload.get("next_batch_in_epoch", 0))
+            saved_next_batch = int(payload.get("next_batch_in_epoch", 0))
+            saved_args = payload.get("args", {})
+            saved_batch_size = int(saved_args.get("batch_size", args.batch_size))
+            saved_rng = payload.get("rng_states", [])
+            saved_world_size = int(payload.get("world_size", max(1, len(saved_rng))))
+            processed_samples_in_epoch = saved_next_batch * saved_batch_size * saved_world_size
+            current_samples_per_micro_batch = args.batch_size * world_size
+            if processed_samples_in_epoch % current_samples_per_micro_batch != 0:
+                raise RuntimeError(
+                    "cannot preserve the resume position after changing the data topology: "
+                    f"processed_samples_in_epoch={processed_samples_in_epoch} is not divisible by "
+                    f"current_samples_per_micro_batch={current_samples_per_micro_batch}"
+                )
+            start_batch = processed_samples_in_epoch // current_samples_per_micro_batch
+            resume_position = {
+                "saved_world_size": saved_world_size,
+                "saved_batch_size": saved_batch_size,
+                "saved_next_batch_in_epoch": saved_next_batch,
+                "processed_samples_in_epoch": processed_samples_in_epoch,
+                "current_world_size": world_size,
+                "current_batch_size": args.batch_size,
+                "adjusted_next_batch_in_epoch": start_batch,
+            }
             if "scaler" in payload:
                 scaler.load_state_dict(payload["scaler"])
-            saved_rng = payload.get("rng_states", [])
             if rank < len(saved_rng):
                 restore_rng_state(saved_rng[rank])
             if is_main(rank):
                 print(f"[dit_second] resumed {resume_path} at optimizer_step={optimizer_step}", flush=True)
+                if saved_world_size != world_size or saved_batch_size != args.batch_size:
+                    print(
+                        "[dit_second] adjusted resume batch position "
+                        f"{saved_next_batch} -> {start_batch} for "
+                        f"world_size {saved_world_size} -> {world_size}, "
+                        f"batch_size {saved_batch_size} -> {args.batch_size}",
+                        flush=True,
+                    )
 
         raw_model = model
         if world_size > 1:
@@ -371,6 +403,7 @@ def main() -> None:
             "dataset_samples": len(dataset),
             "world_size": world_size,
             "global_batch_size": global_batch,
+            "resume_position": resume_position,
             "effective_precision": precision,
             "trainable_parameters": count_parameters(raw_model),
             "torch_version": torch.__version__,
