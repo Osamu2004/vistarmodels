@@ -74,12 +74,16 @@ If a checkpoint was written by the previous two-GPU run, resume converts its
 saved `next_batch_in_epoch` using the number of globally processed samples so
 that the single-GPU loader starts at the corresponding epoch position. Model,
 EMA, optimizer, scheduler, scaler, optimizer step, and the available rank-0 RNG
-state are restored. Reducing the worker count changes worker-local augmentation
-RNG streams, so bitwise-identical data augmentation is not guaranteed.
+state are restored. CUDA RNG restoration is limited to the currently visible
+device count, so a two-GPU checkpoint safely restores one CUDA generator when
+continued on one GPU. Reducing the worker count changes worker-local
+augmentation RNG streams, so bitwise-identical data augmentation is not
+guaranteed.
 
 Multi-GPU training uses the Gloo process-group backend, matching VISTAR. With
-the new single-GPU default no gradient collective is initialized; the launcher
-still rejects non-Gloo overrides for a consistent interface.
+the new single-GPU default the launcher calls Python directly, so no rendezvous
+or gradient collective is initialized. The launcher still rejects non-Gloo
+overrides for a consistent multi-GPU interface.
 
 By default only the newest three periodic checkpoints are retained; set
 `--keep_last 0` to keep every checkpoint.

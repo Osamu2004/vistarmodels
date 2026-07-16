@@ -54,16 +54,26 @@ echo "[dit_b2_second_train] dist_backend=${DIST_BACKEND}"
 "${PYTHON_BIN}" "${ROOT_DIR}/tools/check_dit_deps.py" \
   --dit_root "${DIT_ROOT}" --manifest "${MANIFEST}" --vae "${VAE_MODEL}"
 
-"${PYTHON_BIN}" -m torch.distributed.run --standalone --nproc_per_node="${NPROC_PER_NODE}" --master_port="${MASTER_PORT}" \
-  "${ROOT_DIR}/baselines/dit_second/train_dit_second.py" \
-  --dit_root "${DIT_ROOT}" \
-  --manifest "${MANIFEST}" \
-  --vae "${VAE_MODEL}" \
-  --output_dir "${OUTPUT_DIR}" \
-  --max_steps "${MAX_STEPS}" \
-  --batch_size "${PER_GPU_BATCH}" \
-  --grad_accum "${GRAD_ACCUM}" \
-  --num_workers "${NUM_WORKERS}" \
-  --dist_backend "${DIST_BACKEND}" \
-  --resume "${RESUME}" \
+TRAIN_SCRIPT="${ROOT_DIR}/baselines/dit_second/train_dit_second.py"
+TRAIN_ARGS=(
+  --dit_root "${DIT_ROOT}"
+  --manifest "${MANIFEST}"
+  --vae "${VAE_MODEL}"
+  --output_dir "${OUTPUT_DIR}"
+  --max_steps "${MAX_STEPS}"
+  --batch_size "${PER_GPU_BATCH}"
+  --grad_accum "${GRAD_ACCUM}"
+  --num_workers "${NUM_WORKERS}"
+  --dist_backend "${DIST_BACKEND}"
+  --resume "${RESUME}"
   "${@}"
+)
+
+if [[ "${NPROC_PER_NODE}" == "1" ]]; then
+  echo "[dit_b2_second_train] launcher=direct_python (no distributed process group)"
+  WORLD_SIZE=1 RANK=0 LOCAL_RANK=0 "${PYTHON_BIN}" "${TRAIN_SCRIPT}" "${TRAIN_ARGS[@]}"
+else
+  echo "[dit_b2_second_train] launcher=torchrun"
+  "${PYTHON_BIN}" -m torch.distributed.run --standalone --nproc_per_node="${NPROC_PER_NODE}" --master_port="${MASTER_PORT}" \
+    "${TRAIN_SCRIPT}" "${TRAIN_ARGS[@]}"
+fi

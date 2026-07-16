@@ -171,11 +171,20 @@ def rng_state() -> dict[str, Any]:
     }
 
 
-def restore_rng_state(state: dict[str, Any]) -> None:
+def restore_rng_state(state: dict[str, Any]) -> dict[str, int]:
     random.setstate(state["python"])
     np.random.set_state(state["numpy"])
     torch.set_rng_state(state["torch"])
-    torch.cuda.set_rng_state_all(state["cuda"])
+    saved_cuda_states = list(state.get("cuda", []))
+    visible_cuda_devices = torch.cuda.device_count()
+    restored_cuda_devices = min(len(saved_cuda_states), visible_cuda_devices)
+    for device_index, cuda_state in enumerate(saved_cuda_states[:restored_cuda_devices]):
+        torch.cuda.set_rng_state(cuda_state, device=device_index)
+    return {
+        "saved_cuda_rng_devices": len(saved_cuda_states),
+        "visible_cuda_devices": visible_cuda_devices,
+        "restored_cuda_rng_devices": restored_cuda_devices,
+    }
 
 
 def gather_rng_states(world_size: int) -> list[dict[str, Any]]:
@@ -379,9 +388,18 @@ def main() -> None:
             if "scaler" in payload:
                 scaler.load_state_dict(payload["scaler"])
             if rank < len(saved_rng):
-                restore_rng_state(saved_rng[rank])
+                rng_restore = restore_rng_state(saved_rng[rank])
+                resume_position.update(rng_restore)
             if is_main(rank):
                 print(f"[dit_second] resumed {resume_path} at optimizer_step={optimizer_step}", flush=True)
+                if rank < len(saved_rng) and rng_restore["saved_cuda_rng_devices"] != rng_restore["visible_cuda_devices"]:
+                    print(
+                        "[dit_second] restored CUDA RNG states for the current topology: "
+                        f"saved={rng_restore['saved_cuda_rng_devices']} "
+                        f"visible={rng_restore['visible_cuda_devices']} "
+                        f"restored={rng_restore['restored_cuda_rng_devices']}",
+                        flush=True,
+                    )
                 if saved_world_size != world_size or saved_batch_size != args.batch_size:
                     print(
                         "[dit_second] adjusted resume batch position "

@@ -182,3 +182,34 @@ to 4 after resume. Changing worker count also changes worker-local random
 augmentation streams, so the continuation preserves checkpoint state and data
 position rather than the previous optimization regime or bitwise-identical
 sample augmentations.
+
+## Attempt 6 — Cross-topology CUDA RNG restoration
+
+**Failure Case**: The first one-GPU continuation loaded the two-GPU checkpoint
+but failed before the training loop in `torch.cuda.set_rng_state_all`. Each
+saved per-rank RNG record contained two CUDA generator states, while the new
+process exposed one CUDA device; PyTorch attempted to address the nonexistent
+second visible device and raised `IndexError: tuple index out of range`. The
+preceding c10d hostname lookup warning came from the unnecessary single-process
+torchrun rendezvous and was not the cause.
+
+**Confirmed Cause**: The old restore function assumed the saved CUDA-device
+count always equaled the current visible CUDA-device count. The model,
+optimizer, scheduler, scaler, and checkpoint format had already loaded
+successfully; only CUDA RNG restoration violated the changed topology.
+
+**Fix**: RNG restoration now restores at most
+`min(saved_cuda_states, visible_cuda_devices)` device states and records saved,
+visible, and restored counts in `train_config.json` under `resume_position`.
+For the reported two-to-one-GPU transition this restores the first saved CUDA
+generator and ignores the unavailable second generator. The single-process
+launcher now calls the trainer directly with rank/world-size fixed to 0/1;
+torchrun remains available only for explicit multi-process overrides.
+
+**Verification**: Python byte-compilation, Bash syntax, whitespace checks, and
+a lower-level launcher probe pass locally. The probe expands the direct Python
+trainer call with one process, batch 4, accumulation 1, two workers, and
+`RESUME=auto`; no torchrun command is present. The decisive remote check is that
+the restart logs `saved=2 visible=1 restored=1`, prints the resumed optimizer
+step and adjusted batch position, then completes at least one new optimizer
+update.
