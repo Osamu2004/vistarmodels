@@ -111,3 +111,42 @@ expected two-GPU/global-batch settings and forwarded training overrides.
 orchestration only and does not alter model inputs, loss, optimizer, EMA, or
 sampling protocol. The actual CUDA smoke/resume and full-training gates remain
 open.
+
+## Attempt 4 — Replace repeated NCCL synchronization failures with Gloo
+
+**Hypothesis**: Replacing the default NCCL process group with the Gloo backend
+used by VISTAR will avoid the reproducible single-node two-GPU NCCL collective
+hang while preserving the same DDP model, optimizer, data, and checkpoint
+states.
+
+**Failure Cases**: The full run first hung at optimizer step 104,413 when Rank
+1's gradient `ALLREDUCE` timed out after 600 seconds. `RESUME=auto` restored
+`checkpoint-0100000.pt`, but the run reproduced the same failure near steps
+107,061--107,062: Rank 1 timed out on a 1,204,256-element `ALLREDUCE`, aborted,
+and torch elastic terminated Rank 0. Neither supplied log includes a CUDA OOM
+or an earlier Python exception.
+
+**Code Changes**: `train_dit_second.py` now initializes the default process
+group from an explicit `--dist_backend` whose only accepted value is `gloo`.
+Both the lower-level and one-click launchers default, validate, log, and forward
+`DIST_BACKEND=gloo`. The default process group therefore carries DDP gradient
+synchronization, barriers, scalar loss reduction, and checkpoint RNG-object
+gathering without NCCL. The backend is written to `train_config.json` through
+the parsed training arguments.
+
+**Configuration**: All experiment settings remain unchanged: two GPUs,
+per-GPU batch 4, accumulation 1, global batch 8, bf16, AdamW at `1e-4`, EMA
+`0.9999`, 256x256 inputs, seed 42, and `RESUME=auto` from the newest retained
+full-state checkpoint. Only the distributed backend changes from NCCL to Gloo.
+
+**Result**: Targeted Python byte-compilation, Bash syntax checks, whitespace
+checks, and launcher dry-run validation pass locally. A remote CUDA/Gloo
+optimizer step and long-run stability test remain pending.
+
+**Analysis**: This is a single-variable infrastructure correction motivated by
+two matching NCCL failures. It does not establish that NCCL itself was the
+ultimate hardware/driver root cause, but it removes the failing communication
+path exactly as requested. The next gate is to resume from the latest retained
+checkpoint, verify `dist_backend=gloo` in both launch output and
+`train_config.json`, and confirm progress through at least the next periodic
+checkpoint.

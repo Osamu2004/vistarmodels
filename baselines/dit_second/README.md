@@ -69,6 +69,10 @@ largest `checkpoint-*.pt` in the output directory. Every run writes
 `train_config.json`, `train_log.jsonl`, `latest.json`, and complete model/EMA/
 optimizer/scheduler/scaler/RNG checkpoints.
 
+Distributed training uses the Gloo process-group backend, matching VISTAR.
+The launcher rejects non-Gloo backends so a resumed run cannot silently fall
+back to NCCL.
+
 By default only the newest three periodic checkpoints are retained; set
 `--keep_last 0` to keep every checkpoint.
 

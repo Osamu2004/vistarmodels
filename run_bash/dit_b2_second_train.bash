@@ -29,7 +29,13 @@ PER_GPU_BATCH="${PER_GPU_BATCH:-4}"
 GRAD_ACCUM="${GRAD_ACCUM:-1}"
 MAX_STEPS="${MAX_STEPS:-300000}"
 NUM_WORKERS="${NUM_WORKERS:-8}"
+DIST_BACKEND="${DIST_BACKEND:-gloo}"
 RESUME="${RESUME:-auto}"
+
+if [[ "${DIST_BACKEND}" != "gloo" ]]; then
+  echo "[dit_b2_second_train] only the Gloo backend is supported, got: ${DIST_BACKEND}" >&2
+  exit 2
+fi
 
 export CUDA_VISIBLE_DEVICES="${GPU_IDS}"
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
@@ -42,6 +48,7 @@ echo "[dit_b2_second_train] manifest=${MANIFEST}"
 echo "[dit_b2_second_train] vae=${VAE_MODEL}"
 echo "[dit_b2_second_train] output=${OUTPUT_DIR}"
 echo "[dit_b2_second_train] gpu_ids=${GPU_IDS} nproc=${NPROC_PER_NODE} per_gpu_batch=${PER_GPU_BATCH} grad_accum=${GRAD_ACCUM}"
+echo "[dit_b2_second_train] dist_backend=${DIST_BACKEND}"
 
 "${PYTHON_BIN}" "${ROOT_DIR}/tools/check_dit_deps.py" \
   --dit_root "${DIT_ROOT}" --manifest "${MANIFEST}" --vae "${VAE_MODEL}"
@@ -56,5 +63,6 @@ echo "[dit_b2_second_train] gpu_ids=${GPU_IDS} nproc=${NPROC_PER_NODE} per_gpu_b
   --batch_size "${PER_GPU_BATCH}" \
   --grad_accum "${GRAD_ACCUM}" \
   --num_workers "${NUM_WORKERS}" \
+  --dist_backend "${DIST_BACKEND}" \
   --resume "${RESUME}" \
   "${@}"

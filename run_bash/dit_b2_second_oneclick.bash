@@ -45,6 +45,7 @@ MASTER_PORT="${MASTER_PORT:-29631}"
 PER_GPU_BATCH="${PER_GPU_BATCH:-4}"
 GRAD_ACCUM="${GRAD_ACCUM:-1}"
 FULL_NUM_WORKERS="${NUM_WORKERS:-8}"
+DIST_BACKEND="${DIST_BACKEND:-gloo}"
 FULL_MAX_STEPS="${MAX_STEPS:-300000}"
 FULL_OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/dit_b2_second_source_mask_256_seed42}"
 FULL_RESUME="${RESUME:-auto}"
@@ -64,6 +65,10 @@ for numeric_name in NPROC_PER_NODE PER_GPU_BATCH GRAD_ACCUM FULL_MAX_STEPS; do
 done
 if ! [[ "${FULL_NUM_WORKERS}" =~ ^[0-9]+$ ]]; then
   echo "[dit_b2_second_oneclick] FULL_NUM_WORKERS must be a non-negative integer, got ${FULL_NUM_WORKERS}" >&2
+  exit 2
+fi
+if [[ "${DIST_BACKEND}" != "gloo" ]]; then
+  echo "[dit_b2_second_oneclick] only the Gloo backend is supported, got: ${DIST_BACKEND}" >&2
   exit 2
 fi
 
@@ -98,6 +103,7 @@ echo "[dit_b2_second_oneclick] manifest=${MANIFEST}"
 echo "[dit_b2_second_oneclick] VAE=${VAE_MODEL}"
 echo "[dit_b2_second_oneclick] VAE_subfolder=${VAE_SUBFOLDER:-<direct>}"
 echo "[dit_b2_second_oneclick] GPUs=${GPU_IDS} nproc=${NPROC_PER_NODE}"
+echo "[dit_b2_second_oneclick] dist_backend=${DIST_BACKEND}"
 echo "[dit_b2_second_oneclick] global_batch=$((PER_GPU_BATCH * NPROC_PER_NODE * GRAD_ACCUM))"
 echo "[dit_b2_second_oneclick] smoke=${RUN_SMOKE} full=${RUN_FULL} full_steps=${FULL_MAX_STEPS}"
 
@@ -158,6 +164,7 @@ _train() {
     PER_GPU_BATCH="${PER_GPU_BATCH}" \
     GRAD_ACCUM="${GRAD_ACCUM}" \
     NUM_WORKERS="${num_workers}" \
+    DIST_BACKEND="${DIST_BACKEND}" \
     OUTPUT_DIR="${output_dir}" \
     MAX_STEPS="${max_steps}" \
     RESUME="${resume}" \

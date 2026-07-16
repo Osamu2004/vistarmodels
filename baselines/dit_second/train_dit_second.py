@@ -50,12 +50,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--keep_last", type=int, default=3, help="Number of periodic checkpoints to retain; 0 keeps all")
     parser.add_argument("--log_every", type=int, default=20, help="Optimizer-step interval")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--dist_backend",
+        choices=("gloo",),
+        default="gloo",
+        help="Distributed process-group backend; Gloo matches the VISTAR training stack.",
+    )
     parser.add_argument("--resume", default="auto", help="auto, none, or a checkpoint path")
     parser.add_argument("--verify_files", action=argparse.BooleanOptionalAction, default=True)
     return parser.parse_args()
 
 
-def init_distributed() -> tuple[int, int, int, torch.device]:
+def init_distributed(backend: str) -> tuple[int, int, int, torch.device]:
     if not torch.cuda.is_available():
         raise RuntimeError("DiT-B/2 training requires CUDA")
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
@@ -63,7 +69,7 @@ def init_distributed() -> tuple[int, int, int, torch.device]:
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     if world_size > 1:
         torch.cuda.set_device(local_rank)
-        dist.init_process_group(backend="nccl", init_method="env://")
+        dist.init_process_group(backend=backend, init_method="env://")
     device = torch.device("cuda", local_rank)
     return rank, world_size, local_rank, device
 
@@ -250,7 +256,7 @@ def main() -> None:
     if not 0.0 <= args.ema_decay < 1.0:
         raise ValueError("ema_decay must be in [0, 1)")
 
-    rank, world_size, local_rank, device = init_distributed()
+    rank, world_size, local_rank, device = init_distributed(args.dist_backend)
     output = resolve_path(args.output_dir)
     if is_main(rank):
         output.mkdir(parents=True, exist_ok=True)
