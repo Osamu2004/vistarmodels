@@ -16,7 +16,6 @@ fi
 BASE_MODEL="${BASE_MODEL:-/root/data/weight/stable-diffusion-v1-5}"
 CONTROLNET="${CONTROLNET:?set CONTROLNET to the completed training output directory}"
 MANIFEST="${MANIFEST:-/root/data/experiment/controlnet_second_data/second/test.jsonl}"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/controlnet_sd15_second_mask_text_test_256_steps50_seed42}"
 GPU_IDS="${GPU_IDS:-0,1}"
 NPROC_PER_NODE="${NPROC_PER_NODE:-2}"
 MASTER_PORT="${MASTER_PORT:-29642}"
@@ -24,11 +23,30 @@ RESOLUTION="${RESOLUTION:-256}"
 STEPS="${STEPS:-50}"
 GUIDANCE_SCALE="${GUIDANCE_SCALE:-7.5}"
 CONTROLNET_SCALE="${CONTROLNET_SCALE:-1.0}"
+PIPELINE_MODE="${PIPELINE_MODE:-source_img2img}"
+STRENGTH="${STRENGTH:-0.8}"
 BATCH_SIZE="${BATCH_SIZE:-4}"
 SEED="${SEED:-42}"
 DTYPE="${DTYPE:-bf16}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
 DRY_RUN="${DRY_RUN:-0}"
+STRENGTH_TAG="${STRENGTH//./p}"
+GUIDANCE_TAG="${GUIDANCE_SCALE//./p}"
+case "${PIPELINE_MODE}" in
+  source_img2img)
+    CONDITION_LABEL="Source image + change mask + text"
+    DEFAULT_OUTPUT_DIR="/root/data/experiment/controlnet_sd15_second_source_mask_text_test_${RESOLUTION}_steps${STEPS}_cfg${GUIDANCE_TAG}_strength${STRENGTH_TAG}_seed${SEED}"
+    ;;
+  mask_text2img)
+    CONDITION_LABEL="Change mask + text (legacy)"
+    DEFAULT_OUTPUT_DIR="/root/data/experiment/controlnet_sd15_second_mask_text_test_${RESOLUTION}_steps${STEPS}_cfg${GUIDANCE_TAG}_seed${SEED}"
+    ;;
+  *)
+    echo "[controlnet_second_gen] unsupported PIPELINE_MODE=${PIPELINE_MODE}" >&2
+    exit 2
+    ;;
+esac
+OUTPUT_DIR="${OUTPUT_DIR:-${DEFAULT_OUTPUT_DIR}}"
 
 export CUDA_VISIBLE_DEVICES="${GPU_IDS}"
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
@@ -41,6 +59,8 @@ ARGS=(
   --steps "${STEPS}"
   --guidance_scale "${GUIDANCE_SCALE}"
   --controlnet_scale "${CONTROLNET_SCALE}"
+  --pipeline_mode "${PIPELINE_MODE}"
+  --strength "${STRENGTH}"
   --batch_size "${BATCH_SIZE}"
   --seed "${SEED}"
   --dtype "${DTYPE}"
@@ -65,6 +85,8 @@ echo "[controlnet_second_gen] controlnet=${CONTROLNET}"
 echo "[controlnet_second_gen] manifest=${MANIFEST}"
 echo "[controlnet_second_gen] output=${OUTPUT_DIR}"
 echo "[controlnet_second_gen] gpu_ids=${GPU_IDS} nproc=${NPROC_PER_NODE} batch=${BATCH_SIZE}"
+echo "[controlnet_second_gen] condition=${CONDITION_LABEL}"
+echo "[controlnet_second_gen] pipeline_mode=${PIPELINE_MODE} strength=${STRENGTH}"
 echo "[controlnet_second_gen] resolution=${RESOLUTION} steps=${STEPS} cfg=${GUIDANCE_SCALE} control_scale=${CONTROLNET_SCALE} seed=${SEED}"
 if [[ "${DRY_RUN}" == "1" ]]; then
   printf '[controlnet_second_gen] dry_run:'

@@ -28,6 +28,14 @@ def main() -> None:
 
     base = Path(args.base_model).expanduser().resolve()
     errors: list[str] = []
+    for pipeline_name in (
+        "StableDiffusionControlNetPipeline",
+        "StableDiffusionControlNetImg2ImgPipeline",
+    ):
+        if not hasattr(diffusers, pipeline_name):
+            errors.append(
+                f"installed diffusers {diffusers.__version__} does not provide {pipeline_name}"
+            )
     required_configs = (
         "model_index.json",
         "scheduler/scheduler_config.json",

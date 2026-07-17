@@ -9,7 +9,12 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.distributed as dist
-from diffusers import ControlNetModel, StableDiffusionControlNetPipeline, UniPCMultistepScheduler
+from diffusers import (
+    ControlNetModel,
+    StableDiffusionControlNetImg2ImgPipeline,
+    StableDiffusionControlNetPipeline,
+    UniPCMultistepScheduler,
+)
 from PIL import Image
 from tqdm import tqdm
 
@@ -44,7 +49,9 @@ def sample_seed(base_seed: int, name: str) -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run a trained SD1.5 ControlNet on bidirectional SECOND masks.")
+    parser = argparse.ArgumentParser(
+        description="Run a trained SD1.5 ControlNet on bidirectional SECOND source images and masks."
+    )
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--base_model", required=True)
     parser.add_argument("--controlnet", required=True)
@@ -53,6 +60,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--guidance_scale", type=float, default=7.5)
     parser.add_argument("--controlnet_scale", type=float, default=1.0)
+    parser.add_argument(
+        "--pipeline_mode",
+        choices=("source_img2img", "mask_text2img"),
+        default="source_img2img",
+        help=(
+            "source_img2img conditions on source image + change mask + text; "
+            "mask_text2img preserves the legacy change-mask + text protocol"
+        ),
+    )
+    parser.add_argument(
+        "--strength",
+        type=float,
+        default=0.8,
+        help="Source-image img2img strength; used only when pipeline_mode=source_img2img.",
+    )
     parser.add_argument("--negative_prompt", default="")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--batch_size", type=int, default=4)
@@ -65,6 +87,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if not 0.0 < args.strength <= 1.0:
+        raise ValueError(f"--strength must be in (0, 1], got {args.strength}")
     rank, local_rank, world_size, device = init_runtime()
     dtype = dtype_from_name(args.dtype)
     manifest = Path(args.manifest).expanduser().resolve()
@@ -88,7 +112,12 @@ def main() -> None:
         (output / folder).mkdir(parents=True, exist_ok=True)
 
     controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=dtype, local_files_only=True)
-    pipe = StableDiffusionControlNetPipeline.from_pretrained(
+    pipeline_cls = (
+        StableDiffusionControlNetImg2ImgPipeline
+        if args.pipeline_mode == "source_img2img"
+        else StableDiffusionControlNetPipeline
+    )
+    pipe = pipeline_cls.from_pretrained(
         base_model,
         controlnet=controlnet,
         torch_dtype=dtype,
@@ -113,25 +142,36 @@ def main() -> None:
         names = [str(row["name"]) for row in batch_rows]
         mask_ids = [load_mask_ids(row, args.resolution) for row in batch_rows]
         conditions = [colorize_mask(ids) for ids in mask_ids]
+        sources = [load_rgb(row, "source_image", args.resolution) for row in batch_rows]
         prompts = [controlnet_prompt(row, args.resolution) for row in batch_rows]
         generators = [torch.Generator(device=device).manual_seed(sample_seed(args.seed, name)) for name in names]
         negative_prompt = [args.negative_prompt] * len(batch_rows) if args.negative_prompt else None
         with torch.inference_mode():
-            predictions = pipe(
-                prompt=prompts,
-                negative_prompt=negative_prompt,
-                image=conditions,
-                generator=generators,
-                num_inference_steps=args.steps,
-                guidance_scale=args.guidance_scale,
-                controlnet_conditioning_scale=args.controlnet_scale,
-                height=args.resolution,
-                width=args.resolution,
-            ).images
-        for row, name, ids, condition, prompt, prediction in zip(
-            batch_rows, names, mask_ids, conditions, prompts, predictions
+            common_kwargs = {
+                "prompt": prompts,
+                "negative_prompt": negative_prompt,
+                "generator": generators,
+                "num_inference_steps": args.steps,
+                "guidance_scale": args.guidance_scale,
+                "controlnet_conditioning_scale": args.controlnet_scale,
+                "height": args.resolution,
+                "width": args.resolution,
+            }
+            if args.pipeline_mode == "source_img2img":
+                predictions = pipe(
+                    image=sources,
+                    control_image=conditions,
+                    strength=args.strength,
+                    **common_kwargs,
+                ).images
+            else:
+                predictions = pipe(
+                    image=conditions,
+                    **common_kwargs,
+                ).images
+        for row, name, ids, condition, source, prompt, prediction in zip(
+            batch_rows, names, mask_ids, conditions, sources, prompts, predictions
         ):
-            source = load_rgb(row, "source_image", args.resolution)
             target = load_rgb(row, "target_image", args.resolution)
             pred = prediction.convert("RGB")
             if pred.size != (args.resolution, args.resolution):
@@ -166,6 +206,9 @@ def main() -> None:
                     "direction": row.get("direction"),
                     "prompt": controlnet_prompt(row, args.resolution),
                     "seed": sample_seed(args.seed, name),
+                    "pipeline_mode": args.pipeline_mode,
+                    "source_image_conditioned": args.pipeline_mode == "source_img2img",
+                    "strength": args.strength if args.pipeline_mode == "source_img2img" else None,
                     "prediction": str(pred_path),
                 }
             )
@@ -182,7 +225,13 @@ def main() -> None:
             "requested_samples": len(rows),
             "completed_samples": len(records),
             "missing_samples": missing[:20],
-            "condition_contract": "target-side directional SECOND semantic change mask + class-aware text",
+            "source_image_conditioned": args.pipeline_mode == "source_img2img",
+            "condition_contract": (
+                "source-time SECOND image + target-side directional SECOND semantic change mask "
+                "+ class-aware text"
+                if args.pipeline_mode == "source_img2img"
+                else "target-side directional SECOND semantic change mask + class-aware text"
+            ),
         }
         (output / "inference_config.json").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
         if missing:

@@ -1,10 +1,12 @@
 # SD 1.5 ControlNet for SECOND
 
 This baseline trains a ControlNet from the local Stable Diffusion 1.5 snapshot
-on both directions of SECOND.  Each example conditions the generator on the
-target-side directional semantic change mask and a class-aware English prompt;
-the source-time image is exported for evaluation but is not passed to
-ControlNet.
+on both directions of SECOND.  Training uses the target-side directional
+semantic change mask and a class-aware English prompt.  The default inference
+protocol then uses the source-time image as the img2img initialization, the
+target-side directional semantic change mask as the ControlNet input, and the
+same class-aware text.  Its condition is therefore **source image + change mask
++ text**.
 
 For example, a T1-to-T2 row containing building and playground changes uses:
 
@@ -17,6 +19,13 @@ playground; unchanged pixels are labeled unchanged.
 The reverse row uses `pre-change` and derives its changed-class list from the
 reverse target mask.  The class vocabulary is `inland water`, `bare land`,
 `grass`, `forest`, `building`, and `playground`.
+
+For T1-to-T2 generation, T1 is the source image and the post-side directional
+mask is the control input.  For T2-to-T1 generation, T2 is the source image and
+the pre-side directional mask is the control input.  The existing trained
+ControlNet can be reused; source conditioning is introduced by the SD 1.5
+ControlNet img2img inference pipeline rather than by changing its trainable
+ControlNet weights.
 
 ## One-command training
 
@@ -77,6 +86,7 @@ cd /root/code/vistarmodels
 CONTROLNET=/root/data/experiment/controlnet_sd15_second_mask_text_256_1gpu_bs2_seed42 \
 BASE_MODEL=/root/data/weight/stable-diffusion-v1-5 \
 GPU_IDS=0,1 NPROC_PER_NODE=2 \
+PIPELINE_MODE=source_img2img STRENGTH=0.8 \
 COMPUTE_METRICS=1 \
 bash run_bash/controlnet_second_gen.bash
 ```
@@ -84,7 +94,24 @@ bash run_bash/controlnet_second_gen.bash
 For single-GPU inference, set `GPU_IDS=0 NPROC_PER_NODE=1`.  The common metric
 stage reports mFD6, FID-Sat, PSNR, SSIM, LPIPS, CMMD, and frozen directional
 change-consistency metrics when the VISTAR evaluator and detector checkpoint
-are available.
+are available.  The default output is isolated at:
 
-For paper comparisons, label the condition as **change mask + text**.  It is
-not a source-image-conditioned editing baseline.
+```text
+/root/data/experiment/controlnet_sd15_second_source_mask_text_test_256_steps50_cfg7p5_strength0p8_seed42
+```
+
+`STRENGTH=0.8` retains source-scene information while allowing the requested
+change.  A value near 1.0 injects almost pure noise and consequently weakens
+source-image preservation.
+
+The previous mask-and-text-only result remains reproducible with an explicit
+legacy mode and a separate output directory:
+
+```bash
+PIPELINE_MODE=mask_text2img \
+OUTPUT_DIR=/root/data/experiment/controlnet_sd15_second_mask_text_test_256_steps50_cfg7p5_seed42 \
+bash run_bash/controlnet_second_gen.bash
+```
+
+Do not mix metrics from the two protocols.  For new paper comparisons, label
+the condition as **source image + change mask + text**.
