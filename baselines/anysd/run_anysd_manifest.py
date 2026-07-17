@@ -42,6 +42,14 @@ SECOND_PROMPT_CLASSES = {
     5: "changed building",
     6: "changed playground",
 }
+SECOND_PROMPT_COLORS = {
+    "changed inland water": "blue",
+    "changed bare land": "gray",
+    "changed grass": "dark green",
+    "changed forest": "bright green",
+    "changed building": "brown",
+    "changed playground": "yellow",
+}
 SECOND_PALETTE = np.asarray(
     [
         [255, 255, 255],
@@ -121,14 +129,15 @@ def format_color_map() -> str:
     )
 
 
-def format_prompt_color_map() -> str:
-    # Keep the AnySD instruction comfortably below CLIP's 77-token limit.
-    # Exact RGB triplets remain available in class_map.json.
-    return (
-        "white unchanged, blue changed inland water, gray changed bare land, "
-        "dark-green changed grass, bright-green changed forest, brown changed "
-        "building, yellow changed playground"
+def format_prompt_color_map(class_names: list[str]) -> str:
+    # Include only classes present in this mask. This keeps the instruction
+    # within CLIP's 77-token limit while preserving exact text/mask agreement.
+    entries = ["white unchanged"]
+    entries.extend(
+        f"{SECOND_PROMPT_COLORS[class_name]} {class_name}"
+        for class_name in class_names
     )
+    return ", ".join(entries)
 
 
 def valid(path: Path, size: int) -> bool:
@@ -177,17 +186,12 @@ def prompt_for(
         raise ValueError(f"Unsupported mask mode: {mask_mode!r}")
     target_time = "post-change" if direction == "t1_to_t2" else "pre-change"
     source_time = "pre-change" if direction == "t1_to_t2" else "post-change"
-    present = (
-        ", ".join(class_names)
-        if class_names
-        else "no changed categories"
-    )
+    present = ", ".join(class_names) if class_names else "no changes"
     if mode == "official_visual_segment":
         return (
-            "Follow the full segmentation image [V*] to edit this "
-            f"{source_time} overhead image into its {target_time} image. "
-            f"Colors: {format_prompt_color_map()}. Present changes: {present}. "
-            "Preserve unchanged regions."
+            "Use segmentation [V*] to edit the "
+            f"{source_time} overhead image into the {target_time} image. "
+            f"Color map: {format_prompt_color_map(class_names)}."
         )
     if mode == "short_visual_segment":
         return (
@@ -211,6 +215,22 @@ def stable_generation_seed(
     return int.from_bytes(digest[:8], byteorder="big", signed=False) % (
         2**63 - 1
     )
+
+
+def prompt_token_count(pipe: Any, prompt: str) -> int:
+    tokenized = pipe.tokenizer(
+        prompt,
+        add_special_tokens=True,
+        truncation=False,
+    )
+    input_ids = tokenized["input_ids"]
+    count = len(input_ids)
+    maximum = int(pipe.tokenizer.model_max_length)
+    if count > maximum:
+        raise ValueError(
+            f"AnySD prompt has {count} CLIP tokens, exceeding {maximum}: {prompt}"
+        )
+    return count
 
 
 def torch_load(path: Path) -> Any:
@@ -257,10 +277,25 @@ def load_visual_segment_pipeline(args: argparse.Namespace, device: torch.device)
         torch_dtype=dtype,
         local_files_only=True,
     )
-    pipe.task_embs = torch.nn.Parameter(torch_load(model_dir / "experts/task_embs.bin").to(dtype=dtype))
+    task_embs = torch_load(model_dir / "experts/task_embs.bin")
     pipe.load_ip_adapter(str(model_dir), subfolder="experts", weight_name="visual_seg.bin")
     pipe.set_ip_adapter_scale(args.reference_image_guidance_scale)
     pipe = pipe.to(device)
+    # DiffusionPipeline.to() moves registered modules, but task_embs is an
+    # arbitrary pipeline attribute rather than a registered module. Assign it
+    # only after the pipeline move so every torchrun rank uses its local GPU.
+    pipe.task_embs = torch.nn.Parameter(
+        task_embs.to(device=device, dtype=dtype),
+        requires_grad=False,
+    )
+    if pipe.task_embs.device != device:
+        raise RuntimeError(
+            f"AnySD task embeddings are on {pipe.task_embs.device}, expected {device}"
+        )
+    print(
+        f"[run_anysd_manifest] rank={args.rank} "
+        f"task_embs_device={pipe.task_embs.device}"
+    )
     if args.xformers:
         pipe.enable_xformers_memory_efficient_attention()
     if args.vae_tiling:
@@ -443,6 +478,7 @@ def main() -> None:
         )
         visual_segment = official_visual(semantic_ids)
         pred_path = dirs["pred_rgb"] / f"{base}_pred_rgb.png"
+        token_count: int | None = None
 
         if valid(pred_path, args.eval_size) and not args.overwrite:
             status = "skipped_existing"
@@ -451,6 +487,7 @@ def main() -> None:
             status = "source_copy_no_change"
         else:
             assert pipe is not None
+            token_count = prompt_token_count(pipe, prompt)
             generation_seed = stable_generation_seed(
                 args.seed, str(row.get("sample_name", base)), direction
             )
@@ -501,6 +538,7 @@ def main() -> None:
             "present_class_ids": present_class_ids,
             "present_class_names": prompt_class_names,
             "prompt": prompt,
+            "prompt_token_count": token_count,
             "prompt_mode": args.prompt_mode,
             "expert": "visual_segment",
             "mask_mode": args.mask_mode,

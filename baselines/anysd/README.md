@@ -12,7 +12,7 @@ By default, each directional SECOND record gives the model:
 
 All changed categories are retained in a single color mask; no category is sampled or discarded. For `t1_to_t2`, the source is T1 and the mask uses target-side T2 classes. For `t2_to_t1`, the source is T2 and the mask uses target-side T1 classes. The target-time image is never passed to the model.
 
-The fixed prompt vocabulary is `changed inland water`, `changed bare land`, `changed grass`, `changed forest`, `changed building`, and `changed playground`. The prompt uses compact color names so it stays within CLIP's 77-token context; exact RGB triplets are saved in `class_map.json`. The saved `cond_mask_ids`, `cond_mask`, and `cond_mask_official` files retain the same evaluation-folder contract as the other SECOND generation baselines.
+The fixed prompt vocabulary is `changed inland water`, `changed bare land`, `changed grass`, `changed forest`, `changed building`, and `changed playground`. The prompt lists only the classes present in each mask so it stays within CLIP's 77-token context; the runner checks the real tokenizer length before inference, and exact RGB triplets are saved in `class_map.json`. The saved `cond_mask_ids`, `cond_mask`, and `cond_mask_official` files retain the same evaluation-folder contract as the other SECOND generation baselines.
 
 Set `MASK_MODE=oneclass` to reproduce the former shared random-class protocol. Only this compatibility mode requires `CLASS_SELECTION_FILE`.
 

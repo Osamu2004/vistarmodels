@@ -27,3 +27,11 @@
 **Diagnosis**: The next synchronous stage rebuilt the complete bidirectional SECOND manifest, reading every semantic-label pair and writing 3,388 directional masks without a progress indicator. The process was active on CPU/storage rather than blocked on CUDA or model loading.
 
 **Fix**: Disabled bootstrap/network access by default, added a visible progress bar to full-multiclass manifest construction, printed the active preprocessing stage, loaded each semantic-label pair only once for both directions, and reused an existing manifest only after validating its sample set and preprocessing settings.
+
+## Attempt 4 — First-Sample CUDA Failure
+
+**Observed Symptom**: Both ranks reached the first diffusion step, warned that the prompt had 82 CLIP tokens, and then failed in AnySD UNet conditioning with `Expected all tensors to be on the same device`.
+
+**Diagnosis**: The source pipeline stores `task_embs` as a plain pipeline attribute. `DiffusionPipeline.to(device)` moves registered modules but does not move this tensor, so each rank concatenated a CPU task embedding with a CUDA visual embedding. The overlong prompt was separate and nonfatal but caused truncation.
+
+**Fix**: Register the frozen task embedding after moving the pipeline, explicitly place it on each rank's local CUDA device, assert the device before inference, shorten the direction-aware prompt to the classes present in the mask, and validate its actual CLIP token count before diffusion.
