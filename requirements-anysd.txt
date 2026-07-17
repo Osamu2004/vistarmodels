@@ -1,0 +1,13 @@
+# Install a CUDA-matched PyTorch build separately.
+diffusers==0.31.0
+transformers==4.45.2
+accelerate>=0.33.0
+huggingface-hub>=0.24.0
+safetensors>=0.4.3
+peft==0.14.0
+numpy>=1.24
+Pillow>=9.5
+tqdm>=4.66
+scipy>=1.10
+einops>=0.7
+termcolor>=2.3

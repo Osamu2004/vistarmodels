@@ -233,7 +233,7 @@ def main() -> None:
     parser.add_argument("--direction", choices=["t1_to_t2", "t2_to_t1", "both"], default="both")
     parser.add_argument(
         "--consumer",
-        choices=["rcdgen", "flux1_fill"],
+        choices=["rcdgen", "flux1_fill", "anysd"],
         default="rcdgen",
         help="Declare the model input contract without changing sampled classes or masks.",
     )
@@ -311,11 +311,13 @@ def main() -> None:
                 "class_selection_record": record,
                 "consumer": args.consumer,
                 "model_inputs": (
-                    ["source_image", "text_prompt"]
-                    if args.consumer == "rcdgen"
-                    else ["source_image", "selected_binary_change_mask", "text_prompt"]
+                    ["source_image", "selected_binary_change_mask", "text_prompt"]
+                    if args.consumer == "flux1_fill"
+                    else ["source_image", "selected_semantic_change_mask", "text_prompt"]
+                    if args.consumer == "anysd"
+                    else ["source_image", "text_prompt"]
                 ),
-                "ground_truth_change_mask_passed_to_model": args.consumer == "flux1_fill",
+                "ground_truth_change_mask_passed_to_model": args.consumer in {"flux1_fill", "anysd"},
             })
 
     output.parent.mkdir(parents=True, exist_ok=True)
