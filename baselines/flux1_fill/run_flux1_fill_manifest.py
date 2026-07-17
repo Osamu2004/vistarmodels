@@ -199,7 +199,7 @@ def main() -> None:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--model", default="/root/data/weight/flux1_fill/FLUX.1-Fill-dev")
-    parser.add_argument("--resolution", type=int, default=512)
+    parser.add_argument("--resolution", type=int, default=256)
     parser.add_argument("--eval_size", type=int, default=256)
     parser.add_argument("--num_inference_steps", type=int, default=50)
     parser.add_argument("--guidance_scale", type=float, default=30.0)

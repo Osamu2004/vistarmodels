@@ -35,7 +35,8 @@ CLASS_SELECTION_FILE=/root/data/experiment/protocols/second_test_oneclass_target
 bash run_bash/flux1_fill_second_gen.bash
 ```
 
-The default is `512 -> 256`, 50 denoising steps, guidance 30, BF16, and full
+The default is native `256x256` generation and evaluation, 50 denoising steps,
+guidance 30, BF16, and full
 CUDA residency (`CPU_OFFLOAD=0`). This prevents the VAE, text encoders, and 12B
 Transformer from being moved between host memory and GPU memory again for each
 sample. Use `CPU_OFFLOAD=1` only when the full pipeline does not fit. An
@@ -65,7 +66,7 @@ CLIP/T5 execution. Existing valid predictions are skipped, so changing
 placement does not require deleting the output folder.
 
 For a fast, inspectable editing check, run several non-empty masks and save the
-exact `512x512` source/mask supplied to the pipeline:
+exact `256x256` source/mask supplied to the pipeline:
 
 ```bash
 MAX_SAMPLES=8 ONLY_CHANGED=1 SAVE_MODEL_INPUTS=1 OVERWRITE=1 \
