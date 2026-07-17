@@ -28,6 +28,47 @@ from transformers import AutoTokenizer, CLIPTextModel
 from common import colorize_mask, controlnet_prompt, load_jsonl, load_mask_ids, load_rgb
 
 
+DISTRIBUTED_ENV_KEYS = (
+    "RANK",
+    "WORLD_SIZE",
+    "LOCAL_RANK",
+    "LOCAL_WORLD_SIZE",
+    "GROUP_RANK",
+    "ROLE_RANK",
+    "ROLE_WORLD_SIZE",
+    "MASTER_ADDR",
+    "MASTER_PORT",
+    "TORCHELASTIC_RUN_ID",
+    "MPI_LOCALRANKID",
+    "PMI_RANK",
+    "PMI_SIZE",
+    "OMPI_COMM_WORLD_LOCAL_RANK",
+    "OMPI_COMM_WORLD_RANK",
+    "OMPI_COMM_WORLD_SIZE",
+    "MV2_COMM_WORLD_LOCAL_RANK",
+    "MV2_COMM_WORLD_RANK",
+    "MV2_COMM_WORLD_SIZE",
+)
+
+
+def clear_single_process_distributed_environment() -> dict[str, str]:
+    """Prevent Accelerate from treating a direct one-GPU run as torchrun.
+
+    Interactive shells can retain rank variables from a previous distributed
+    launch.  Accelerate uses those variables for auto-detection, so a direct
+    Python process may otherwise enter its distributed branch before a default
+    process group exists.
+    """
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        raise RuntimeError("--single_process cannot clear an initialized distributed process group")
+    removed = {}
+    for key in DISTRIBUTED_ENV_KEYS:
+        value = os.environ.pop(key, None)
+        if value is not None:
+            removed[key] = value
+    return removed
+
+
 class SecondControlNetDataset(Dataset):
     def __init__(
         self,
@@ -138,6 +179,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--log_every", type=int, default=20)
     parser.add_argument("--resume", default="auto", help="auto, none, or a checkpoint directory")
     parser.add_argument("--dist_backend", choices=("gloo", "nccl"), default="gloo")
+    parser.add_argument("--single_process", action="store_true")
     parser.add_argument("--gradient_checkpointing", action="store_true")
     parser.add_argument("--enable_xformers", action="store_true")
     parser.add_argument("--allow_tf32", action="store_true")
@@ -147,6 +189,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    removed_distributed_environment = (
+        clear_single_process_distributed_environment() if args.single_process else {}
+    )
     manifest = Path(args.manifest).expanduser().resolve()
     base_model = Path(args.base_model).expanduser().resolve()
     output_dir = Path(args.output_dir).expanduser().resolve()
@@ -272,6 +317,8 @@ def main() -> None:
         "trainable_parameters": trainable_parameters,
         "resume_path": str(resume_path) if resume_path else None,
         "resume_global_step": global_step,
+        "single_process": args.single_process,
+        "cleared_distributed_environment": removed_distributed_environment,
         "versions": {
             "torch": torch.__version__,
             "accelerate": accelerate.__version__,

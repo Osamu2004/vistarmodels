@@ -78,6 +78,15 @@ echo "[controlnet_second_train] resume=${RESUME} dist_backend=${DIST_BACKEND}"
 
 TRAIN_SCRIPT="${ROOT_DIR}/baselines/controlnet/train_controlnet_second.py"
 if [[ "${NPROC_PER_NODE}" == "1" ]]; then
+  # Accelerate infers distributed mode from these variables.  They can remain
+  # exported in an interactive shell after a previous torchrun experiment.
+  unset RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE GROUP_RANK ROLE_RANK ROLE_WORLD_SIZE
+  unset MASTER_ADDR MASTER_PORT TORCHELASTIC_RUN_ID
+  unset MPI_LOCALRANKID PMI_RANK PMI_SIZE
+  unset OMPI_COMM_WORLD_LOCAL_RANK OMPI_COMM_WORLD_RANK OMPI_COMM_WORLD_SIZE
+  unset MV2_COMM_WORLD_LOCAL_RANK MV2_COMM_WORLD_RANK MV2_COMM_WORLD_SIZE
+  ARGS+=(--single_process)
+  echo "[controlnet_second_train] single_process=1; cleared inherited distributed rank variables"
   COMMAND=("${PYTHON_BIN}" "${TRAIN_SCRIPT}" "${ARGS[@]}")
 else
   COMMAND=("${PYTHON_BIN}" -m torch.distributed.run --standalone --nproc_per_node="${NPROC_PER_NODE}" \

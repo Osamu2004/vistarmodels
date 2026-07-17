@@ -28,3 +28,24 @@
 - Stage-1 gate: pending remote CUDA smoke/resume completion, final
   `save_pretrained` files, 3,388 bidirectional test outputs, and the common
   metric report.  No paper value should be entered before that gate passes.
+
+## Attempt 2 — single-process Accelerate initialization repair
+
+- Failure: the remote one-GPU run passed dependency/data checks and then failed
+  while constructing `Accelerator`, where `torch.distributed.get_world_size()`
+  raised `ValueError: Default process group has not been initialized`.
+- Isolation: the launcher correctly used direct Python for one process, so it
+  intentionally had no default process group.  Accelerate nevertheless entered
+  its distributed auto-detection path, which is controlled by inherited
+  `RANK`, `WORLD_SIZE`, and `LOCAL_RANK` environment variables.
+- Cause classification: launcher/environment integration bug, not a model,
+  checkpoint, data, CUDA-memory, or optimization failure.
+- Fix: the one-process launcher now clears torchrun rank/rendezvous variables
+  and passes an explicit `--single_process` guard.  The trainer defensively
+  removes the same variables before constructing `Accelerator` and records any
+  removed values in `train_config.json`.  Multi-process launches are unchanged.
+- Verification: Python byte compilation, Bash syntax, targeted whitespace
+  checks, a dry-run seeded with stale rank/world/rendezvous values, and an
+  isolated sanitizer unit test pass.  The dry-run remains one GPU, batch 2,
+  direct Python, and includes `--single_process`.  The original remote CUDA
+  smoke/resume command remains the final runtime check.
