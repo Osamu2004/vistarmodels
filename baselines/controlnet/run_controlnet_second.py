@@ -3,64 +3,194 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import shutil
+import os
 from pathlib import Path
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from diffusers import ControlNetModel, StableDiffusionControlNetPipeline, UniPCMultistepScheduler
 from PIL import Image
 from tqdm import tqdm
 
+from common import binary_mask, colorize_mask, controlnet_prompt, load_jsonl, load_mask_ids, load_rgb
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Run a trained SD ControlNet on bidirectional SECOND masks.")
+
+def init_runtime() -> tuple[int, int, int, torch.device]:
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    rank = int(os.environ.get("RANK", "0"))
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    if not torch.cuda.is_available():
+        raise RuntimeError("ControlNet SECOND inference requires CUDA")
+    torch.cuda.set_device(local_rank)
+    if world_size > 1 and not dist.is_initialized():
+        dist.init_process_group("gloo")
+    return rank, local_rank, world_size, torch.device(f"cuda:{local_rank}")
+
+
+def dtype_from_name(name: str) -> torch.dtype:
+    if name == "bf16":
+        if not torch.cuda.is_bf16_supported():
+            raise RuntimeError("bf16 was requested but the selected GPU does not support it")
+        return torch.bfloat16
+    if name == "fp16":
+        return torch.float16
+    return torch.float32
+
+
+def sample_seed(base_seed: int, name: str) -> int:
+    digest = int.from_bytes(hashlib.sha256(name.encode("utf-8")).digest()[:4], "big")
+    return (base_seed + digest) % (2**63 - 1)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run a trained SD1.5 ControlNet on bidirectional SECOND masks.")
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--base_model", required=True)
     parser.add_argument("--controlnet", required=True)
     parser.add_argument("--output_dir", required=True)
+    parser.add_argument("--resolution", type=int, default=256)
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--guidance_scale", type=float, default=7.5)
+    parser.add_argument("--controlnet_scale", type=float, default=1.0)
+    parser.add_argument("--negative_prompt", default="")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--dtype", choices=("bf16", "fp16", "fp32"), default="bf16")
     parser.add_argument("--max_samples", type=int, default=0)
     parser.add_argument("--overwrite", action="store_true")
-    args = parser.parse_args()
-    dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    controlnet = ControlNetModel.from_pretrained(args.controlnet, torch_dtype=dtype, local_files_only=True)
-    pipe = StableDiffusionControlNetPipeline.from_pretrained(
-        args.base_model, controlnet=controlnet, torch_dtype=dtype, safety_checker=None, local_files_only=True
-    ).to("cuda")
-    pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
-    rows = [json.loads(line) for line in Path(args.manifest).read_text().splitlines() if line.strip()]
-    if args.max_samples:
-        rows = rows[: args.max_samples]
+    parser.add_argument("--enable_xformers", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    rank, local_rank, world_size, device = init_runtime()
+    dtype = dtype_from_name(args.dtype)
+    manifest = Path(args.manifest).expanduser().resolve()
+    base_model = Path(args.base_model).expanduser().resolve()
+    controlnet_path = Path(args.controlnet).expanduser().resolve()
     output = Path(args.output_dir).expanduser().resolve()
-    for folder in ("source_rgb", "cond_mask", "cond_mask_official", "cond_mask_ids", "gt_rgb", "pred_rgb", "absdiff", "prompts"):
+    rows = load_jsonl(manifest)
+    if args.max_samples > 0:
+        rows = rows[: args.max_samples]
+    rank_rows = rows[rank::world_size]
+    for folder in (
+        "source_rgb",
+        "cond_mask",
+        "cond_mask_official",
+        "cond_mask_ids",
+        "gt_rgb",
+        "pred_rgb",
+        "absdiff",
+        "prompts",
+    ):
         (output / folder).mkdir(parents=True, exist_ok=True)
-    for row in tqdm(rows, desc="ControlNet SECOND"):
-        name = row["name"]
+
+    controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=dtype, local_files_only=True)
+    pipe = StableDiffusionControlNetPipeline.from_pretrained(
+        base_model,
+        controlnet=controlnet,
+        torch_dtype=dtype,
+        safety_checker=None,
+        local_files_only=True,
+    )
+    pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+    pipe.to(device)
+    pipe.set_progress_bar_config(disable=True)
+    if args.enable_xformers:
+        pipe.enable_xformers_memory_efficient_attention()
+
+    pending = []
+    for row in rank_rows:
+        name = str(row["name"])
         pred_path = output / "pred_rgb" / f"{name}_pred_rgb.png"
-        if pred_path.is_file() and not args.overwrite:
-            continue
-        condition = Image.open(row["target_mask_rgb"]).convert("RGB")
-        digest = int.from_bytes(hashlib.sha256(name.encode()).digest()[:4], "big")
-        generator = torch.Generator("cuda").manual_seed(args.seed + digest)
-        pred = pipe(
-            prompt=row["prompt"], image=condition, generator=generator,
-            num_inference_steps=args.steps, guidance_scale=args.guidance_scale,
-        ).images[0].convert("RGB").resize((256, 256), Image.Resampling.BICUBIC)
-        pred.save(pred_path)
-        shutil.copy2(row["source_image"], output / "source_rgb" / f"{name}_source_rgb.png")
-        shutil.copy2(row["target_image"], output / "gt_rgb" / f"{name}_gt_rgb.png")
-        shutil.copy2(row["target_mask_ids"], output / "cond_mask_ids" / f"{name}_cond_mask_ids.png")
-        shutil.copy2(row["target_mask_rgb"], output / "cond_mask_official" / f"{name}_cond_mask_official.png")
-        ids = np.asarray(Image.open(row["target_mask_ids"]).convert("L"))
-        binary = np.repeat(((ids > 0) * 255).astype(np.uint8)[..., None], 3, axis=2)
-        Image.fromarray(binary, mode="RGB").save(output / "cond_mask" / f"{name}_cond_mask.png")
-        gt = np.asarray(Image.open(row["target_image"]).convert("RGB"), dtype=np.int16)
-        pa = np.asarray(pred, dtype=np.int16)
-        Image.fromarray(np.abs(gt - pa).astype(np.uint8), mode="RGB").save(output / "absdiff" / f"{name}_absdiff.png")
-        (output / "prompts" / f"{name}.txt").write_text(row["prompt"] + "\n")
+        if args.overwrite or not pred_path.is_file():
+            pending.append(row)
+    iterator = range(0, len(pending), args.batch_size)
+    for start in tqdm(iterator, desc=f"ControlNet SECOND rank {rank}", disable=rank != 0):
+        batch_rows = pending[start : start + args.batch_size]
+        names = [str(row["name"]) for row in batch_rows]
+        mask_ids = [load_mask_ids(row, args.resolution) for row in batch_rows]
+        conditions = [colorize_mask(ids) for ids in mask_ids]
+        prompts = [controlnet_prompt(row, args.resolution) for row in batch_rows]
+        generators = [torch.Generator(device=device).manual_seed(sample_seed(args.seed, name)) for name in names]
+        negative_prompt = [args.negative_prompt] * len(batch_rows) if args.negative_prompt else None
+        with torch.inference_mode():
+            predictions = pipe(
+                prompt=prompts,
+                negative_prompt=negative_prompt,
+                image=conditions,
+                generator=generators,
+                num_inference_steps=args.steps,
+                guidance_scale=args.guidance_scale,
+                controlnet_conditioning_scale=args.controlnet_scale,
+                height=args.resolution,
+                width=args.resolution,
+            ).images
+        for row, name, ids, condition, prompt, prediction in zip(
+            batch_rows, names, mask_ids, conditions, prompts, predictions
+        ):
+            source = load_rgb(row, "source_image", args.resolution)
+            target = load_rgb(row, "target_image", args.resolution)
+            pred = prediction.convert("RGB")
+            if pred.size != (args.resolution, args.resolution):
+                pred = pred.resize((args.resolution, args.resolution), Image.Resampling.BICUBIC)
+            source.save(output / "source_rgb" / f"{name}_source_rgb.png")
+            target.save(output / "gt_rgb" / f"{name}_gt_rgb.png")
+            Image.fromarray(ids, mode="L").save(output / "cond_mask_ids" / f"{name}_cond_mask_ids.png")
+            condition.save(output / "cond_mask_official" / f"{name}_cond_mask_official.png")
+            binary_mask(ids).save(output / "cond_mask" / f"{name}_cond_mask.png")
+            pred.save(output / "pred_rgb" / f"{name}_pred_rgb.png")
+            gt_array = np.asarray(target, dtype=np.int16)
+            pred_array = np.asarray(pred, dtype=np.int16)
+            Image.fromarray(np.abs(gt_array - pred_array).astype(np.uint8), mode="RGB").save(
+                output / "absdiff" / f"{name}_absdiff.png"
+            )
+            (output / "prompts" / f"{name}.txt").write_text(prompt + "\n", encoding="utf-8")
+
+    if dist.is_initialized():
+        dist.barrier()
+    if rank == 0:
+        records = []
+        missing = []
+        for row in rows:
+            name = str(row["name"])
+            pred_path = output / "pred_rgb" / f"{name}_pred_rgb.png"
+            if not pred_path.is_file():
+                missing.append(name)
+                continue
+            records.append(
+                {
+                    "name": name,
+                    "direction": row.get("direction"),
+                    "prompt": controlnet_prompt(row, args.resolution),
+                    "seed": sample_seed(args.seed, name),
+                    "prediction": str(pred_path),
+                }
+            )
+        with (output / "generated_samples.jsonl").open("w", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        config = {
+            **vars(args),
+            "manifest": str(manifest),
+            "base_model": str(base_model),
+            "controlnet": str(controlnet_path),
+            "output_dir": str(output),
+            "world_size": world_size,
+            "requested_samples": len(rows),
+            "completed_samples": len(records),
+            "missing_samples": missing[:20],
+            "condition_contract": "target-side directional SECOND semantic change mask + class-aware text",
+        }
+        (output / "inference_config.json").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        if missing:
+            raise RuntimeError(f"missing {len(missing)} predictions; first entries: {missing[:5]}")
+        print(json.dumps(config, indent=2), flush=True)
+    if dist.is_initialized():
+        dist.barrier()
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":

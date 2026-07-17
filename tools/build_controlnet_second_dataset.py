@@ -1,39 +1,26 @@
+"""Compatibility notice for the retired ImageFolder ControlNet adapter.
+
+The old adapter stored ``conditioning_image_file_name`` as JSON metadata, but
+Hugging Face ImageFolder only decodes ``file_name`` as an image.  The condition
+therefore remained a string and failed at training time.  The maintained
+ControlNet trainer reads the common SECOND JSONL manifest directly.
+"""
+
 from __future__ import annotations
 
 import argparse
-import json
-import os
-from pathlib import Path
-
-
-def link(source: Path, target: Path) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists() or target.is_symlink():
-        return
-    os.symlink(source.resolve(), target)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build an imagefolder dataset for SECOND ControlNet training.")
-    parser.add_argument("--manifest", default="/data/vistar/runs/paper_baselines/data/second/train.jsonl")
-    parser.add_argument("--output", default="/data/vistar/runs/paper_baselines/controlnet_second_train")
-    args = parser.parse_args()
-    rows = [json.loads(line) for line in Path(args.manifest).read_text().splitlines() if line.strip()]
-    output = Path(args.output).expanduser().resolve()
-    metadata = []
-    for row in rows:
-        name = row["name"] + ".png"
-        link(Path(row["target_image"]), output / "images" / name)
-        link(Path(row["target_mask_rgb"]), output / "conditioning" / name)
-        metadata.append({
-            "file_name": f"images/{name}",
-            "conditioning_image_file_name": f"conditioning/{name}",
-            "text": row["prompt"],
-        })
-    with (output / "metadata.jsonl").open("w", encoding="utf-8") as handle:
-        for row in metadata:
-            handle.write(json.dumps(row) + "\n")
-    print(f"[build_controlnet_second_dataset] wrote {len(metadata)} rows to {output}")
+    parser = argparse.ArgumentParser(
+        description="Retired: use run_bash/controlnet_second_prepare.bash and the direct-manifest trainer."
+    )
+    parser.parse_args()
+    raise SystemExit(
+        "This ImageFolder adapter is retired. Run "
+        "`bash run_bash/controlnet_second_prepare.bash`, then "
+        "`bash run_bash/controlnet_second_train.bash`."
+    )
 
 
 if __name__ == "__main__":

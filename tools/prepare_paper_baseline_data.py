@@ -35,6 +35,14 @@ SECOND_RGB_LABEL_COLORS = {
     (165, 0, 165): 6,
     (255, 255, 0): 6,
 }
+SECOND_CLASS_NAMES = {
+    1: "inland water",
+    2: "bare land",
+    3: "grass",
+    4: "forest",
+    5: "building",
+    6: "playground",
+}
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp")
 MASK_EXTS = (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
 
@@ -117,6 +125,31 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def format_english_list(values: list[str]) -> str:
+    if not values:
+        return ""
+    if len(values) == 1:
+        return values[0]
+    if len(values) == 2:
+        return f"{values[0]} and {values[1]}"
+    return f"{', '.join(values[:-1])}, and {values[-1]}"
+
+
+def build_second_controlnet_prompt(direction: str, class_ids: list[int], size: int) -> str:
+    target_time = "post-change" if direction == "t1_to_t2" else "pre-change"
+    changed_names = format_english_list(
+        [f"changed {SECOND_CLASS_NAMES[class_id]}" for class_id in class_ids if class_id in SECOND_CLASS_NAMES]
+    )
+    if changed_names:
+        semantics = (
+            f"The target-side semantic change mask contains {changed_names}; "
+            "unchanged pixels are labeled unchanged."
+        )
+    else:
+        semantics = "The target-side semantic change mask contains only unchanged pixels."
+    return f"Generate a realistic {size} by {size} {target_time} remote sensing image. {semantics}"
 
 
 def prepare_loveda(source: Path, output: Path, size: int) -> dict:
@@ -275,6 +308,7 @@ def prepare_second(
                     "direction": direction,
                     "changed_class_ids": class_ids,
                     "prompt": f"A realistic {size} by {size} remote sensing image matching the target semantic change mask.",
+                    "controlnet_prompt": build_second_controlnet_prompt(direction, class_ids, size),
                 }
                 if storage == "online":
                     row.update({
