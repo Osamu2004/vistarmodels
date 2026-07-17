@@ -201,13 +201,17 @@ def main() -> None:
         raise NotADirectoryError(base_model)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    process_group = InitProcessGroupKwargs(backend=args.dist_backend, timeout=timedelta(minutes=60))
     project_config = ProjectConfiguration(project_dir=str(output_dir), total_limit=args.checkpoint_limit)
+    kwargs_handlers = []
+    if not args.single_process:
+        kwargs_handlers.append(
+            InitProcessGroupKwargs(backend=args.dist_backend, timeout=timedelta(minutes=60))
+        )
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         project_config=project_config,
-        kwargs_handlers=[process_group],
+        kwargs_handlers=kwargs_handlers,
     )
     set_seed(args.seed, device_specific=True)
     if args.allow_tf32 and torch.cuda.is_available():

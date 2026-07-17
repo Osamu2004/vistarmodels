@@ -35,15 +35,19 @@
   while constructing `Accelerator`, where `torch.distributed.get_world_size()`
   raised `ValueError: Default process group has not been initialized`.
 - Isolation: the launcher correctly used direct Python for one process, so it
-  intentionally had no default process group.  Accelerate nevertheless entered
-  its distributed auto-detection path, which is controlled by inherited
-  `RANK`, `WORLD_SIZE`, and `LOCAL_RANK` environment variables.
+  intentionally had no default process group.  The trainer nevertheless passed
+  `InitProcessGroupKwargs(backend="gloo")` unconditionally.  In Accelerate
+  1.12, that preserves a non-empty backend and reaches `get_world_size()` even
+  though no direct-launch process group exists.  Inherited rank variables can
+  trigger the same distributed misdetection and remain a secondary risk.
 - Cause classification: launcher/environment integration bug, not a model,
   checkpoint, data, CUDA-memory, or optimization failure.
 - Fix: the one-process launcher now clears torchrun rank/rendezvous variables
   and passes an explicit `--single_process` guard.  The trainer defensively
-  removes the same variables before constructing `Accelerator` and records any
-  removed values in `train_config.json`.  Multi-process launches are unchanged.
+  removes the same variables and, critically, does not supply any process-group
+  handler to Accelerate in single-process mode.  Multi-process launches still
+  receive the requested Gloo handler.  Removed environment values are recorded
+  in `train_config.json`.
 - Verification: Python byte compilation, Bash syntax, targeted whitespace
   checks, a dry-run seeded with stale rank/world/rendezvous values, and an
   isolated sanitizer unit test pass.  The dry-run remains one GPU, batch 2,
