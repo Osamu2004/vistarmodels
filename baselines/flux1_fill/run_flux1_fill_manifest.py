@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -129,15 +130,66 @@ def load_pipeline(args: argparse.Namespace):
     from diffusers import FluxFillPipeline
 
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}[args.dtype]
+    free_bytes, total_bytes = torch.cuda.mem_get_info()
+    free_gib = free_bytes / (1024**3)
+    total_gib = total_bytes / (1024**3)
+    resolved_cpu_offload = args.cpu_offload
+    if resolved_cpu_offload is None:
+        resolved_cpu_offload = free_gib < args.auto_cuda_min_free_gib
+    placement = "model_cpu_offload" if resolved_cpu_offload else "full_cuda"
+    print(
+        f"[run_flux1_fill_manifest] placement={placement} "
+        f"cuda_free={free_gib:.2f}GiB cuda_total={total_gib:.2f}GiB "
+        f"auto_cuda_min_free={args.auto_cuda_min_free_gib:.2f}GiB",
+        flush=True,
+    )
+    load_started = time.perf_counter()
     pipe = FluxFillPipeline.from_pretrained(args.model, torch_dtype=dtype)
-    if args.cpu_offload:
+    if resolved_cpu_offload:
         pipe.enable_model_cpu_offload()
     else:
-        pipe = pipe.to("cuda")
+        try:
+            pipe = pipe.to("cuda")
+        except torch.cuda.OutOfMemoryError as exc:
+            raise RuntimeError(
+                "FLUX.1 Fill-dev did not fit in GPU memory. Rerun with CPU_OFFLOAD=1."
+            ) from exc
     if args.vae_tiling:
         pipe.enable_vae_tiling()
-    pipe.set_progress_bar_config(disable=False)
-    return pipe
+    pipe.set_progress_bar_config(disable=not args.show_denoising_progress)
+    runtime = {
+        "placement": placement,
+        "resolved_cpu_offload": bool(resolved_cpu_offload),
+        "cuda_free_gib_before_load": free_gib,
+        "cuda_total_gib": total_gib,
+        "pipeline_load_seconds": time.perf_counter() - load_started,
+    }
+    return pipe, runtime
+
+
+def cache_prompt_embeddings(
+    pipe,
+    prompts: list[str],
+    max_sequence_length: int,
+) -> tuple[dict[str, tuple[torch.Tensor, torch.Tensor]], float]:
+    if not prompts:
+        return {}, 0.0
+    started = time.perf_counter()
+    with torch.inference_mode():
+        prompt_embeds, pooled_prompt_embeds, _ = pipe.encode_prompt(
+            prompt=prompts,
+            device=pipe._execution_device,
+            num_images_per_prompt=1,
+            max_sequence_length=max_sequence_length,
+        )
+    cache = {
+        prompt: (
+            prompt_embeds[index : index + 1].detach(),
+            pooled_prompt_embeds[index : index + 1].detach(),
+        )
+        for index, prompt in enumerate(prompts)
+    }
+    return cache, time.perf_counter() - started
 
 
 def main() -> None:
@@ -163,7 +215,15 @@ def main() -> None:
         help="fill_target is the recommended FLUX Fill caption; legacy_change reproduces the old run.",
     )
     parser.add_argument("--dtype", choices=["bf16", "fp16"], default="bf16")
-    parser.add_argument("--cpu_offload", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--cpu_offload",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Use model CPU offload. Omit both flags for automatic placement from free GPU memory.",
+    )
+    parser.add_argument("--auto_cuda_min_free_gib", type=float, default=44.0)
+    parser.add_argument("--cache_prompt_embeds", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--show_denoising_progress", action="store_true")
     parser.add_argument("--vae_tiling", action="store_true")
     parser.add_argument(
         "--save_model_inputs",
@@ -192,12 +252,65 @@ def main() -> None:
     if not rows:
         raise ValueError("Manifest has no rows to generate")
 
-    # Avoid allocating the 12B model when a smoke manifest contains only
-    # no-change examples, whose correct generation is a source-image copy.
-    requires_model = any(int(row.get("selected_class_id", -1)) > 0 for row in rows)
-    pipe = load_pipeline(args) if requires_model else None
+    # Do not allocate FLUX when all requested generated outputs already exist or
+    # when a smoke manifest contains only no-change source-copy examples.
+    pending_generation_rows = []
+    for row_index, row in enumerate(rows):
+        class_id = int(row.get("selected_class_id", -1))
+        name = str(row.get("name", f"sample_{row_index:06d}"))
+        pred_path = dirs["pred_rgb"] / f"{name}_pred_rgb.png"
+        if class_id > 0 and (args.overwrite or not valid(pred_path, args.eval_size)):
+            pending_generation_rows.append(row)
+    requires_model = bool(pending_generation_rows)
+    pipe = None
+    runtime_info: dict[str, Any] = {
+        "requested_rows": len(rows),
+        "pending_generated_rows": len(pending_generation_rows),
+        "cache_prompt_embeds": args.cache_prompt_embeds,
+        "show_denoising_progress": args.show_denoising_progress,
+    }
+    prompt_cache: dict[str, tuple[torch.Tensor, torch.Tensor]] = {}
+    if requires_model:
+        pipe, placement_info = load_pipeline(args)
+        runtime_info.update(placement_info)
+        unique_prompts = sorted(
+            {
+                prompt_for(str(row["direction"]), str(row["selected_class_name"]), args.prompt_mode)
+                for row in pending_generation_rows
+            }
+        )
+        if args.cache_prompt_embeds:
+            prompt_cache, prompt_cache_seconds = cache_prompt_embeddings(
+                pipe, unique_prompts, args.max_sequence_length
+            )
+            runtime_info.update(
+                {
+                    "prompt_cache_unique_prompts": len(prompt_cache),
+                    "prompt_cache_seconds": prompt_cache_seconds,
+                    "prompt_cache_prompts": unique_prompts,
+                }
+            )
+            print(
+                f"[run_flux1_fill_manifest] cached {len(prompt_cache)} unique prompts "
+                f"in {prompt_cache_seconds:.2f}s; text encoders will not rerun per sample",
+                flush=True,
+            )
+    else:
+        runtime_info.update(
+            {
+                "placement": "model_not_loaded",
+                "resolved_cpu_offload": None,
+                "prompt_cache_unique_prompts": 0,
+                "prompt_cache_seconds": 0.0,
+                "prompt_cache_prompts": [],
+            }
+        )
+    (output / "runtime_config.json").write_text(
+        json.dumps({**vars(args), **runtime_info}, indent=2) + "\n", encoding="utf-8"
+    )
     metadata: list[dict[str, Any]] = []
-    for row_index, row in enumerate(tqdm(rows, desc="FLUX.1 Fill-dev SECOND records")):
+    progress = tqdm(rows, desc="FLUX.1 Fill-dev SECOND records")
+    for row_index, row in enumerate(progress):
         consumer = str(row.get("consumer", ""))
         if consumer != "flux1_fill":
             raise ValueError(
@@ -239,6 +352,8 @@ def main() -> None:
         if args.save_model_inputs:
             save(source, dirs["model_input_source_rgb"] / f"{name}_source_rgb.png")
             save(binary_mask, dirs["model_input_mask"] / f"{name}_white_repaint_black_preserve.png")
+        generation_seconds = 0.0
+        prompt_cache_hit = False
         if valid(pred_path, args.eval_size) and not args.overwrite:
             status = "skipped_existing"
         elif class_id == 0:
@@ -248,8 +363,18 @@ def main() -> None:
             assert pipe is not None
             draw_seed = int(dict(row.get("class_selection_record", {})).get("draw_seed", 0))
             generator = torch.Generator("cpu").manual_seed((int(args.seed) + draw_seed) % (2**63 - 1))
+            prompt_kwargs: dict[str, Any]
+            if prompt in prompt_cache:
+                prompt_embeds, pooled_prompt_embeds = prompt_cache[prompt]
+                prompt_kwargs = {
+                    "prompt_embeds": prompt_embeds,
+                    "pooled_prompt_embeds": pooled_prompt_embeds,
+                }
+                prompt_cache_hit = True
+            else:
+                prompt_kwargs = {"prompt": prompt}
+            generation_started = time.perf_counter()
             generated = pipe(
-                prompt=prompt,
                 image=source,
                 mask_image=binary_mask,
                 height=args.resolution,
@@ -259,9 +384,16 @@ def main() -> None:
                 num_inference_steps=args.num_inference_steps,
                 max_sequence_length=args.max_sequence_length,
                 generator=generator,
+                **prompt_kwargs,
             ).images[0].convert("RGB")
+            generation_seconds = time.perf_counter() - generation_started
             save(generated.resize((args.eval_size, args.eval_size), Image.Resampling.BICUBIC), pred_path)
             status = "generated"
+            progress.set_postfix(
+                generation_seconds=f"{generation_seconds:.1f}",
+                placement=runtime_info.get("placement", "unknown"),
+                prompt_cache="hit" if prompt_cache_hit else "miss",
+            )
 
         semantic_eval = np.asarray(
             Image.fromarray(semantic_ids, "L").resize((args.eval_size, args.eval_size), Image.Resampling.NEAREST),
@@ -287,6 +419,10 @@ def main() -> None:
             "class_name": class_name,
             "prompt": prompt,
             "prompt_mode": args.prompt_mode,
+            "prompt_cache_hit": prompt_cache_hit,
+            "generation_seconds": generation_seconds,
+            "placement": runtime_info.get("placement"),
+            "resolved_cpu_offload": runtime_info.get("resolved_cpu_offload"),
             "strength": args.strength,
             "class_selection_file": str(selection_file),
             "class_selection_record": row.get("class_selection_record"),

@@ -35,10 +35,34 @@ CLASS_SELECTION_FILE=/root/data/experiment/protocols/second_test_oneclass_target
 bash run_bash/flux1_fill_second_gen.bash
 ```
 
-The default is `512 -> 256`, 50 denoising steps, guidance 30, BF16, and CPU
-model offload. `FLUX.1-Fill-dev` is large; use `VAE_TILING=1` when VRAM is
-tight. The wrapper writes the common Vistar result layout and records that the
-selected ground-truth binary mask was passed to the model.
+The default is `512 -> 256`, 50 denoising steps, guidance 30, BF16, and full
+CUDA residency (`CPU_OFFLOAD=0`). This prevents the VAE, text encoders, and 12B
+Transformer from being moved between host memory and GPU memory again for each
+sample. Use `CPU_OFFLOAD=1` only when the full pipeline does not fit. An
+optional `CPU_OFFLOAD=auto` mode selects full CUDA when at least 44 GiB is free.
+`FLUX.1-Fill-dev` is large; use `VAE_TILING=1` when VRAM is tight. The wrapper
+writes the common Vistar result layout and records that the selected
+ground-truth binary mask was passed to the model.
+
+The six class captions are encoded once and cached on the execution device.
+This avoids rerunning CLIP/T5 and swapping them with the Transformer between
+all 3,388 samples. `runtime_config.json` records placement and prompt-cache
+startup time; each generated row in `prompts.jsonl` records generation time and
+cache hits. Set `CACHE_PROMPT_EMBEDS=0` only for an exact performance ablation.
+The inner 50-step bar is hidden by default so the outer bar reports real
+per-sample generation time; restore it with `SHOW_DENOISING_PROGRESS=1`.
+
+The normal fast resident command is:
+
+```bash
+CUDA_VISIBLE_DEVICES=1 CPU_OFFLOAD=0 CACHE_PROMPT_EMBEDS=1 \
+bash run_bash/flux1_fill_second_gen.bash
+```
+
+If this raises CUDA OOM, rerun with `CPU_OFFLOAD=1`. Offload necessarily reloads
+large components between samples, although prompt caching still avoids repeated
+CLIP/T5 execution. Existing valid predictions are skipped, so changing
+placement does not require deleting the output folder.
 
 For a fast, inspectable editing check, run several non-empty masks and save the
 exact `512x512` source/mask supplied to the pipeline:

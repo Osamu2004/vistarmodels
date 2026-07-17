@@ -27,7 +27,10 @@ MAX_SEQUENCE_LENGTH="${MAX_SEQUENCE_LENGTH:-512}"
 SEED="${SEED:-42}"
 PROMPT_MODE="${PROMPT_MODE:-fill_target}"
 DTYPE="${DTYPE:-bf16}"
-CPU_OFFLOAD="${CPU_OFFLOAD:-1}"
+CPU_OFFLOAD="${CPU_OFFLOAD:-0}"
+AUTO_CUDA_MIN_FREE_GIB="${AUTO_CUDA_MIN_FREE_GIB:-44}"
+CACHE_PROMPT_EMBEDS="${CACHE_PROMPT_EMBEDS:-1}"
+SHOW_DENOISING_PROGRESS="${SHOW_DENOISING_PROGRESS:-0}"
 VAE_TILING="${VAE_TILING:-0}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
 ONLY_CHANGED="${ONLY_CHANGED:-0}"
@@ -36,6 +39,10 @@ OVERWRITE="${OVERWRITE:-0}"
 BOOTSTRAP_FLUX1_FILL="${BOOTSTRAP_FLUX1_FILL:-1}"
 OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/flux1_fill_second_${SPLIT}_${DIRECTION}_oneclass_targetmask_source_binarymask_prompt${PROMPT_MODE}_resize${RESOLUTION}_eval${EVAL_SIZE}_steps${NUM_INFERENCE_STEPS}_cfg${GUIDANCE_TAG}_strength${STRENGTH_TAG}_seed${SEED}_selectionseed${SELECTION_SEED}_1gpu}"
 MANIFEST="${MANIFEST:-${OUTPUT_DIR}/manifest.jsonl}"
+
+echo "[flux1_fill_second_gen] cuda_visible_devices=${CUDA_VISIBLE_DEVICES}"
+echo "[flux1_fill_second_gen] cpu_offload=${CPU_OFFLOAD} cache_prompt_embeds=${CACHE_PROMPT_EMBEDS}"
+echo "[flux1_fill_second_gen] steps=${NUM_INFERENCE_STEPS} resolution=${RESOLUTION} eval_size=${EVAL_SIZE}"
 
 if [[ ! -f "${CLASS_SELECTION_FILE}" ]]; then
   echo "[flux1_fill_second_gen] missing shared CLASS_SELECTION_FILE: ${CLASS_SELECTION_FILE}" >&2
@@ -64,9 +71,18 @@ if [[ "${SAVE_MODEL_INPUTS}" == "1" || "${SAVE_MODEL_INPUTS}" == "true" || "${SA
   RUN_ARGS+=(--save_model_inputs)
 fi
 case "${CPU_OFFLOAD,,}" in
+  auto|"") ;;
   0|false|no|n|off) RUN_ARGS+=(--no-cpu_offload) ;;
-  *) RUN_ARGS+=(--cpu_offload) ;;
+  1|true|yes|y|on) RUN_ARGS+=(--cpu_offload) ;;
+  *) echo "[flux1_fill_second_gen] invalid CPU_OFFLOAD=${CPU_OFFLOAD}; use auto, 0, or 1" >&2; exit 2 ;;
 esac
+case "${CACHE_PROMPT_EMBEDS,,}" in
+  0|false|no|n|off) RUN_ARGS+=(--no-cache_prompt_embeds) ;;
+  *) RUN_ARGS+=(--cache_prompt_embeds) ;;
+esac
+if [[ "${SHOW_DENOISING_PROGRESS}" == "1" || "${SHOW_DENOISING_PROGRESS}" == "true" ]]; then
+  RUN_ARGS+=(--show_denoising_progress)
+fi
 if [[ "${VAE_TILING}" == "1" || "${VAE_TILING}" == "true" || "${VAE_TILING}" == "yes" ]]; then
   RUN_ARGS+=(--vae_tiling)
 fi
@@ -76,6 +92,7 @@ fi
   --resolution "${RESOLUTION}" --eval_size "${EVAL_SIZE}" \
   --num_inference_steps "${NUM_INFERENCE_STEPS}" --guidance_scale "${GUIDANCE_SCALE}" \
   --strength "${STRENGTH}" --max_sequence_length "${MAX_SEQUENCE_LENGTH}" --seed "${SEED}" \
-  --prompt_mode "${PROMPT_MODE}" --dtype "${DTYPE}" "${RUN_ARGS[@]}"
+  --prompt_mode "${PROMPT_MODE}" --dtype "${DTYPE}" \
+  --auto_cuda_min_free_gib "${AUTO_CUDA_MIN_FREE_GIB}" "${RUN_ARGS[@]}"
 
 echo "[flux1_fill_second_gen] done: ${OUTPUT_DIR}"
