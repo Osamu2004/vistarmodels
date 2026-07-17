@@ -19,3 +19,11 @@
 **Configuration**: Source-time image + complete target-side semantic color mask + class-aware `[V*]` instruction; SECOND official palette; prompt vocabulary `changed inland water`, `changed bare land`, `changed grass`, `changed forest`, `changed building`, and `changed playground`; both temporal directions by default.
 
 **Validation**: AST compilation, Python bytecode compilation, Bash syntax checking, and `git diff --check` pass. A synthetic bidirectional SECOND pair verifies that a T1-to-T2 mask retains classes 4 and 5 together, the reverse mask retains classes 1 and 2 together, and the direction-specific prompt remains below the CLIP text limit. Full CUDA inference remains to be run in the Linux AnySD environment.
+
+## Attempt 3 — Startup Stall Diagnosis
+
+**Observed Symptom**: The terminal stopped printing immediately after `AnySD dependency check PASSED`, despite successful downloads and a working CUDA check.
+
+**Diagnosis**: The next synchronous stage rebuilt the complete bidirectional SECOND manifest, reading every semantic-label pair and writing 3,388 directional masks without a progress indicator. The process was active on CPU/storage rather than blocked on CUDA or model loading.
+
+**Fix**: Disabled bootstrap/network access by default, added a visible progress bar to full-multiclass manifest construction, printed the active preprocessing stage, loaded each semantic-label pair only once for both directions, and reused an existing manifest only after validating its sample set and preprocessing settings.

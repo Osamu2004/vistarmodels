@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from tqdm import tqdm
 
 from build_rcdgen_second_manifest import (
     IMAGE_EXTS,
@@ -47,19 +48,13 @@ def _color_map() -> list[dict[str, Any]]:
 
 def _full_directional_mask(
     *,
-    label1_path: Path,
-    label2_path: Path,
+    label1: np.ndarray,
+    label2: np.ndarray,
     direction: str,
     label_pair_mode: str,
-    semantic_zero_is_class: bool,
 ) -> np.ndarray:
-    label1 = load_ids(label1_path, semantic_zero_is_class)
-    label2 = load_ids(label2_path, semantic_zero_is_class)
     if label1.shape != label2.shape:
-        raise ValueError(
-            f"label shape mismatch: {label1_path}={label1.shape}, "
-            f"{label2_path}={label2.shape}"
-        )
+        raise ValueError(f"label shape mismatch: {label1.shape} != {label2.shape}")
     target, other = (
         (label2, label1) if direction == "t1_to_t2" else (label1, label2)
     )
@@ -93,6 +88,14 @@ def main() -> None:
         "--semantic_zero_is_class",
         action=argparse.BooleanOptionalAction,
         default=False,
+    )
+    parser.add_argument(
+        "--reuse_if_valid",
+        action="store_true",
+        help=(
+            "Reuse an existing manifest only when its sample names, directions, "
+            "protocol, and label settings match this invocation."
+        ),
     )
     parser.add_argument("--max_samples", type=int, default=0)
     args = parser.parse_args()
@@ -175,17 +178,65 @@ def main() -> None:
     color_map = _color_map()
     rows: list[dict[str, Any]] = []
 
-    for t1_path in unique_t1:
+    if args.reuse_if_valid and output.is_file() and output.stat().st_size > 0:
+        existing = [
+            json.loads(line)
+            for line in output.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        expected_names = {
+            f"{t1_path.stem}_{direction}"
+            for t1_path in unique_t1
+            for direction in directions
+        }
+        actual_names = {str(row.get("name", "")) for row in existing}
+        settings_match = all(
+            row.get("protocol") == PROTOCOL
+            and row.get("split") == args.split
+            and row.get("direction") in directions
+            and row.get("label_pair_mode") == args.label_pair_mode
+            and bool(row.get("semantic_zero_is_class", False))
+            == bool(args.semantic_zero_is_class)
+            and Path(str(row.get("semantic_change_mask", ""))).is_file()
+            for row in existing
+        )
+        if (
+            len(existing) == len(expected_names)
+            and actual_names == expected_names
+            and settings_match
+        ):
+            print(
+                "[build_anysd_second_manifest] reusing validated manifest "
+                f"with {len(existing)} rows: {output}"
+            )
+            return
+        print(
+            "[build_anysd_second_manifest] existing manifest does not match "
+            "the requested data/settings; rebuilding"
+        )
+
+    for t1_path in tqdm(
+        unique_t1,
+        desc="Build AnySD full-multiclass masks",
+        unit="pair",
+        dynamic_ncols=True,
+    ):
         t2_path = matching(t2_index, t1_path, t2_dir)
         label1_path = matching(label1_index, t1_path, label1_dir)
         label2_path = matching(label2_index, t1_path, label2_dir)
+        label1 = load_ids(label1_path, bool(args.semantic_zero_is_class))
+        label2 = load_ids(label2_path, bool(args.semantic_zero_is_class))
+        if label1.shape != label2.shape:
+            raise ValueError(
+                f"label shape mismatch: {label1_path}={label1.shape}, "
+                f"{label2_path}={label2.shape}"
+            )
         for direction in directions:
             semantic_mask = _full_directional_mask(
-                label1_path=label1_path,
-                label2_path=label2_path,
+                label1=label1,
+                label2=label2,
                 direction=direction,
                 label_pair_mode=args.label_pair_mode,
-                semantic_zero_is_class=bool(args.semantic_zero_is_class),
             )
             present_class_ids = sorted(
                 int(value)

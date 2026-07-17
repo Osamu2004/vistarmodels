@@ -35,8 +35,9 @@ ONLY_CHANGED="${ONLY_CHANGED:-0}"
 XFORMERS="${XFORMERS:-0}"
 VAE_TILING="${VAE_TILING:-0}"
 OVERWRITE="${OVERWRITE:-0}"
-BOOTSTRAP_ANYSD="${BOOTSTRAP_ANYSD:-1}"
+BOOTSTRAP_ANYSD="${BOOTSTRAP_ANYSD:-0}"
 CHECK_DEPS="${CHECK_DEPS:-1}"
+REBUILD_MANIFEST="${REBUILD_MANIFEST:-0}"
 COMPUTE_METRICS="${COMPUTE_METRICS:-0}"
 VISTAR_ROOT="${VISTAR_ROOT:-/root/code/vistar}"
 METRIC_GPU_ID="${METRIC_GPU_ID:-${GPU_IDS%%,*}}"
@@ -77,15 +78,24 @@ if [[ "${MAX_SAMPLES}" != "0" ]]; then BUILD_ARGS+=(--max_samples "${MAX_SAMPLES
 if [[ "${MASK_MODE}" == "full_multiclass" ]]; then
   SEMANTIC_ZERO_ARG="--no-semantic_zero_is_class"
   if [[ "${SEMANTIC_ZERO_IS_CLASS}" == "1" ]]; then SEMANTIC_ZERO_ARG="--semantic_zero_is_class"; fi
+  REUSE_ARGS=()
+  if [[ "${REBUILD_MANIFEST}" != "1" ]]; then REUSE_ARGS+=(--reuse_if_valid); fi
+  echo "[anysd_second_gen] validating/building the full-multiclass manifest"
+  echo "[anysd_second_gen] first build reads every SECOND label pair and writes directional masks"
   "${PYTHON_BIN}" "${ROOT_DIR}/tools/build_anysd_second_manifest.py" \
     --second_root "${SECOND_ROOT}" --split "${SPLIT}" --direction "${DIRECTION}" \
     --label_pair_mode "${LABEL_PAIR_MODE}" "${SEMANTIC_ZERO_ARG}" \
-    --output "${MANIFEST}" "${BUILD_ARGS[@]}"
+    --output "${MANIFEST}" "${REUSE_ARGS[@]}" "${BUILD_ARGS[@]}"
 else
-  "${PYTHON_BIN}" "${ROOT_DIR}/tools/build_rcdgen_second_manifest.py" \
-    --second_root "${SECOND_ROOT}" --split "${SPLIT}" --direction "${DIRECTION}" \
-    --consumer anysd --class_selection_file "${CLASS_SELECTION_FILE}" \
-    --output "${MANIFEST}" "${BUILD_ARGS[@]}"
+  if [[ -s "${MANIFEST}" && "${REBUILD_MANIFEST}" != "1" ]]; then
+    echo "[anysd_second_gen] reusing existing one-class manifest: ${MANIFEST}"
+  else
+    echo "[anysd_second_gen] building the one-class manifest"
+    "${PYTHON_BIN}" "${ROOT_DIR}/tools/build_rcdgen_second_manifest.py" \
+      --second_root "${SECOND_ROOT}" --split "${SPLIT}" --direction "${DIRECTION}" \
+      --consumer anysd --class_selection_file "${CLASS_SELECTION_FILE}" \
+      --output "${MANIFEST}" "${BUILD_ARGS[@]}"
+  fi
 fi
 
 RUN_ARGS=()

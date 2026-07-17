@@ -40,6 +40,12 @@ Use `MAX_SAMPLES=2` for a smoke test. `BOOTSTRAP_ANYSD=1` downloads the official
 The default output directory starts with
 `/root/data/experiment/anysd_second_test_both_multiclass_targetmask_visualseg_`.
 
+The launcher does not access the network by default. On a new machine, run the
+first setup explicitly with `BOOTSTRAP_ANYSD=1`; subsequent runs should omit it
+or use `BOOTSTRAP_ANYSD=0`. A completed nonempty manifest is reused by default.
+Set `REBUILD_MANIFEST=1` only after changing the dataset, split, direction, or
+label preprocessing settings.
+
 ## Legacy one-class compatibility
 
 ```bash
