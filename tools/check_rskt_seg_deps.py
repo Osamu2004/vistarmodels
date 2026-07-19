@@ -75,7 +75,9 @@ def main() -> int:
 
     checkpoint = _path(
         "RSKT_CHECKPOINT",
-        "/root/data/weight/rskt_seg/RSKT_Seg_DLRSD_ViT_L/model_final.pth",
+        "/root/data/weight/RSKT-Seg-ckpt/"
+        "0SAVEoutput_vitl_336_DLRSD_rotate_dino_remoteclip_3W_layer5/"
+        "model_final.pth",
     )
     clip_vitl = _path(
         "RSKT_CLIP_VITL",
@@ -154,7 +156,7 @@ def main() -> int:
         print(
             "  The bootstrap downloads all auxiliary weights automatically. "
             "Download only the official DLRSD+ViT-L model_final.pth manually "
-            "to /root/data/weight/rskt_seg/RSKT_Seg_DLRSD_ViT_L/"
+            "under /root/data/weight/RSKT-Seg-ckpt."
         )
         return 1
 

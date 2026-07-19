@@ -30,8 +30,12 @@ DLRSD + ViT-L checkpoint from the
 and place it at:
 
 ```text
-/root/data/weight/rskt_seg/RSKT_Seg_DLRSD_ViT_L/model_final.pth
+/root/data/weight/RSKT-Seg-ckpt/0SAVEoutput_vitl_336_DLRSD_rotate_dino_remoteclip_3W_layer5/model_final.pth
 ```
+
+The official folder contains multiple ViT-B/ViT-L and DLRSD/iSAID runs. The
+CHN6-CUG launcher deliberately selects the ViT-L/336 DLRSD layer-5 checkpoint
+above; another file can be supplied explicitly through `RSKT_CHECKPOINT`.
 
 The public checkpoint also needs four foundation weights:
 

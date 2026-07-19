@@ -285,6 +285,11 @@ def main() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     default_rskt = repo_root / "third_party" / "RSKT-Seg"
     default_weight_root = Path("/root/data/weight/rskt_seg")
+    default_checkpoint = (
+        Path("/root/data/weight/RSKT-Seg-ckpt")
+        / "0SAVEoutput_vitl_336_DLRSD_rotate_dino_remoteclip_3W_layer5"
+        / "model_final.pth"
+    )
     parser.add_argument("--data_root", default="/root/data/CHN6-CUG/val")
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--rskt_root", default=str(default_rskt))
@@ -294,11 +299,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--checkpoint",
-        default=str(
-            default_weight_root
-            / "RSKT_Seg_DLRSD_ViT_L"
-            / "model_final.pth"
-        ),
+        default=str(default_checkpoint),
     )
     parser.add_argument(
         "--class_json",

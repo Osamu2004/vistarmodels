@@ -17,7 +17,7 @@ DATA_ROOT="${DATA_ROOT:-/root/data/CHN6-CUG/val}"
 RSKT_ROOT="${RSKT_ROOT:-${ROOT_DIR}/third_party/RSKT-Seg}"
 RSKT_WEIGHT_ROOT="${RSKT_WEIGHT_ROOT:-/root/data/weight/rskt_seg}"
 RSKT_CONFIG="${RSKT_CONFIG:-${RSKT_ROOT}/configs/vitl_336_DLRSD.yaml}"
-RSKT_CHECKPOINT="${RSKT_CHECKPOINT:-${RSKT_WEIGHT_ROOT}/RSKT_Seg_DLRSD_ViT_L/model_final.pth}"
+RSKT_CHECKPOINT="${RSKT_CHECKPOINT:-/root/data/weight/RSKT-Seg-ckpt/0SAVEoutput_vitl_336_DLRSD_rotate_dino_remoteclip_3W_layer5/model_final.pth}"
 RSKT_CLASS_JSON="${RSKT_CLASS_JSON:-${ROOT_DIR}/baselines/rskt_seg/configs/chn6_cug_classes.json}"
 RSKT_CLIP_VITL="${RSKT_CLIP_VITL:-${RSKT_WEIGHT_ROOT}/pretrained/ViT-L-14-336px.pt}"
 RSKT_CLIP_VITB="${RSKT_CLIP_VITB:-${RSKT_WEIGHT_ROOT}/pretrained/ViT-B-32.pt}"
@@ -35,15 +35,15 @@ BOOTSTRAP_RSKT_SEG="${BOOTSTRAP_RSKT_SEG:-1}"
 RSKT_DOWNLOAD_AUX_WEIGHTS="${RSKT_DOWNLOAD_AUX_WEIGHTS:-1}"
 CHECK_DEPS="${CHECK_DEPS:-1}"
 
-CHECKPOINT_TAG="$(basename "$(dirname "${RSKT_CHECKPOINT}")")"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rskt_seg_chn6_cug_${CHECKPOINT_TAG}_crossdomain_resize${INPUT_SIZE}_${NPROC_PER_NODE}gpu}"
-
 is_truthy() {
   case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
     1|true|yes|y|on) return 0 ;;
     *) return 1 ;;
   esac
 }
+
+CHECKPOINT_TAG="$(basename "$(dirname "${RSKT_CHECKPOINT}")")"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rskt_seg_chn6_cug_${CHECKPOINT_TAG}_crossdomain_resize${INPUT_SIZE}_${NPROC_PER_NODE}gpu}"
 
 if ! [[ "${NPROC_PER_NODE}" =~ ^[1-9][0-9]*$ ]]; then
   echo "NPROC_PER_NODE must be a positive integer, got ${NPROC_PER_NODE}." >&2
@@ -58,6 +58,7 @@ fi
 if is_truthy "${BOOTSTRAP_RSKT_SEG}"; then
   RSKT_ROOT="${RSKT_ROOT}" \
   RSKT_WEIGHT_ROOT="${RSKT_WEIGHT_ROOT}" \
+  RSKT_CHECKPOINT="${RSKT_CHECKPOINT}" \
   RSKT_DOWNLOAD_AUX_WEIGHTS="${RSKT_DOWNLOAD_AUX_WEIGHTS}" \
     bash "${ROOT_DIR}/scripts/bootstrap_rskt_seg.sh"
 fi
