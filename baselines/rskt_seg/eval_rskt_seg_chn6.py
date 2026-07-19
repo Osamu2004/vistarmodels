@@ -214,9 +214,24 @@ def _configure_model(args: argparse.Namespace, local_rank: int):
     cfg.TEST.SLIDING_WINDOW = False
     cfg.freeze()
 
-    model = build_model(cfg)
-    model.eval()
-    load_result = DetectionCheckpointer(model).load(cfg.MODEL.WEIGHTS)
+    # RSKT-Seg's released RSIB and model checkpoints predate PyTorch 2.6.
+    # Their upstream loaders omit weights_only, whose default changed to True
+    # in PyTorch 2.6. These paths are explicitly supplied official weights, so
+    # retain the legacy loading behavior only while constructing/loading this
+    # model instead of modifying the vendored upstream source.
+    original_torch_load = torch.load
+
+    def load_trusted_release(*load_args, **load_kwargs):
+        load_kwargs.setdefault("weights_only", False)
+        return original_torch_load(*load_args, **load_kwargs)
+
+    torch.load = load_trusted_release
+    try:
+        model = build_model(cfg)
+        model.eval()
+        load_result = DetectionCheckpointer(model).load(cfg.MODEL.WEIGHTS)
+    finally:
+        torch.load = original_torch_load
     return cfg, model, load_result
 
 
