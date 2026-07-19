@@ -7,6 +7,7 @@ RSKT_REPO_URL="${RSKT_REPO_URL:-https://github.com/LiBingyu01/RSKT-Seg.git}"
 RSKT_ROOT="${RSKT_ROOT:-${ROOT_DIR}/third_party/RSKT-Seg}"
 RSKT_WEIGHT_ROOT="${RSKT_WEIGHT_ROOT:-/root/data/weight/rskt_seg}"
 RSKT_PRETRAINED_DIR="${RSKT_PRETRAINED_DIR:-${RSKT_WEIGHT_ROOT}/pretrained}"
+RSKT_RSIB="${RSKT_RSIB:-/root/data/weight/rsib/RSIB.pth}"
 RSKT_CHECKPOINT="${RSKT_CHECKPOINT:-/root/data/weight/RSKT-Seg-ckpt/0SAVEoutput_vitl_336_DLRSD_rotate_dino_remoteclip_3W_layer5/model_final.pth}"
 RSKT_DOWNLOAD_AUX_WEIGHTS="${RSKT_DOWNLOAD_AUX_WEIGHTS:-1}"
 RSKT_DOWNLOAD_CLIP_VITB="${RSKT_DOWNLOAD_CLIP_VITB:-0}"
@@ -131,7 +132,9 @@ hf_hub_download(
 '
   fi
 
-  if [[ ! -s "${RSKT_PRETRAINED_DIR}/RSIB.pth" ]]; then
+  if [[ -s "${RSKT_RSIB}" ]]; then
+    echo "[bootstrap_rskt_seg] using existing RSIB checkpoint: ${RSKT_RSIB}"
+  else
     if ! "${PYTHON_BIN}" -c "import gdown" >/dev/null 2>&1; then
       echo "[bootstrap_rskt_seg] gdown is required for RSIB.pth." >&2
       echo "Install requirements-rskt-seg.txt, then rerun with RSKT_DOWNLOAD_AUX_WEIGHTS=1." >&2
@@ -139,13 +142,7 @@ hf_hub_download(
     fi
     download_gdrive_checkpoint \
       "${RSIB_GOOGLE_DRIVE_ID}" \
-      "${RSKT_PRETRAINED_DIR}/RSIB.pth"
-  elif ! validate_torch_checkpoint "${RSKT_PRETRAINED_DIR}/RSIB.pth"; then
-    download_gdrive_checkpoint \
-      "${RSIB_GOOGLE_DRIVE_ID}" \
-      "${RSKT_PRETRAINED_DIR}/RSIB.pth"
-  else
-    echo "[bootstrap_rskt_seg] exists and is valid: ${RSKT_PRETRAINED_DIR}/RSIB.pth"
+      "${RSKT_RSIB}"
   fi
 else
   echo "[bootstrap_rskt_seg] auxiliary weight download disabled by RSKT_DOWNLOAD_AUX_WEIGHTS=0"

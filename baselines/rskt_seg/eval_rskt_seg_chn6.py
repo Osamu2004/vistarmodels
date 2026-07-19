@@ -325,7 +325,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--rsib",
-        default=str(default_weight_root / "pretrained" / "RSIB.pth"),
+        default=os.environ.get(
+            "RSKT_RSIB",
+            "/root/data/weight/rsib/RSIB.pth",
+        ),
     )
     parser.add_argument("--input_size", type=int, default=512)
     parser.add_argument("--num_layers", type=int, default=5)

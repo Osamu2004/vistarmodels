@@ -22,7 +22,7 @@ RSKT_CLASS_JSON="${RSKT_CLASS_JSON:-${ROOT_DIR}/baselines/rskt_seg/configs/chn6_
 RSKT_CLIP_VITL="${RSKT_CLIP_VITL:-${RSKT_WEIGHT_ROOT}/pretrained/ViT-L-14-336px.pt}"
 RSKT_CLIP_VITB="${RSKT_CLIP_VITB:-${RSKT_WEIGHT_ROOT}/pretrained/ViT-B-32.pt}"
 RSKT_REMOTE_CLIP="${RSKT_REMOTE_CLIP:-${RSKT_WEIGHT_ROOT}/pretrained/RemoteCLIP-ViT-B-32.pt}"
-RSKT_RSIB="${RSKT_RSIB:-${RSKT_WEIGHT_ROOT}/pretrained/RSIB.pth}"
+RSKT_RSIB="${RSKT_RSIB:-/root/data/weight/rsib/RSIB.pth}"
 
 INPUT_SIZE="${INPUT_SIZE:-512}"
 NUM_LAYERS="${NUM_LAYERS:-5}"
@@ -58,6 +58,7 @@ fi
 if is_truthy "${BOOTSTRAP_RSKT_SEG}"; then
   RSKT_ROOT="${RSKT_ROOT}" \
   RSKT_WEIGHT_ROOT="${RSKT_WEIGHT_ROOT}" \
+  RSKT_RSIB="${RSKT_RSIB}" \
   RSKT_CHECKPOINT="${RSKT_CHECKPOINT}" \
   RSKT_DOWNLOAD_AUX_WEIGHTS="${RSKT_DOWNLOAD_AUX_WEIGHTS}" \
     bash "${ROOT_DIR}/scripts/bootstrap_rskt_seg.sh"

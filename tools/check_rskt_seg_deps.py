@@ -89,7 +89,7 @@ def main() -> int:
     )
     rsib = _path(
         "RSKT_RSIB",
-        "/root/data/weight/rskt_seg/pretrained/RSIB.pth",
+        "/root/data/weight/rsib/RSIB.pth",
     )
     _check_file("RSKT-Seg DLRSD+ViT-L checkpoint", checkpoint, failures)
     _check_file("CLIP ViT-L/14@336", clip_vitl, failures)

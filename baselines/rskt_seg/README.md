@@ -42,13 +42,15 @@ The selected DLRSD + ViT-L checkpoint needs three foundation weights:
 ```text
 /root/data/weight/rskt_seg/pretrained/ViT-L-14-336px.pt
 /root/data/weight/rskt_seg/pretrained/RemoteCLIP-ViT-B-32.pt
-/root/data/weight/rskt_seg/pretrained/RSIB.pth
+/root/data/weight/rsib/RSIB.pth
 ```
 
 The launcher and bootstrap script automatically download these three auxiliary
 files when they are absent. `RemoteCLIP-ViT-B-32.pt` is downloaded from its
 Hugging Face repository; OpenAI CLIP ViT-L uses its official direct URL, and
-`RSIB.pth` uses its public Google Drive file. The ordinary OpenAI CLIP
+`RSIB.pth` uses its public Google Drive file. An existing nonempty RSIB file at
+the path above is used directly without another Google Drive download. Set
+`RSKT_RSIB` to override this location. The ordinary OpenAI CLIP
 ViT-B/32 weight is not used by this ViT-L configuration and is therefore not
 downloaded or required. Set `RSKT_DOWNLOAD_CLIP_VITB=1` only for a custom
 ViT-B configuration. The only manual file is the official RSKT-Seg DLRSD +
