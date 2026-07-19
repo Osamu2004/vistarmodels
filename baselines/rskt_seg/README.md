@@ -1,12 +1,13 @@
-# RSKT-Seg on CHN6-CUG
+# RSKT-Seg on CHN6-CUG and xBD-pre
 
 This adapter evaluates the official
 [RSKT-Seg](https://github.com/LiBingyu01/RSKT-Seg) DLRSD-trained ViT-L
-checkpoint on CHN6-CUG road segmentation. CHN6-CUG is not registered by the
-official repository, so this wrapper supplies the two-class vocabulary and
-computes the binary road metrics without modifying upstream source.
+checkpoint on CHN6-CUG road segmentation and xBD-pre building extraction.
+Neither target dataset is registered by the official repository, so these
+wrappers supply the two-class vocabularies and compute binary metrics without
+modifying upstream source.
 
-## Evaluation protocol
+## CHN6-CUG protocol
 
 - Model: released RSKT-Seg DLRSD + CLIP ViT-L/14@336 checkpoint.
 - Adaptation: none; this is cross-dataset/out-of-domain evaluation.
@@ -15,11 +16,35 @@ computes the binary road metrics without modifying upstream source.
 - Primary reported value: foreground `road_iou`.
 - Additional outputs: road F1/precision/recall, background IoU, binary mIoU,
   and pixel accuracy.
-- Default input size: 512, with metrics computed at each original image size.
+- Inference: non-overlapping native-resolution 512x512 source tiles, matching
+  the VISTAR CHN6-CUG protocol.
+- Boundary handling: zero-pad only the right and bottom edges, stitch tile
+  predictions, then crop to the exact original extent.
+- Model input size: 512x512 per tile with no tile resize by default.
+- Metrics: computed after stitching at each image's original spatial extent.
 
 The output folder follows the other segmentation baselines:
 `input`, `pred_mask`, `pred_rgb`, `gt_mask`, `gt_rgb`, `overlay`,
 `predictions.jsonl`, and `metrics.json`.
+
+## xBD-pre protocol
+
+- Model: the same released RSKT-Seg DLRSD + CLIP ViT-L/14@336 checkpoint.
+- Adaptation: none; this is cross-dataset/out-of-domain evaluation.
+- Population: the 933 `*_pre_disaster` images in the official xBD test split.
+- Text classes: `background`, `building`.
+- Ground truth: rasterize `features.xy[*].wkt` polygon exteriors after rounding
+  their coordinates, matching the xView2/SegEarth-OV conversion; every
+  annotated polygon is building ID 1.
+- Primary reported value: foreground `building_iou`; the binary mIoU that
+  includes background is saved only as an auxiliary diagnostic.
+- Inference: partition every native 1024x1024 image into four non-overlapping
+  512x512 source tiles, predict the tiles sequentially, stitch them, and score
+  at the original extent.
+
+Raw annotation JSON files under `test/labels` are rasterized on the fly.
+Already converted masks under `targets`, `targets_cvt`, or `masks_building`
+are also accepted.
 
 ## Weights
 
@@ -88,6 +113,8 @@ cd /root/code/vistarmodels
 GPU_IDS=0 \
 NPROC_PER_NODE=1 \
 DATA_ROOT=/root/data/CHN6-CUG/val \
+TILE_SIZE=512 \
+INPUT_SIZE=512 \
 bash run_bash/rskt_seg_chn6_road.bash
 ```
 
@@ -101,9 +128,32 @@ Two GPUs:
 GPU_IDS=0,1 \
 NPROC_PER_NODE=2 \
 DATA_ROOT=/root/data/CHN6-CUG/val \
+TILE_SIZE=512 \
+INPUT_SIZE=512 \
 bash run_bash/rskt_seg_chn6_road.bash
 ```
 
 Use `MAX_SAMPLES=2` for a smoke test. Multi-GPU inference splits files across
 independent model processes and uses Gloo only for CPU synchronization; it
-does not use NCCL.
+does not use NCCL. The official RSKT-Seg non-sliding forward path emits only
+the first item in `batched_inputs`, so this adapter deliberately evaluates
+source tiles sequentially within each process.
+
+xBD-pre, single GPU:
+
+```bash
+cd /root/code/vistarmodels
+
+BOOTSTRAP_RSKT_SEG=0 \
+RSKT_RSIB=/root/data/weight/rsib/RSIB.pth \
+GPU_IDS=0 \
+NPROC_PER_NODE=1 \
+DATA_ROOT=/root/data/xview2/test \
+TILE_SIZE=512 \
+INPUT_SIZE=512 \
+OUTPUT_DIR=/root/data/experiment/rskt_seg_xbd_pre_vitl336_dlrsd_gpu0_tile512 \
+bash run_bash/rskt_seg_xbd_pre_building.bash
+```
+
+Use `MAX_SAMPLES=2` first to verify the JSON rasterization and qualitative
+building masks before launching all 933 images.

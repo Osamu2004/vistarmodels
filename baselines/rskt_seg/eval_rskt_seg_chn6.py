@@ -235,50 +235,98 @@ def _configure_model(args: argparse.Namespace, local_rank: int):
     return cfg, model, load_result
 
 
-def _predict(
+def _ceil_to_multiple(value: int, multiple: int) -> int:
+    return ((int(value) + int(multiple) - 1) // int(multiple)) * int(multiple)
+
+
+def _tile_coords(height: int, width: int, tile_size: int) -> list[tuple[int, int]]:
+    return [
+        (y, x)
+        for y in range(0, height, tile_size)
+        for x in range(0, width, tile_size)
+    ]
+
+
+def _predict_tiled(
     *,
     model: torch.nn.Module,
     cfg: Any,
     image_path: Path,
     amp: str,
-) -> tuple[np.ndarray, np.ndarray]:
+    tile_size: int,
+) -> tuple[np.ndarray, np.ndarray, int]:
     from detectron2.data import detection_utils as utils
     from detectron2.data import transforms as transforms
 
     image = utils.read_image(str(image_path), format=cfg.INPUT.FORMAT)
     original_height, original_width = image.shape[:2]
+    if cfg.INPUT.FORMAT == "RGB":
+        image_rgb = image.copy()
+    else:
+        image_rgb = utils.read_image(str(image_path), format="RGB")
+
+    padded_height = _ceil_to_multiple(original_height, tile_size)
+    padded_width = _ceil_to_multiple(original_width, tile_size)
+    padded_image = np.zeros(
+        (padded_height, padded_width, image.shape[2]),
+        dtype=image.dtype,
+    )
+    padded_image[:original_height, :original_width] = image
+    prediction_padded = np.zeros((padded_height, padded_width), dtype=np.uint8)
+    coordinates = _tile_coords(padded_height, padded_width, tile_size)
+
     resize = transforms.ResizeShortestEdge(
         [cfg.INPUT.MIN_SIZE_TEST, cfg.INPUT.MIN_SIZE_TEST],
         cfg.INPUT.MAX_SIZE_TEST,
     )
-    transformed = resize.get_transform(image).apply_image(image)
-    tensor = torch.as_tensor(
-        transformed.astype("float32").transpose(2, 0, 1)
-    )
-    model_input = {
-        "image": tensor,
-        "height": original_height,
-        "width": original_width,
-        "file_name": str(image_path),
-    }
     dtype = {
         "fp32": torch.float32,
         "fp16": torch.float16,
         "bf16": torch.bfloat16,
     }[amp]
-    with torch.inference_mode(), torch.autocast(
-        device_type="cuda",
-        dtype=dtype,
-        enabled=amp != "fp32",
-    ):
-        output = model([model_input])[0]["sem_seg"]
-    if output.ndim != 3 or output.shape[0] != 2:
-        raise RuntimeError(
-            "RSKT-Seg did not return two CHN6-CUG class maps: "
-            f"shape={tuple(output.shape)}"
+
+    # The official non-sliding RSKT-Seg forward path returns only
+    # batched_inputs[0], so native tiles must be evaluated one at a time.
+    for y, x in coordinates:
+        tile = padded_image[y : y + tile_size, x : x + tile_size]
+        transformed = resize.get_transform(tile).apply_image(tile)
+        tensor = torch.as_tensor(
+            transformed.astype("float32").transpose(2, 0, 1)
         )
-    prediction = output.argmax(dim=0).to("cpu").numpy().astype(np.uint8)
-    return image, prediction
+        model_input = {
+            "image": tensor,
+            "height": tile_size,
+            "width": tile_size,
+            "file_name": str(image_path),
+        }
+        with torch.inference_mode(), torch.autocast(
+            device_type="cuda",
+            dtype=dtype,
+            enabled=amp != "fp32",
+        ):
+            output = model([model_input])[0]["sem_seg"]
+        if output.ndim != 3 or output.shape[0] != 2:
+            raise RuntimeError(
+                "RSKT-Seg did not return two binary-segmentation class maps: "
+                f"shape={tuple(output.shape)}"
+            )
+        prediction = output.argmax(dim=0).to("cpu").numpy().astype(np.uint8)
+        if prediction.shape != (tile_size, tile_size):
+            prediction = cv2.resize(
+                prediction,
+                (tile_size, tile_size),
+                interpolation=cv2.INTER_NEAREST,
+            )
+        prediction_padded[
+            y : y + tile_size,
+            x : x + tile_size,
+        ] = prediction
+
+    return (
+        image_rgb,
+        prediction_padded[:original_height, :original_width].copy(),
+        len(coordinates),
+    )
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -290,6 +338,46 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _validate_resume_protocol(
+    output_root: Path,
+    *,
+    tile_size: int,
+    model_input_size: int,
+    overwrite: bool,
+) -> None:
+    saved_predictions = list(
+        (output_root / "pred_mask").glob("*_pred_mask.png")
+    )
+    if overwrite or not saved_predictions:
+        return
+    config_path = output_root / "run_config.json"
+    if not config_path.is_file():
+        raise RuntimeError(
+            f"{output_root} already contains predictions without run_config.json. "
+            "Use OVERWRITE=1 or a new OUTPUT_DIR to avoid mixing protocols."
+        )
+    with config_path.open("r", encoding="utf-8") as handle:
+        existing = json.load(handle)
+    expected = {
+        "inference_mode": "native_nonoverlap_tiled",
+        "tile_size": int(tile_size),
+        "model_input_size": int(model_input_size),
+        "padding": "zero_right_bottom",
+        "metric_size": "original",
+    }
+    mismatches = {
+        key: {"existing": existing.get(key), "expected": value}
+        for key, value in expected.items()
+        if existing.get(key) != value
+    }
+    if mismatches:
+        raise RuntimeError(
+            "Existing predictions use a different evaluation protocol: "
+            f"{json.dumps(mismatches, ensure_ascii=False)}. "
+            "Use OVERWRITE=1 or a new OUTPUT_DIR."
+        )
 
 
 def main() -> None:
@@ -345,7 +433,18 @@ def main() -> None:
             "/root/data/weight/rsib/RSIB.pth",
         ),
     )
-    parser.add_argument("--input_size", type=int, default=512)
+    parser.add_argument(
+        "--input_size",
+        type=int,
+        default=512,
+        help="model input resolution after resizing each native source tile",
+    )
+    parser.add_argument(
+        "--tile_size",
+        type=int,
+        default=512,
+        help="native-resolution non-overlapping source tile size",
+    )
     parser.add_argument("--num_layers", type=int, default=5)
     parser.add_argument(
         "--prompt_ensemble",
@@ -361,6 +460,8 @@ def main() -> None:
 
     if args.input_size <= 0:
         parser.error("--input_size must be positive")
+    if args.tile_size <= 0:
+        parser.error("--tile_size must be positive")
     if args.num_layers <= 0:
         parser.error("--num_layers must be positive")
     if not torch.cuda.is_available():
@@ -388,6 +489,12 @@ def main() -> None:
     output_root = _path(args.output_dir)
     output_root.mkdir(parents=True, exist_ok=True)
     output_dirs = _make_output_dirs(output_root)
+    _validate_resume_protocol(
+        output_root,
+        tile_size=args.tile_size,
+        model_input_size=args.input_size,
+        overwrite=args.overwrite,
+    )
 
     data_root = _path(args.data_root)
     image_dir, mask_dir, split = _resolve_chn6_dirs(data_root)
@@ -409,6 +516,10 @@ def main() -> None:
                 ],
                 "ground_truth_mapping": "zero=background, nonzero=road",
                 "test_class_json": str(_path(args.class_json)),
+                "inference_mode": "native_nonoverlap_tiled",
+                "source_tile_size": args.tile_size,
+                "model_input_size": args.input_size,
+                "padding": "zero_right_bottom",
             },
         )
         _write_json(
@@ -417,9 +528,17 @@ def main() -> None:
                 "dataset": "CHN6-CUG",
                 "split": split,
                 "method": "RSKT-Seg",
-                "protocol": "DLRSD-trained cross-dataset evaluation",
+                "protocol": (
+                    "DLRSD-trained cross-dataset evaluation with native "
+                    "non-overlapping tiled inference"
+                ),
                 "num_samples": len(pairs),
-                "input_size": args.input_size,
+                "inference_mode": "native_nonoverlap_tiled",
+                "tile_size": args.tile_size,
+                "model_input_size": args.input_size,
+                "tile_resize": args.tile_size != args.input_size,
+                "padding": "zero_right_bottom",
+                "metric_size": "original",
                 "amp": args.amp,
                 "prompt_ensemble": args.prompt_ensemble,
                 "num_layers": args.num_layers,
@@ -442,17 +561,23 @@ def main() -> None:
         output_stem = f"{global_index:06d}_{image_path.stem}"
         saved_prediction = output_dirs["pred_mask"] / f"{output_stem}_pred_mask.png"
         gt = _load_binary_mask(mask_path)
+        num_tiles = (
+            _ceil_to_multiple(gt.shape[0], args.tile_size) // args.tile_size
+        ) * (
+            _ceil_to_multiple(gt.shape[1], args.tile_size) // args.tile_size
+        )
 
         if saved_prediction.is_file() and not args.overwrite:
             prediction = _load_binary_mask(saved_prediction)
             with Image.open(image_path) as input_image:
                 image_rgb = np.asarray(input_image.convert("RGB"), dtype=np.uint8)
         else:
-            image_rgb, prediction = _predict(
+            image_rgb, prediction, num_tiles = _predict_tiled(
                 model=model,
                 cfg=cfg,
                 image_path=image_path,
                 amp=args.amp,
+                tile_size=args.tile_size,
             )
 
         if prediction.shape != gt.shape:
@@ -494,6 +619,9 @@ def main() -> None:
                 "image": str(image_path),
                 "ground_truth": str(mask_path),
                 "prediction": str(saved_prediction),
+                "original_height": int(gt.shape[0]),
+                "original_width": int(gt.shape[1]),
+                "num_tiles": int(num_tiles),
                 **sample_counts,
                 **_metrics(sample_counts),
             }
@@ -524,7 +652,14 @@ def main() -> None:
             "method": "RSKT-Seg",
             "training_dataset": "DLRSD",
             "evaluation_setting": "cross-dataset/out-of-domain",
+            "inference_mode": "native_nonoverlap_tiled",
+            "tile_size": args.tile_size,
+            "model_input_size": args.input_size,
+            "tile_resize": args.tile_size != args.input_size,
+            "padding": "zero_right_bottom",
+            "metric_size": "original",
             "num_samples": len(merged_rows),
+            "num_tiles": sum(int(row["num_tiles"]) for row in merged_rows),
             **merged_counts,
             **_metrics(merged_counts),
         }

@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 GPU_IDS="${GPU_IDS:-0}"
 NPROC_PER_NODE="${NPROC_PER_NODE:-1}"
-MASTER_PORT="${MASTER_PORT:-29631}"
+MASTER_PORT="${MASTER_PORT:-29632}"
 export CUDA_VISIBLE_DEVICES="${GPU_IDS}"
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
@@ -13,12 +13,12 @@ if ! [[ "${OMP_NUM_THREADS:-}" =~ ^[1-9][0-9]*$ ]]; then
   export OMP_NUM_THREADS=1
 fi
 
-DATA_ROOT="${DATA_ROOT:-/root/data/CHN6-CUG/val}"
+DATA_ROOT="${DATA_ROOT:-/root/data/xview2/test}"
 RSKT_ROOT="${RSKT_ROOT:-${ROOT_DIR}/third_party/RSKT-Seg}"
 RSKT_WEIGHT_ROOT="${RSKT_WEIGHT_ROOT:-/root/data/weight/rskt_seg}"
 RSKT_CONFIG="${RSKT_CONFIG:-${RSKT_ROOT}/configs/vitl_336_DLRSD.yaml}"
 RSKT_CHECKPOINT="${RSKT_CHECKPOINT:-/root/data/weight/RSKT-Seg-ckpt/0SAVEoutput_vitl_336_DLRSD_rotate_dino_remoteclip_3W_layer5/model_final.pth}"
-RSKT_CLASS_JSON="${RSKT_CLASS_JSON:-${ROOT_DIR}/baselines/rskt_seg/configs/chn6_cug_classes.json}"
+RSKT_CLASS_JSON="${RSKT_CLASS_JSON:-${ROOT_DIR}/baselines/rskt_seg/configs/xbd_pre_classes.json}"
 RSKT_CLIP_VITL="${RSKT_CLIP_VITL:-${RSKT_WEIGHT_ROOT}/pretrained/ViT-L-14-336px.pt}"
 RSKT_CLIP_VITB="${RSKT_CLIP_VITB:-${RSKT_WEIGHT_ROOT}/pretrained/ViT-B-32.pt}"
 RSKT_REMOTE_CLIP="${RSKT_REMOTE_CLIP:-${RSKT_WEIGHT_ROOT}/pretrained/RemoteCLIP-ViT-B-32.pt}"
@@ -44,7 +44,7 @@ is_truthy() {
 }
 
 CHECKPOINT_TAG="$(basename "$(dirname "${RSKT_CHECKPOINT}")")"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rskt_seg_chn6_cug_${CHECKPOINT_TAG}_crossdomain_tile${TILE_SIZE}_resize${INPUT_SIZE}_${NPROC_PER_NODE}gpu}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rskt_seg_xbd_pre_${CHECKPOINT_TAG}_crossdomain_tile${TILE_SIZE}_resize${INPUT_SIZE}_${NPROC_PER_NODE}gpu}"
 
 if ! [[ "${NPROC_PER_NODE}" =~ ^[1-9][0-9]*$ ]]; then
   echo "NPROC_PER_NODE must be a positive integer, got ${NPROC_PER_NODE}." >&2
@@ -97,7 +97,7 @@ CMD=(
   --standalone
   --nproc_per_node="${NPROC_PER_NODE}"
   --master_port="${MASTER_PORT}"
-  "${ROOT_DIR}/baselines/rskt_seg/eval_rskt_seg_chn6.py"
+  "${ROOT_DIR}/baselines/rskt_seg/eval_rskt_seg_xbd_pre.py"
   --data_root "${DATA_ROOT}"
   --output_dir "${OUTPUT_DIR}"
   --rskt_root "${RSKT_ROOT}"
@@ -117,11 +117,13 @@ CMD=(
   "$@"
 )
 
-echo "[$(date)] RSKT-Seg CHN6-CUG road evaluation"
+echo "[$(date)] RSKT-Seg xBD-pre building evaluation"
 echo "[$(date)] setting=DLRSD-trained cross-dataset/out-of-domain"
 echo "[$(date)] data_root=${DATA_ROOT}"
+echo "[$(date)] expected_layout=test/images/*_pre_disaster.png + test/labels/*_pre_disaster.json"
 echo "[$(date)] checkpoint=${RSKT_CHECKPOINT}"
-echo "[$(date)] classes=background,road | primary_metric=road_iou"
+echo "[$(date)] classes=background,building | primary_metric=building_iou"
+echo "[$(date)] labels=features.xy WKT rounded and rasterized with cv2.fillPoly"
 echo "[$(date)] inference=native_nonoverlap_tiled | source_tile=${TILE_SIZE} | model_input=${INPUT_SIZE}"
 echo "[$(date)] tile_resize=$([[ "${TILE_SIZE}" == "${INPUT_SIZE}" ]] && echo off || echo on) | padding=zero_right_bottom | metric_size=original"
 echo "[$(date)] prompt_ensemble=${PROMPT_ENSEMBLE} | amp=${AMP}"
