@@ -83,10 +83,6 @@ def main() -> int:
         "RSKT_CLIP_VITL",
         "/root/data/weight/rskt_seg/pretrained/ViT-L-14-336px.pt",
     )
-    clip_vitb = _path(
-        "RSKT_CLIP_VITB",
-        "/root/data/weight/rskt_seg/pretrained/ViT-B-32.pt",
-    )
     remote_clip = _path(
         "RSKT_REMOTE_CLIP",
         "/root/data/weight/rskt_seg/pretrained/RemoteCLIP-ViT-B-32.pt",
@@ -97,7 +93,6 @@ def main() -> int:
     )
     _check_file("RSKT-Seg DLRSD+ViT-L checkpoint", checkpoint, failures)
     _check_file("CLIP ViT-L/14@336", clip_vitl, failures)
-    _check_file("CLIP ViT-B/32", clip_vitb, failures)
     _check_file("RemoteCLIP ViT-B/32", remote_clip, failures)
     _check_file("RSIB/DINO", rsib, failures)
 

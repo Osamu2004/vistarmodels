@@ -186,7 +186,9 @@ def _configure_model(args: argparse.Namespace, local_rank: int):
     # The official release hard-codes ./pretrained paths inside clip.py.
     # Override the lookup table in memory so large weights remain outside Git.
     official_clip.pretrained["ViT-L/14@336px"] = str(_path(args.clip_vitl))
-    official_clip.pretrained["ViT-B/32"] = str(_path(args.clip_vitb))
+    clip_vitb = _path(args.clip_vitb)
+    if clip_vitb.is_file():
+        official_clip.pretrained["ViT-B/32"] = str(clip_vitb)
 
     config_path = _path(args.config)
     cfg = get_cfg()
@@ -352,7 +354,6 @@ def main() -> None:
         "checkpoint": _path(args.checkpoint),
         "class JSON": _path(args.class_json),
         "CLIP ViT-L/14@336": _path(args.clip_vitl),
-        "CLIP ViT-B/32": _path(args.clip_vitb),
         "RemoteCLIP ViT-B/32": _path(args.remote_clip),
         "RSIB/DINO": _path(args.rsib),
     }

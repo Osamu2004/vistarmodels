@@ -37,22 +37,24 @@ The official folder contains multiple ViT-B/ViT-L and DLRSD/iSAID runs. The
 CHN6-CUG launcher deliberately selects the ViT-L/336 DLRSD layer-5 checkpoint
 above; another file can be supplied explicitly through `RSKT_CHECKPOINT`.
 
-The public checkpoint also needs four foundation weights:
+The selected DLRSD + ViT-L checkpoint needs three foundation weights:
 
 ```text
 /root/data/weight/rskt_seg/pretrained/ViT-L-14-336px.pt
-/root/data/weight/rskt_seg/pretrained/ViT-B-32.pt
 /root/data/weight/rskt_seg/pretrained/RemoteCLIP-ViT-B-32.pt
 /root/data/weight/rskt_seg/pretrained/RSIB.pth
 ```
 
-The launcher and bootstrap script automatically download these four auxiliary
+The launcher and bootstrap script automatically download these three auxiliary
 files when they are absent. `RemoteCLIP-ViT-B-32.pt` is downloaded from its
-Hugging Face repository; the two OpenAI CLIP files use their official direct
-URLs, and `RSIB.pth` uses its public Google Drive file. The only manual file is
-the official RSKT-Seg DLRSD + ViT-L `model_final.pth`, because the authors
-currently publish it only through Baidu Netdisk and OneDrive folders and no
-official Hugging Face copy is available.
+Hugging Face repository; OpenAI CLIP ViT-L uses its official direct URL, and
+`RSIB.pth` uses its public Google Drive file. The ordinary OpenAI CLIP
+ViT-B/32 weight is not used by this ViT-L configuration and is therefore not
+downloaded or required. Set `RSKT_DOWNLOAD_CLIP_VITB=1` only for a custom
+ViT-B configuration. The only manual file is the official RSKT-Seg DLRSD +
+ViT-L `model_final.pth`, because the authors currently publish it only through
+Baidu Netdisk and OneDrive folders and no official Hugging Face copy is
+available.
 
 ## Setup
 
