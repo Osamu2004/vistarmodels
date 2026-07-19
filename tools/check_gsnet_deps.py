@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import subprocess
 import sys
@@ -90,6 +91,50 @@ def main() -> int:
     _check_file("GSNet LandDiscover50K checkpoint", checkpoint, failures)
     _check_file("CLIP ViT-B/16", clip_vitb, failures)
     _check_file("RSIB/DINO", rsib, failures)
+
+    class_json_value = os.environ.get("GSNET_CLASS_JSON", "")
+    foreground_class = os.environ.get("GSNET_FOREGROUND_CLASS", "").strip()
+    if class_json_value:
+        class_json = Path(class_json_value).expanduser().resolve()
+        _check_file("GSNet test taxonomy", class_json, failures)
+        if class_json.is_file():
+            try:
+                class_names = json.loads(class_json.read_text(encoding="utf-8"))
+                if not isinstance(class_names, list) or not class_names:
+                    raise ValueError("taxonomy must be a non-empty list")
+                if any(
+                    not isinstance(class_name, str) or not class_name.strip()
+                    for class_name in class_names
+                ):
+                    raise ValueError(
+                        "taxonomy entries must be non-empty strings"
+                    )
+                normalized = [
+                    class_name.strip().casefold()
+                    for class_name in class_names
+                ]
+                if len(normalized) != len(set(normalized)):
+                    raise ValueError("taxonomy contains duplicate classes")
+                if "background" in normalized:
+                    raise ValueError(
+                        "taxonomy must exclude GSNet's ignored background "
+                        "channel"
+                    )
+                if foreground_class.casefold() not in normalized:
+                    raise ValueError(
+                        f"foreground class {foreground_class!r} is absent"
+                    )
+                print(
+                    "ok               GSNet prediction protocol="
+                    f"{len(normalized)} non-background classes, "
+                    f"foreground={foreground_class}"
+                )
+            except Exception as exc:
+                failures.append("invalid GSNet test taxonomy")
+                print(
+                    "INCOMPATIBLE     GSNet test taxonomy "
+                    f"reason={exc}"
+                )
 
     if (root / ".git").is_dir():
         try:

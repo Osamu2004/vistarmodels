@@ -1,7 +1,7 @@
-# GSNet zero-shot binary segmentation
+# GSNet cross-domain target-class segmentation
 
-This adapter evaluates the official AAAI 2025 GSNet release on the two
-binary-segmentation protocols already used by the RSKT-Seg adapter:
+This adapter evaluates the official AAAI 2025 GSNet release on two
+target-class segmentation protocols already used by the RSKT-Seg adapter:
 
 - **CHN6-CUG val:** road versus background.
 - **xBD-pre test:** building versus background, using the same rounded
@@ -10,6 +10,24 @@ binary-segmentation protocols already used by the RSKT-Seg adapter:
 
 The official `GSNet_base.pth` checkpoint was trained on LandDiscover50K.
 Both evaluations are therefore cross-dataset/out-of-domain evaluations.
+
+## Foreground prediction protocol
+
+Do not evaluate the released checkpoint with a two-class
+`[background, target]` vocabulary. LandDiscover50K label 0 is registered as
+the ignored label in the official GSNet source. During training, it is never
+encoded as a positive `background` target, so that text channel is not a
+learned complement for binary argmax. The invalid two-class adapter produces
+near-all-foreground masks on both xBD-pre and CHN6-CUG.
+
+The corrected adapter supplies the 39 non-background LandDiscover50K semantic
+classes at inference. It takes the argmax over that complete foreground
+taxonomy and then collapses `building` (xBD-pre) or `road` (CHN6-CUG) to
+binary foreground; every other predicted semantic category becomes binary
+background. This is substantially closer to the official GSNet evaluation,
+which performs argmax over a complete target taxonomy. The xBD vocabulary uses
+the target-dataset spelling `building`, consistent with the official GSNet
+Potsdam evaluation vocabulary.
 
 ## Resolution protocol
 
@@ -27,6 +45,7 @@ The output tree matches the RSKT-Seg adapters:
 OUTPUT_DIR/
   input/
   pred_mask/
+  pred_class_id/
   pred_rgb/
   gt_mask/
   gt_rgb/
@@ -77,7 +96,7 @@ CHN6-CUG on physical GPU 0:
 GPU_IDS=0 \
 NPROC_PER_NODE=1 \
 DATA_ROOT=/root/data/CHN6-CUG/val \
-OUTPUT_DIR=/root/data/experiment/gsnet_chn6_cug_ld50k_gpu0_tile512 \
+OUTPUT_DIR=/root/data/experiment/gsnet_chn6_cug_ld50k_fullvocab_gpu0_tile512 \
 bash run_bash/gsnet_chn6_road.bash
 ```
 
@@ -87,10 +106,13 @@ xBD-pre on physical GPU 0:
 GPU_IDS=0 \
 NPROC_PER_NODE=1 \
 DATA_ROOT=/root/data/xview2/test \
-OUTPUT_DIR=/root/data/experiment/gsnet_xbd_pre_ld50k_gpu0_tile512 \
+OUTPUT_DIR=/root/data/experiment/gsnet_xbd_pre_ld50k_fullvocab_gpu0_tile512 \
 bash run_bash/gsnet_xbd_pre_building.bash
 ```
 
 Use `NPROC_PER_NODE=2 GPU_IDS=0,1` for independent two-GPU data parallel
 evaluation. Use `MAX_SAMPLES=2` for a smoke test and `DRY_RUN=1` to print the
-resolved command without loading the model.
+resolved command without loading the model. Do not reuse the historical
+two-class output directories. The resume guard rejects cached predictions
+whose taxonomy, target class, checkpoint, prompt ensemble, layer count, or
+prediction protocol differs.

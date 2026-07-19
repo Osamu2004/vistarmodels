@@ -23,6 +23,7 @@ DATASET_SPECS = {
     "chn6_cug": {
         "display_name": "CHN6-CUG",
         "foreground": "road",
+        "model_foreground": "road",
         "default_root": "/root/data/CHN6-CUG/val",
         "class_json": "chn6_cug_classes.json",
         "primary_metric": "road_iou",
@@ -30,11 +31,15 @@ DATASET_SPECS = {
     "xbd_pre": {
         "display_name": "xBD-pre",
         "foreground": "building",
+        "model_foreground": "building",
         "default_root": "/root/data/xview2/test",
         "class_json": "xbd_pre_classes.json",
         "primary_metric": "building_iou",
     },
 }
+PREDICTION_PROTOCOL = (
+    "complete_nonbackground_taxonomy_argmax_then_target_collapse"
+)
 
 
 def _normalize_wsl_unc(path: str) -> str:
@@ -62,6 +67,48 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def _load_class_names(path: Path) -> list[str]:
+    with path.open("r", encoding="utf-8") as handle:
+        value = json.load(handle)
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"Class JSON must contain a non-empty list: {path}")
+    class_names: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(
+                f"Class JSON entry {index} must be a non-empty string: {path}"
+            )
+        class_names.append(item.strip())
+    normalized = [name.casefold() for name in class_names]
+    if len(set(normalized)) != len(normalized):
+        raise ValueError(f"Class JSON contains duplicate names: {path}")
+    if "background" in normalized:
+        raise ValueError(
+            "GSNet's LandDiscover50K label 0 is ignored during training, so "
+            "the text class 'background' is not a valid binary comparator. "
+            f"Use a complete non-background taxonomy instead: {path}"
+        )
+    return class_names
+
+
+def _resolve_foreground_indices(
+    class_names: list[str],
+    foreground_class: str,
+) -> list[int]:
+    normalized_foreground = foreground_class.strip().casefold()
+    indices = [
+        index
+        for index, class_name in enumerate(class_names)
+        if class_name.casefold() == normalized_foreground
+    ]
+    if not indices:
+        raise ValueError(
+            f"Foreground class {foreground_class!r} is absent from the test "
+            f"taxonomy: {class_names}"
+        )
+    return indices
+
+
 def _distributed_context() -> tuple[int, int, int, bool]:
     rank = int(os.environ.get("RANK", "0"))
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
@@ -84,6 +131,7 @@ def _make_output_dirs(root: Path) -> dict[str, Path]:
     directories = {
         "input": root / "input",
         "pred_mask": root / "pred_mask",
+        "pred_class_id": root / "pred_class_id",
         "pred_rgb": root / "pred_rgb",
         "gt_mask": root / "gt_mask",
         "gt_rgb": root / "gt_rgb",
@@ -94,7 +142,7 @@ def _make_output_dirs(root: Path) -> dict[str, Path]:
     return directories
 
 
-def _save_binary_mask(mask: np.ndarray, path: Path) -> None:
+def _save_id_mask(mask: np.ndarray, path: Path) -> None:
     Image.fromarray(mask.astype(np.uint8), mode="L").save(path)
 
 
@@ -296,7 +344,12 @@ def _tile_coords(height: int, width: int, tile_size: int) -> list[tuple[int, int
     ]
 
 
-def _configure_model(args: argparse.Namespace, local_rank: int):
+def _configure_model(
+    args: argparse.Namespace,
+    local_rank: int,
+    *,
+    num_test_classes: int,
+):
     source_root = _path(args.gsnet_root)
     sys.path.insert(0, str(source_root))
 
@@ -323,7 +376,7 @@ def _configure_model(args: argparse.Namespace, local_rank: int):
         source_root / "datasets" / "landdiscover.json"
     )
     cfg.MODEL.SEM_SEG_HEAD.TEST_CLASS_JSON = str(_path(args.class_json))
-    cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES = 2
+    cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES = int(num_test_classes)
     cfg.MODEL.SEM_SEG_HEAD.NUM_LAYERS = int(args.num_layers)
     cfg.MODEL.SEM_SEG_HEAD.POOLING_SIZES = [1, 1]
     cfg.MODEL.SEM_SEG_HEAD.DINO_WEIGHTS = str(rsib_path)
@@ -373,7 +426,9 @@ def _predict_tiled(
     image_path: Path,
     amp: str,
     tile_size: int,
-) -> tuple[np.ndarray, np.ndarray, int]:
+    num_test_classes: int,
+    foreground_indices: list[int],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
     from detectron2.data import detection_utils as utils
     from detectron2.data import transforms as transforms
 
@@ -392,7 +447,10 @@ def _predict_tiled(
         dtype=image.dtype,
     )
     padded_image[:original_height, :original_width] = image
-    prediction_padded = np.zeros((padded_height, padded_width), dtype=np.uint8)
+    class_prediction_padded = np.zeros(
+        (padded_height, padded_width),
+        dtype=np.uint8,
+    )
     coordinates = _tile_coords(padded_height, padded_width, tile_size)
 
     resize = transforms.ResizeShortestEdge(
@@ -426,26 +484,39 @@ def _predict_tiled(
             enabled=amp != "fp32",
         ):
             output = model([model_input])[0]["sem_seg"]
-        if output.ndim != 3 or output.shape[0] != 2:
+        if output.ndim != 3 or output.shape[0] != num_test_classes:
             raise RuntimeError(
-                "GSNet did not return two binary-segmentation class maps: "
-                f"shape={tuple(output.shape)}"
+                "GSNet output-channel count does not match the configured "
+                f"test taxonomy: shape={tuple(output.shape)}, "
+                f"expected_classes={num_test_classes}"
             )
-        prediction = output.argmax(dim=0).to("cpu").numpy().astype(np.uint8)
-        if prediction.shape != (tile_size, tile_size):
-            prediction = cv2.resize(
-                prediction,
+        class_prediction = (
+            output.argmax(dim=0).to("cpu").numpy().astype(np.uint8)
+        )
+        if class_prediction.shape != (tile_size, tile_size):
+            class_prediction = cv2.resize(
+                class_prediction,
                 (tile_size, tile_size),
                 interpolation=cv2.INTER_NEAREST,
             )
-        prediction_padded[
+        class_prediction_padded[
             y : y + tile_size,
             x : x + tile_size,
-        ] = prediction
+        ] = class_prediction
+
+    class_prediction = class_prediction_padded[
+        :original_height,
+        :original_width,
+    ].copy()
+    binary_prediction = np.isin(
+        class_prediction,
+        np.asarray(foreground_indices, dtype=np.uint8),
+    ).astype(np.uint8)
 
     return (
         image_rgb,
-        prediction_padded[:original_height, :original_width].copy(),
+        binary_prediction,
+        class_prediction,
         len(coordinates),
     )
 
@@ -456,6 +527,15 @@ def _validate_resume_protocol(
     dataset: str,
     tile_size: int,
     model_input_size: int,
+    class_names: list[str],
+    foreground_class: str,
+    prompt_ensemble: str,
+    num_layers: int,
+    checkpoint: Path,
+    config: Path,
+    clip_vitb: Path,
+    rsib: Path,
+    amp: str,
     overwrite: bool,
 ) -> None:
     predictions = list((output_root / "pred_mask").glob("*_pred_mask.png"))
@@ -477,6 +557,17 @@ def _validate_resume_protocol(
         "model_input_size": int(model_input_size),
         "padding": "zero_right_bottom",
         "metric_size": "original",
+        "prediction_protocol": PREDICTION_PROTOCOL,
+        "test_classes": class_names,
+        "foreground_model_class": foreground_class,
+        "prompt_ensemble": prompt_ensemble,
+        "num_layers": int(num_layers),
+        "checkpoint": str(checkpoint),
+        "config": str(config),
+        "clip_vitb": str(clip_vitb),
+        "rsib": str(rsib),
+        "amp": amp,
+        "pooling_sizes": [1, 1],
     }
     mismatches = {
         key: {"existing": existing.get(key), "expected": value}
@@ -518,6 +609,7 @@ def _parse_args() -> argparse.Namespace:
         default=str(default_weight_root / "GSNet_base.pth"),
     )
     parser.add_argument("--class_json", default="")
+    parser.add_argument("--foreground_class", default="")
     parser.add_argument(
         "--clip_vitb",
         default=str(default_weight_root / "pretrained" / "ViT-B-16.pt"),
@@ -557,6 +649,8 @@ def _parse_args() -> argparse.Namespace:
             / "configs"
             / spec["class_json"]
         )
+    if not args.foreground_class:
+        args.foreground_class = str(spec["model_foreground"])
     if args.input_size <= 0:
         parser.error("--input_size must be positive")
     if args.tile_size <= 0:
@@ -572,12 +666,18 @@ def main() -> None:
     args = _parse_args()
     spec = DATASET_SPECS[args.dataset]
     foreground = str(spec["foreground"])
+    class_json_path = _path(args.class_json)
+    class_names = _load_class_names(class_json_path)
+    foreground_indices = _resolve_foreground_indices(
+        class_names,
+        args.foreground_class,
+    )
 
     required = {
         "official source": _path(args.gsnet_root) / "gs_net" / "GSNet.py",
         "config": _path(args.config),
         "checkpoint": _path(args.checkpoint),
-        "class JSON": _path(args.class_json),
+        "class JSON": class_json_path,
         "CLIP ViT-B/16": _path(args.clip_vitb),
         "RSIB/DINO": _path(args.rsib),
     }
@@ -604,6 +704,15 @@ def main() -> None:
         dataset=args.dataset,
         tile_size=args.tile_size,
         model_input_size=args.input_size,
+        class_names=class_names,
+        foreground_class=args.foreground_class,
+        prompt_ensemble=args.prompt_ensemble,
+        num_layers=args.num_layers,
+        checkpoint=_path(args.checkpoint),
+        config=_path(args.config),
+        clip_vitb=_path(args.clip_vitb),
+        rsib=_path(args.rsib),
+        amp=args.amp,
         overwrite=args.overwrite,
     )
 
@@ -625,7 +734,11 @@ def main() -> None:
         pairs = pairs[: args.max_samples]
     local_pairs = pairs[rank::world_size]
 
-    cfg, model, load_result = _configure_model(args, local_rank)
+    cfg, model, load_result = _configure_model(
+        args,
+        local_rank,
+        num_test_classes=len(class_names),
+    )
     if rank == 0:
         label_protocol = (
             "zero=background, nonzero=road"
@@ -641,7 +754,11 @@ def main() -> None:
                     {"id": 1, "name": foreground, "rgb": [255, 255, 255]},
                 ],
                 "ground_truth_mapping": label_protocol,
-                "test_class_json": str(_path(args.class_json)),
+                "test_class_json": str(class_json_path),
+                "test_classes": class_names,
+                "foreground_model_class": args.foreground_class,
+                "foreground_class_indices": foreground_indices,
+                "prediction_protocol": PREDICTION_PROTOCOL,
                 "inference_mode": "native_nonoverlap_tiled",
                 "source_tile_size": args.tile_size,
                 "model_input_size": args.input_size,
@@ -666,13 +783,19 @@ def main() -> None:
                 "encoder_internal_size": 384,
                 "padding": "zero_right_bottom",
                 "metric_size": "original",
+                "prediction_protocol": PREDICTION_PROTOCOL,
                 "label_protocol": label_protocol,
                 "amp": args.amp,
                 "prompt_ensemble": args.prompt_ensemble,
                 "num_layers": args.num_layers,
+                "pooling_sizes": [1, 1],
+                "test_classes": class_names,
+                "num_test_classes": len(class_names),
+                "foreground_model_class": args.foreground_class,
+                "foreground_class_indices": foreground_indices,
                 "checkpoint": str(_path(args.checkpoint)),
                 "config": str(_path(args.config)),
-                "class_json": str(_path(args.class_json)),
+                "class_json": str(class_json_path),
                 "clip_vitb": str(_path(args.clip_vitb)),
                 "rsib": str(_path(args.rsib)),
                 "world_size": world_size,
@@ -693,6 +816,9 @@ def main() -> None:
         saved_prediction = (
             output_dirs["pred_mask"] / f"{output_stem}_pred_mask.png"
         )
+        saved_class_prediction = (
+            output_dirs["pred_class_id"] / f"{output_stem}_pred_class_id.png"
+        )
         with Image.open(image_path) as input_image:
             original_width, original_height = input_image.size
         target = _load_target(
@@ -708,22 +834,52 @@ def main() -> None:
         )
 
         if saved_prediction.is_file() and not args.overwrite:
+            if not saved_class_prediction.is_file():
+                raise RuntimeError(
+                    f"Binary prediction exists without its taxonomy class-ID "
+                    f"map: {saved_class_prediction}. Use OVERWRITE=1 or a new "
+                    "OUTPUT_DIR."
+                )
             with Image.open(saved_prediction) as image:
-                prediction = (
+                cached_binary_prediction = (
                     np.asarray(image.convert("L"), dtype=np.uint8) != 0
                 ).astype(np.uint8)
+            with Image.open(saved_class_prediction) as image:
+                class_prediction = np.asarray(
+                    image.convert("L"),
+                    dtype=np.uint8,
+                )
+            if class_prediction.size and int(class_prediction.max()) >= len(
+                class_names
+            ):
+                raise ValueError(
+                    f"Cached class-ID map contains an invalid class index: "
+                    f"{saved_class_prediction}"
+                )
+            prediction = np.isin(
+                class_prediction,
+                np.asarray(foreground_indices, dtype=np.uint8),
+            ).astype(np.uint8)
+            if not np.array_equal(prediction, cached_binary_prediction):
+                raise ValueError(
+                    "Cached binary prediction is inconsistent with its "
+                    f"taxonomy class-ID map: {saved_prediction}. Use "
+                    "OVERWRITE=1 or a new OUTPUT_DIR."
+                )
             with Image.open(image_path) as input_image:
                 image_rgb = np.asarray(
                     input_image.convert("RGB"),
                     dtype=np.uint8,
                 )
         else:
-            image_rgb, prediction, num_tiles = _predict_tiled(
+            image_rgb, prediction, class_prediction, num_tiles = _predict_tiled(
                 model=model,
                 cfg=cfg,
                 image_path=image_path,
                 amp=args.amp,
                 tile_size=args.tile_size,
+                num_test_classes=len(class_names),
+                foreground_indices=foreground_indices,
             )
 
         if prediction.shape != target.shape:
@@ -731,7 +887,16 @@ def main() -> None:
                 f"Prediction/GT shape mismatch for {image_path.name}: "
                 f"prediction={prediction.shape}, gt={target.shape}"
             )
+        if class_prediction.shape != target.shape:
+            raise ValueError(
+                f"Class prediction/GT shape mismatch for {image_path.name}: "
+                f"prediction={class_prediction.shape}, gt={target.shape}"
+            )
         sample_counts = _confusion(prediction, target)
+        class_histogram = np.bincount(
+            class_prediction.reshape(-1),
+            minlength=len(class_names),
+        )
         for key in counts:
             counts[key] += sample_counts[key]
 
@@ -739,12 +904,13 @@ def main() -> None:
             Image.fromarray(image_rgb, mode="RGB").save(
                 output_dirs["input"] / f"{output_stem}_input.png"
             )
-            _save_binary_mask(prediction, saved_prediction)
+            _save_id_mask(prediction, saved_prediction)
+            _save_id_mask(class_prediction, saved_class_prediction)
             _save_color_mask(
                 prediction,
                 output_dirs["pred_rgb"] / f"{output_stem}_pred_rgb.png",
             )
-            _save_binary_mask(
+            _save_id_mask(
                 target,
                 output_dirs["gt_mask"] / f"{output_stem}_gt_mask.png",
             )
@@ -765,9 +931,19 @@ def main() -> None:
                 "image": str(image_path),
                 "ground_truth": str(label_path),
                 "prediction": str(saved_prediction),
+                "class_prediction": str(saved_class_prediction),
                 "original_height": int(original_height),
                 "original_width": int(original_width),
                 "num_tiles": int(num_tiles),
+                "ground_truth_foreground_pixels": int(np.count_nonzero(target)),
+                "predicted_foreground_pixels": int(
+                    np.count_nonzero(prediction)
+                ),
+                "predicted_class_pixels": {
+                    class_name: int(class_histogram[index])
+                    for index, class_name in enumerate(class_names)
+                    if int(class_histogram[index]) > 0
+                },
                 **sample_counts,
                 **_metrics(sample_counts, foreground),
             }
@@ -782,14 +958,27 @@ def main() -> None:
     if rank == 0:
         merged_counts = {"tp": 0, "fp": 0, "fn": 0, "tn": 0}
         merged_rows: list[dict[str, Any]] = []
+        merged_class_histogram = {
+            class_name: 0 for class_name in class_names
+        }
         for process_rank in range(world_size):
             rank_file = output_root / f"rank_{process_rank:05d}.json"
             with rank_file.open("r", encoding="utf-8") as handle:
                 payload = json.load(handle)
             for key in merged_counts:
                 merged_counts[key] += int(payload["counts"][key])
+            for row in payload["rows"]:
+                for class_name, count in row["predicted_class_pixels"].items():
+                    merged_class_histogram[class_name] += int(count)
             merged_rows.extend(payload["rows"])
         merged_rows.sort(key=lambda row: int(row["index"]))
+        total_pixels = sum(merged_counts.values())
+        ground_truth_foreground_pixels = (
+            merged_counts["tp"] + merged_counts["fn"]
+        )
+        predicted_foreground_pixels = (
+            merged_counts["tp"] + merged_counts["fp"]
+        )
         result = {
             "dataset": spec["display_name"],
             "split": split,
@@ -808,8 +997,27 @@ def main() -> None:
             "encoder_internal_size": 384,
             "padding": "zero_right_bottom",
             "metric_size": "original",
+            "prediction_protocol": PREDICTION_PROTOCOL,
+            "test_classes": class_names,
+            "num_test_classes": len(class_names),
+            "foreground_model_class": args.foreground_class,
+            "foreground_class_indices": foreground_indices,
             "num_samples": len(merged_rows),
             "num_tiles": sum(int(row["num_tiles"]) for row in merged_rows),
+            "num_pixels": total_pixels,
+            "ground_truth_foreground_pixels": ground_truth_foreground_pixels,
+            "predicted_foreground_pixels": predicted_foreground_pixels,
+            "ground_truth_foreground_fraction": (
+                ground_truth_foreground_pixels / max(total_pixels, 1)
+            ),
+            "predicted_foreground_fraction": (
+                predicted_foreground_pixels / max(total_pixels, 1)
+            ),
+            "predicted_class_pixels": {
+                class_name: count
+                for class_name, count in merged_class_histogram.items()
+                if count > 0
+            },
             **merged_counts,
             **_metrics(merged_counts, foreground),
         }

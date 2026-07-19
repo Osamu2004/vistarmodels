@@ -19,6 +19,7 @@ GSNET_WEIGHT_ROOT="${GSNET_WEIGHT_ROOT:-/root/data/weight/gsnet}"
 GSNET_CONFIG="${GSNET_CONFIG:-${GSNET_ROOT}/configs/vitb_384.yaml}"
 GSNET_CHECKPOINT="${GSNET_CHECKPOINT:-${GSNET_WEIGHT_ROOT}/GSNet_base.pth}"
 GSNET_CLASS_JSON="${GSNET_CLASS_JSON:-${ROOT_DIR}/baselines/gsnet/configs/chn6_cug_classes.json}"
+GSNET_FOREGROUND_CLASS="${GSNET_FOREGROUND_CLASS:-road}"
 GSNET_CLIP_VITB="${GSNET_CLIP_VITB:-${GSNET_WEIGHT_ROOT}/pretrained/ViT-B-16.pt}"
 GSNET_RSIB="${GSNET_RSIB:-/root/data/weight/rsib/RSIB.pth}"
 
@@ -41,7 +42,7 @@ is_truthy() {
   esac
 }
 
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/gsnet_chn6_cug_ld50k_crossdomain_tile${TILE_SIZE}_resize${INPUT_SIZE}_${NPROC_PER_NODE}gpu}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/gsnet_chn6_cug_ld50k_fullvocab_tile${TILE_SIZE}_resize${INPUT_SIZE}_${NPROC_PER_NODE}gpu}"
 
 if ! [[ "${NPROC_PER_NODE}" =~ ^[1-9][0-9]*$ ]]; then
   echo "NPROC_PER_NODE must be positive, got ${NPROC_PER_NODE}." >&2
@@ -57,6 +58,8 @@ if is_truthy "${BOOTSTRAP_GSNET}"; then
   GSNET_ROOT="${GSNET_ROOT}" \
   GSNET_WEIGHT_ROOT="${GSNET_WEIGHT_ROOT}" \
   GSNET_CHECKPOINT="${GSNET_CHECKPOINT}" \
+  GSNET_CLASS_JSON="${GSNET_CLASS_JSON}" \
+  GSNET_FOREGROUND_CLASS="${GSNET_FOREGROUND_CLASS}" \
   GSNET_CLIP_VITB="${GSNET_CLIP_VITB}" \
   GSNET_RSIB="${GSNET_RSIB}" \
   GSNET_DOWNLOAD_WEIGHTS="${GSNET_DOWNLOAD_WEIGHTS}" \
@@ -97,6 +100,7 @@ CMD=(
   --config "${GSNET_CONFIG}"
   --checkpoint "${GSNET_CHECKPOINT}"
   --class_json "${GSNET_CLASS_JSON}"
+  --foreground_class "${GSNET_FOREGROUND_CLASS}"
   --clip_vitb "${GSNET_CLIP_VITB}"
   --rsib "${GSNET_RSIB}"
   --input_size "${INPUT_SIZE}"
@@ -112,7 +116,9 @@ echo "[$(date)] GSNet CHN6-CUG road evaluation"
 echo "[$(date)] setting=LandDiscover50K-trained cross-dataset/out-of-domain"
 echo "[$(date)] data_root=${DATA_ROOT}"
 echo "[$(date)] checkpoint=${GSNET_CHECKPOINT}"
-echo "[$(date)] classes=background,road | primary_metric=road_iou"
+echo "[$(date)] prediction=complete non-background taxonomy argmax, then road-vs-rest collapse"
+echo "[$(date)] class_json=${GSNET_CLASS_JSON} | foreground_model_class=${GSNET_FOREGROUND_CLASS}"
+echo "[$(date)] primary_metric=road_iou"
 echo "[$(date)] inference=native_nonoverlap_tiled | source_tile=${TILE_SIZE} | model_input=${INPUT_SIZE}"
 echo "[$(date)] encoder_internal=384 | padding=zero_right_bottom | metric_size=original"
 echo "[$(date)] prompt_ensemble=${PROMPT_ENSEMBLE} | amp=${AMP}"
