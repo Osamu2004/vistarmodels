@@ -83,6 +83,15 @@ ViT-L `model_final.pth`, because the authors currently publish it only through
 Baidu Netdisk and OneDrive folders and no official Hugging Face copy is
 available.
 
+GSNet and RSKT-Seg officially use the same RSIB/DINO specialist checkpoint:
+both releases link Google Drive file ID
+`1kH0wDM_Hl4sEQJG8JjILCo0RTx65X7zV`, and their `BuildRSIB` loaders are
+identical. The shared path is intentional; it does not mean that their main
+segmentation checkpoints or CLIP branches are shared. The bootstrap validator
+loads this trusted legacy release with `weights_only=False`, which is required
+under PyTorch 2.6+ and prevents a valid RSIB checkpoint from being
+misclassified as corrupt and downloaded repeatedly.
+
 ## Setup
 
 The official environment uses Python 3.8, PyTorch 2.3, CUDA 11.8, and its

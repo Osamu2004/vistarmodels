@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 RSKT_REPO_URL="${RSKT_REPO_URL:-https://github.com/LiBingyu01/RSKT-Seg.git}"
+RSKT_COMMIT="${RSKT_COMMIT:-7b84091598e1edc3236dfbf45cc27e7e3436ffcb}"
 RSKT_ROOT="${RSKT_ROOT:-${ROOT_DIR}/third_party/RSKT-Seg}"
 RSKT_WEIGHT_ROOT="${RSKT_WEIGHT_ROOT:-/root/data/weight/rskt_seg}"
 RSKT_PRETRAINED_DIR="${RSKT_PRETRAINED_DIR:-${RSKT_WEIGHT_ROOT}/pretrained}"
@@ -46,9 +47,11 @@ import torch
 
 path = sys.argv[1]
 try:
-    torch.load(path, map_location="cpu", weights_only=True)
+    value = torch.load(path, map_location="cpu", weights_only=False)
 except TypeError:
-    torch.load(path, map_location="cpu")
+    value = torch.load(path, map_location="cpu")
+if value is None:
+    raise RuntimeError("checkpoint decoded to None")
 PY
 }
 
@@ -68,8 +71,8 @@ download_gdrive_checkpoint() {
   fi
 
   mkdir -p "$(dirname "${destination}")"
-  for attempt in 1 2 3 4 5; do
-    echo "[bootstrap_rskt_seg] downloading Google Drive checkpoint (attempt ${attempt}/5) -> ${destination}"
+  for attempt in 1 2 3; do
+    echo "[bootstrap_rskt_seg] downloading Google Drive checkpoint (attempt ${attempt}/3) -> ${destination}"
     if "${PYTHON_BIN}" -m gdown \
       --continue \
       "https://drive.google.com/uc?id=${file_id}" \
@@ -85,7 +88,7 @@ download_gdrive_checkpoint() {
     sleep "$((attempt * 2))"
   done
 
-  echo "[bootstrap_rskt_seg] failed to download ${destination} after 5 attempts." >&2
+  echo "[bootstrap_rskt_seg] failed to download ${destination} after 3 attempts." >&2
   echo "[bootstrap_rskt_seg] A partial file may remain at ${partial}; rerunning resumes it." >&2
   return 1
 }
@@ -94,8 +97,18 @@ if [[ ! -f "${RSKT_ROOT}/RSKT_Seg/RSKT_Seg.py" ]]; then
   mkdir -p "$(dirname "${RSKT_ROOT}")"
   echo "[bootstrap_rskt_seg] cloning official source ${RSKT_REPO_URL} -> ${RSKT_ROOT}"
   git clone --depth 1 "${RSKT_REPO_URL}" "${RSKT_ROOT}"
+  if ! git -C "${RSKT_ROOT}" cat-file -e "${RSKT_COMMIT}^{commit}" 2>/dev/null; then
+    git -C "${RSKT_ROOT}" fetch --depth 1 origin "${RSKT_COMMIT}"
+  fi
+  git -C "${RSKT_ROOT}" checkout --detach "${RSKT_COMMIT}"
 else
   echo "[bootstrap_rskt_seg] using official source: ${RSKT_ROOT}"
+  if [[ -d "${RSKT_ROOT}/.git" ]]; then
+    CURRENT_COMMIT="$(git -C "${RSKT_ROOT}" rev-parse HEAD)"
+    if [[ "${CURRENT_COMMIT}" != "${RSKT_COMMIT}" ]]; then
+      echo "[bootstrap_rskt_seg] warning: source revision ${CURRENT_COMMIT} differs from pinned ${RSKT_COMMIT}" >&2
+    fi
+  fi
 fi
 
 if [[ ! -f "${RSKT_ROOT}/detectron2/setup.py" ]]; then
@@ -153,8 +166,10 @@ if [[ -n "${RSKT_CHECKPOINT_URL}" && ! -s "${RSKT_CHECKPOINT}" ]]; then
 fi
 
 if is_truthy "${RSKT_INSTALL_DETECTRON2}"; then
-  echo "[bootstrap_rskt_seg] installing official bundled Detectron2"
-  "${PYTHON_BIN}" -m pip install -e "${RSKT_ROOT}/detectron2"
+  echo "[bootstrap_rskt_seg] installing official bundled Detectron2 without build isolation"
+  MAX_JOBS="${MAX_JOBS:-8}" "${PYTHON_BIN}" -m pip install \
+    --no-build-isolation \
+    -e "${RSKT_ROOT}/detectron2"
 else
   echo "[bootstrap_rskt_seg] Detectron2 installation disabled"
 fi

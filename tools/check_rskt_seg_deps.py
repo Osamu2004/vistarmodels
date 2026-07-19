@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import subprocess
 import sys
 from importlib import metadata
 from pathlib import Path
@@ -23,8 +24,11 @@ DEPENDENCIES = {
     "iopath": "iopath",
     "yacs": "yacs",
     "pycocotools": "pycocotools",
+    "cloudpickle": "cloudpickle",
     "detectron2": "detectron2",
 }
+
+EXPECTED_RSKT_COMMIT = "7b84091598e1edc3236dfbf45cc27e7e3436ffcb"
 
 
 def _path(name: str, default: str) -> Path:
@@ -72,6 +76,22 @@ def main() -> int:
     )
     for path in source_files:
         _check_file("official RSKT-Seg source", path, failures)
+
+    if (root / ".git").is_dir():
+        try:
+            commit = subprocess.check_output(
+                ["git", "-C", str(root), "rev-parse", "HEAD"],
+                text=True,
+            ).strip()
+            if commit == EXPECTED_RSKT_COMMIT:
+                print(f"ok               official RSKT-Seg revision={commit}")
+            else:
+                print(
+                    "warning          official RSKT-Seg revision="
+                    f"{commit} expected={EXPECTED_RSKT_COMMIT}"
+                )
+        except Exception as exc:
+            print(f"warning          cannot read RSKT-Seg revision reason={exc}")
 
     checkpoint = _path(
         "RSKT_CHECKPOINT",

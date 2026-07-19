@@ -53,6 +53,14 @@ to disable weight downloads. If Detectron2 is not already installed, first
 bootstrap RSKT-Seg and install its bundled Detectron2 source, or set
 `GSNET_INSTALL_DETECTRON2=1`.
 
+This RSIB reuse is intentional. The official GSNet and RSKT-Seg repositories
+link the same Google Drive file ID, use identical `BuildRSIB` loaders, and
+carry byte-identical `vision_transformer.py` implementations. Only the RSIB
+specialist encoder is shared: GSNet still uses its own LandDiscover50K model
+checkpoint and CLIP ViT-B/16 branch, whereas the selected RSKT-Seg release
+uses its own DLRSD model checkpoint, CLIP ViT-L/14@336 branch, and RemoteCLIP
+branch.
+
 Official sources:
 
 - Code: <https://github.com/yecy749/GSNet>
