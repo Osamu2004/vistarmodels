@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from baselines.segearth_ov.protocols import (
@@ -11,6 +12,7 @@ from baselines.segearth_ov.protocols import (
     confusion_matrix,
     discover_chn6_cug,
     discover_loveda,
+    discover_uavid,
     discover_xbd_pre,
     load_rgb,
     load_target,
@@ -39,6 +41,7 @@ def test_all_bundled_class_files_match_fixed_protocols() -> None:
     filenames = {
         "loveda": "loveda.txt",
         "flair": "flair_12.txt",
+        "uavid": "uavid_8.txt",
         "xbd_pre": "xbd_pre.txt",
         "chn6_cug": "chn6_cug.txt",
     }
@@ -46,6 +49,32 @@ def test_all_bundled_class_files_match_fixed_protocols() -> None:
         groups = read_class_groups(config_root / filename)
         validate_class_groups(dataset, groups)
         assert len(groups) == len(DATASET_SPECS[dataset]["classes"])
+
+
+def test_uavid_spec_exactly_matches_vistar_eight_class_protocol() -> None:
+    spec = DATASET_SPECS["uavid"]
+    assert spec["classes"] == (
+        "background clutter",
+        "building",
+        "road",
+        "tree",
+        "low vegetation",
+        "moving car",
+        "static car",
+        "human",
+    )
+    assert np.asarray(spec["palette"]).tolist() == [
+        [0, 0, 0],
+        [128, 0, 0],
+        [128, 64, 128],
+        [0, 128, 0],
+        [128, 128, 0],
+        [64, 0, 128],
+        [192, 0, 192],
+        [64, 64, 0],
+    ]
+    assert spec["expected_samples"] == 270
+    assert spec["primary_metric"] == "miou"
 
 
 def test_loveda_discovery_and_reduce_zero_label(tmp_path: Path) -> None:
@@ -76,6 +105,51 @@ def test_loveda_rgb_palette_decode_uses_non_overflowing_distance(tmp_path: Path)
     sample = EvalSample("palette", image_path, mask_path)
     target = load_target(sample, "loveda", height=1, width=7)
     assert target.tolist() == [list(range(7))]
+
+
+def test_uavid_role_token_pairing_and_eight_class_rgb_decode(tmp_path: Path) -> None:
+    image_path = tmp_path / "Images" / "seq10_Images_000000.png"
+    mask_path = tmp_path / "Labels" / "seq10_Labels_000000.png"
+    _save_rgb(image_path, (2, 4))
+    mask_path.parent.mkdir(parents=True, exist_ok=True)
+    palette = np.asarray(DATASET_SPECS["uavid"]["palette"], dtype=np.uint8)
+    Image.fromarray(palette.reshape(2, 4, 3), mode="RGB").save(mask_path)
+
+    records, audit = discover_uavid(tmp_path)
+    assert len(records) == 1
+    assert records[0].mask_path == mask_path
+    assert records[0].mask_id_base == "zero"
+    assert audit["complete_pairing"] is True
+    assert audit["mask_encoding"]["rgb_files"] == 1
+    target = load_target(records[0], "uavid", height=2, width=4)
+    assert target.tolist() == [[0, 1, 2, 3], [4, 5, 6, 7]]
+
+
+def test_uavid_explicit_one_based_indexed_masks(tmp_path: Path) -> None:
+    image_path = tmp_path / "Images" / "frame.png"
+    mask_path = tmp_path / "Labels" / "frame.png"
+    _save_rgb(image_path, (2, 4))
+    _save_mask(mask_path, np.arange(1, 9, dtype=np.uint8).reshape(2, 4))
+
+    records, audit = discover_uavid(tmp_path, mask_id_base="one")
+    assert audit["mask_encoding"]["resolved_mask_id_base"] == "one"
+    target = load_target(records[0], "uavid", height=2, width=4)
+    assert target.tolist() == [[0, 1, 2, 3], [4, 5, 6, 7]]
+
+
+def test_uavid_primary_metric_includes_all_eight_classes() -> None:
+    confusion = np.diag(np.arange(1, 9, dtype=np.int64))
+    metrics = metrics_for_dataset(confusion, "uavid")
+    assert metrics["miou"] == 1.0
+    assert metrics["miou_foreground7"] == 1.0
+    assert len(DATASET_SPECS["uavid"]["classes"]) == 8
+
+    background_confusion = np.zeros((8, 8), dtype=np.int64)
+    background_confusion[0, 1] = 9
+    background_confusion[1, 0] = 1
+    background_confusion[1, 1] = 1
+    metrics = metrics_for_dataset(background_confusion, "uavid")
+    assert metrics["miou_foreground7"] == pytest.approx(1.0 / 11.0)
 
 
 def test_xbd_pre_prepared_layout_filters_to_pre_images(tmp_path: Path) -> None:

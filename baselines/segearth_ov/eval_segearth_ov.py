@@ -49,12 +49,14 @@ CLIP_STD_255 = np.asarray([68.501, 66.632, 70.323], dtype=np.float32)
 DEFAULT_DATA_ROOTS = {
     "loveda": "/root/data/LoveDA",
     "flair": "/root/data/FLAIR-1-2/data/flair#1-test",
+    "uavid": "/root/data/OVSISBenchDataset/uavid",
     "xbd_pre": "/root/data/xview2/test",
     "chn6_cug": "/root/data/CHN6-CUG/val",
 }
 DEFAULT_CLASS_FILES = {
     "loveda": "loveda.txt",
     "flair": "flair_12.txt",
+    "uavid": "uavid_8.txt",
     "xbd_pre": "xbd_pre.txt",
     "chn6_cug": "chn6_cug.txt",
 }
@@ -337,7 +339,7 @@ def _validate_resume_protocol(output_root: Path, expected: dict[str, Any], overw
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Standalone official SegEarth-OV inference on LoveDA, FLAIR #1, "
+            "Standalone SegEarth-OV inference on LoveDA, FLAIR #1, UAVid, "
             "xBD-pre, or CHN6-CUG with Vistar-compatible saved outputs."
         )
     )
@@ -372,6 +374,12 @@ def _parse_args() -> argparse.Namespace:
         default=True,
     )
     parser.add_argument("--max_samples", type=int, default=0)
+    parser.add_argument(
+        "--mask_id_base",
+        choices=("auto", "zero", "one"),
+        default="auto",
+        help="UAVid indexed-mask base; ignored by the other datasets",
+    )
     parser.add_argument(
         "--strict_protocol",
         action=argparse.BooleanOptionalAction,
@@ -489,6 +497,7 @@ def main() -> None:
         args.dataset,
         data_root,
         strict=bool(args.strict_protocol),
+        mask_id_base=str(args.mask_id_base),
     )
     indexed_records = list(enumerate(records))
     if args.max_samples > 0:
@@ -517,6 +526,16 @@ def main() -> None:
         "clip_vitb": str(clip_vitb),
         "metric_size": "original",
     }
+    if args.dataset == "uavid":
+        protocol_identity.update(
+            {
+                "label_space": "VISTAR/OVSISBench UAVid eight-class",
+                "mask_id_base": dataset_audit["mask_encoding"][
+                    "resolved_mask_id_base"
+                ],
+                "population": "all 270 one-to-one pairs under Images/Labels",
+            }
+        )
     _validate_resume_protocol(output_root, protocol_identity, args.overwrite)
 
     if rank == 0:
@@ -563,6 +582,7 @@ def main() -> None:
                     or simfeatup_revision == SIMFEATUP_SOURCE_REVISION
                 ),
                 "data_root": str(data_root),
+                "requested_mask_id_base": str(args.mask_id_base),
                 "strict_protocol": bool(args.strict_protocol),
                 "num_discovered_samples": len(records),
                 "num_selected_samples": len(indexed_records),
@@ -574,6 +594,13 @@ def main() -> None:
                     "FLAIR uses the shared GSNet/RSKT-Seg 12-class protocol; "
                     "the original SegEarth-OV repository has no FLAIR config."
                     if args.dataset == "flair"
+                    else None
+                ),
+                "uavid_protocol_note": (
+                    "Repository-local VISTAR-compatible eight-class adaptation; "
+                    "moving car and static car remain separate. This is not the "
+                    "official SegEarth-OV seven-class merged-car protocol."
+                    if args.dataset == "uavid"
                     else None
                 ),
             },
@@ -720,6 +747,7 @@ def main() -> None:
                 "Distributed result count mismatch: "
                 f"expected {len(indexed_records)}, found {len(merged_rows)}"
             )
+        expected_num_samples = int(dataset_audit["expected_num_samples"])
         result = {
             "dataset": spec["display_name"],
             "dataset_key": args.dataset,
@@ -732,8 +760,8 @@ def main() -> None:
             "simfeatup_source_revision": simfeatup_revision,
             "expected_simfeatup_source_revision": SIMFEATUP_SOURCE_REVISION,
             "num_samples": len(merged_rows),
-            "expected_num_samples": int(spec["expected_samples"]),
-            "complete_protocol_population": len(merged_rows) == int(spec["expected_samples"]),
+            "expected_num_samples": expected_num_samples,
+            "complete_protocol_population": len(merged_rows) == expected_num_samples,
             "num_classes": num_classes,
             "classes": list(class_names),
             "class_groups": [list(group) for group in class_groups],

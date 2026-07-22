@@ -1,11 +1,13 @@
 # Standalone SegEarth-OV evaluation
 
 This adapter runs the official training-free SegEarth-OV model independently
-of DynamicEarth.  It covers the four single-image benchmarks used by the
+of DynamicEarth.  It covers five single-image benchmarks used by the
 Vistar paper:
 
 - LoveDA semantic segmentation;
 - FLAIR #1 semantic segmentation;
+- UAVid semantic segmentation under the VISTAR/OVSISBench eight-class label
+  space;
 - xBD pre-disaster building extraction;
 - CHN6-CUG road extraction.
 
@@ -69,7 +71,7 @@ predictions; `run_config.json` prevents reuse when any inference-critical
 setting differs.  `SAVE_IMAGES=1` additionally writes input PNGs, colorized
 prediction/GT masks, GT class IDs, and overlays.
 
-All four evaluators report IoU/mIoU, mF1, mAcc, pixel accuracy, per-class
+All five evaluators report IoU/mIoU, mF1, mAcc, pixel accuracy, per-class
 metrics, and the shared IDGBR-compatible 3-pixel boundary WFm.  Aggregate
 artifacts are `metrics.json`, `predictions.jsonl`, and
 `per_image_metrics.csv`.
@@ -121,6 +123,44 @@ MAX_SAMPLES=2 DATA_ROOT='/root/data/FLAIR-1-2/data/flair#1-test' \
   bash run_bash/segearth_ov_flair.bash
 DATA_ROOT='/root/data/FLAIR-1-2/data/flair#1-test' \
   bash run_bash/segearth_ov_flair.bash
+```
+
+## UAVid (VISTAR-compatible eight classes)
+
+- Population: all 270 paired OVSISBench assets under `Images/` and `Labels/`.
+  Strict mode rejects a missing, duplicate, or unused image/mask pair.
+- Pairing: exact stems and the observed role-token form such as
+  `seq10_Images_000000.png` to `seq10_Labels_000000.png` are supported.
+- Classes and IDs: `background clutter`, `building`, `road`, `tree`,
+  `low vegetation`, `moving car`, `static car`, and `human`, in that exact
+  order. RGB masks use the same eight-color palette as the standalone VISTAR
+  UAVid evaluator. Indexed `0..7` and `1..8` masks are also supported after a
+  whole-population encoding audit.
+- Primary result: all-eight-class `miou`. The background-excluded
+  `miou_foreground7` is saved only as an auxiliary diagnostic and must not be
+  substituted for the primary paper value.
+- Model settings: probability threshold 0.3 and CLS-token lambda -0.3, with
+  the shared 448-pixel keep-ratio input and 224/112 internal sliding windows.
+
+The official SegEarth-OV UAVid configuration merges moving and static cars
+into one `car` class and reports a seven-class result. This repository-local
+adapter deliberately keeps both car classes separate so that its labels,
+population, palette, and primary metric match the VISTAR eight-class result.
+Consequently, the new result is not interchangeable with the published
+seven-class SegEarth-OV number.
+
+```bash
+# Two-image smoke test on the second visible GPU.
+GPU_IDS=1 NPROC_PER_NODE=1 MAX_SAMPLES=2 \
+  DATA_ROOT=/root/data/OVSISBenchDataset/uavid \
+  OUTPUT_DIR=/root/data/experiment/segearth_ov_uavid_8class_smoke_gpu1 \
+  bash run_bash/segearth_ov_uavid.bash
+
+# Complete 270-image evaluation on the second visible GPU.
+GPU_IDS=1 NPROC_PER_NODE=1 \
+  DATA_ROOT=/root/data/OVSISBenchDataset/uavid \
+  OUTPUT_DIR=/root/data/experiment/segearth_ov_uavid_8class_gpu1 \
+  bash run_bash/segearth_ov_uavid.bash
 ```
 
 ## xBD-pre

@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
-DATASET="${DATASET:?Set DATASET to loveda, flair, xbd_pre, or chn6_cug}"
+DATASET="${DATASET:?Set DATASET to loveda, flair, uavid, xbd_pre, or chn6_cug}"
 GPU_IDS="${GPU_IDS:-0}"
 NPROC_PER_NODE="${NPROC_PER_NODE:-1}"
 MASTER_PORT="${MASTER_PORT:-29660}"
@@ -29,6 +29,13 @@ case "${DATASET}" in
     DEFAULT_CLS_TOKEN_LAMBDA="-0.3"
     DEFAULT_OUTPUT_TAG="flair1_test_12class"
     ;;
+  uavid)
+    DEFAULT_DATA_ROOT="/root/data/OVSISBenchDataset/uavid"
+    DEFAULT_CLASS_FILE="${ROOT_DIR}/baselines/segearth_ov/configs/uavid_8.txt"
+    DEFAULT_PROBABILITY_THRESHOLD="0.3"
+    DEFAULT_CLS_TOKEN_LAMBDA="-0.3"
+    DEFAULT_OUTPUT_TAG="uavid_8class_all"
+    ;;
   xbd_pre)
     DEFAULT_DATA_ROOT="/root/data/xview2/test"
     DEFAULT_CLASS_FILE="${ROOT_DIR}/baselines/segearth_ov/configs/xbd_pre.txt"
@@ -44,7 +51,7 @@ case "${DATASET}" in
     DEFAULT_OUTPUT_TAG="chn6_cug_val"
     ;;
   *)
-    echo "Unsupported DATASET=${DATASET}; expected loveda, flair, xbd_pre, or chn6_cug." >&2
+    echo "Unsupported DATASET=${DATASET}; expected loveda, flair, uavid, xbd_pre, or chn6_cug." >&2
     exit 2
     ;;
 esac
@@ -63,6 +70,7 @@ PROBABILITY_THRESHOLD="${PROBABILITY_THRESHOLD:-${DEFAULT_PROBABILITY_THRESHOLD}
 CLS_TOKEN_LAMBDA="${CLS_TOKEN_LAMBDA:-${DEFAULT_CLS_TOKEN_LAMBDA}}"
 FEATURE_UP="${FEATURE_UP:-1}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
+MASK_ID_BASE="${MASK_ID_BASE:-auto}"
 STRICT_PROTOCOL="${STRICT_PROTOCOL:-1}"
 SAVE_IMAGES="${SAVE_IMAGES:-1}"
 OVERWRITE="${OVERWRITE:-0}"
@@ -97,6 +105,12 @@ if [[ "${MAX_SAMPLES}" != "0" ]] && ! [[ "${MAX_SAMPLES}" =~ ^[1-9][0-9]*$ ]]; t
   echo "MAX_SAMPLES must be zero or a positive integer, got ${MAX_SAMPLES}." >&2
   exit 2
 fi
+if [[ "${MASK_ID_BASE}" != "auto" ]] && \
+   [[ "${MASK_ID_BASE}" != "zero" ]] && \
+   [[ "${MASK_ID_BASE}" != "one" ]]; then
+  echo "MASK_ID_BASE must be auto, zero, or one; got ${MASK_ID_BASE}." >&2
+  exit 2
+fi
 IFS=',' read -r -a GPU_ARRAY <<< "${GPU_IDS}"
 if (( ${#GPU_ARRAY[@]} < NPROC_PER_NODE )); then
   echo "GPU_IDS=${GPU_IDS} exposes fewer devices than NPROC_PER_NODE=${NPROC_PER_NODE}." >&2
@@ -129,6 +143,7 @@ CMD=(
   --slide_stride "${SLIDE_STRIDE}"
   --probability_threshold "${PROBABILITY_THRESHOLD}"
   --cls_token_lambda "${CLS_TOKEN_LAMBDA}"
+  --mask_id_base "${MASK_ID_BASE}"
   "${EXTRA_ARGS[@]}"
   "$@"
 )
@@ -143,6 +158,7 @@ echo "[$(date)] probability_threshold=${PROBABILITY_THRESHOLD} | cls_token_lambd
 echo "[$(date)] metrics=IoU/mIoU,mF1,mAcc,pixel_accuracy,wfm_3px_percent"
 echo "[$(date)] GPUs=${GPU_IDS} | nproc=${NPROC_PER_NODE} | synchronization=gloo"
 echo "[$(date)] strict_protocol=${STRICT_PROTOCOL} | max_samples=${MAX_SAMPLES} | overwrite=${OVERWRITE}"
+echo "[$(date)] mask_id_base=${MASK_ID_BASE} (UAVid only)"
 echo "[$(date)] output=${OUTPUT_DIR}"
 
 if is_truthy "${DRY_RUN:-0}"; then
