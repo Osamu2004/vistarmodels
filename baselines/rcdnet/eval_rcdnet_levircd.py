@@ -40,6 +40,39 @@ from baselines.levircd_common import (  # noqa: E402
 SECOND_MEAN = np.asarray([0.439, 0.447, 0.459], dtype=np.float32)
 SECOND_STD = np.asarray([0.193, 0.183, 0.189], dtype=np.float32)
 
+# The public SECOND checkpoint was saved from an earlier module schema that
+# still registered four unused CrossMamba fusion blocks.  The pinned official
+# source no longer registers or executes these blocks; its forward path uses
+# channel_attn_mamba instead.  Keep this compatibility list exact so that a
+# genuinely incompatible checkpoint still fails closed.
+_LEGACY_CROSS_MAMBA_SUFFIXES = (
+    "op.CMA_ssm.A_log_1",
+    "op.CMA_ssm.A_log_2",
+    "op.CMA_ssm.D_1",
+    "op.CMA_ssm.D_2",
+    "op.CMA_ssm.dt_proj_1.bias",
+    "op.CMA_ssm.dt_proj_1.weight",
+    "op.CMA_ssm.dt_proj_2.bias",
+    "op.CMA_ssm.dt_proj_2.weight",
+    "op.CMA_ssm.out_norm_1.bias",
+    "op.CMA_ssm.out_norm_1.weight",
+    "op.CMA_ssm.out_norm_2.bias",
+    "op.CMA_ssm.out_norm_2.weight",
+    "op.CMA_ssm.x_proj_1.weight",
+    "op.CMA_ssm.x_proj_2.weight",
+    "op.conv2d.bias",
+    "op.conv2d.weight",
+    "op.in_proj.weight",
+    "op.in_proj_modalx.weight",
+    "op.out_proj_e.weight",
+    "op.out_proj_rgb.weight",
+)
+_PUBLIC_SECOND_LEGACY_KEYS = frozenset(
+    f"backbone.cross_mamba.{stage}.{suffix}"
+    for stage in range(4)
+    for suffix in _LEGACY_CROSS_MAMBA_SUFFIXES
+)
+
 
 def _distributed_context(device_arg: str) -> tuple[int, int, int, torch.device, bool]:
     rank = int(os.environ.get("RANK", "0"))
@@ -96,6 +129,23 @@ def _load_checkpoint(path: Path) -> dict[str, torch.Tensor]:
     return normalized
 
 
+def _filter_public_second_legacy_keys(
+    state: dict[str, torch.Tensor], model_keys: set[str]
+) -> tuple[dict[str, torch.Tensor], list[str]]:
+    """Remove only the exact 80-key dormant CrossMamba release schema."""
+
+    checkpoint_only = set(state).difference(model_keys)
+    present_legacy = checkpoint_only.intersection(_PUBLIC_SECOND_LEGACY_KEYS)
+    if present_legacy != _PUBLIC_SECOND_LEGACY_KEYS:
+        return state, []
+    filtered = {
+        key: value
+        for key, value in state.items()
+        if key not in _PUBLIC_SECOND_LEGACY_KEYS
+    }
+    return filtered, sorted(present_legacy)
+
+
 def _build_model(
     rcdnet_root: Path,
     checkpoint: Path,
@@ -121,6 +171,9 @@ def _build_model(
 
     model = EncoderDecoder(cfg=cfg, criterion=None, norm_layer=nn.BatchNorm2d)
     state = _load_checkpoint(checkpoint)
+    state, ignored_legacy = _filter_public_second_legacy_keys(
+        state, set(model.state_dict())
+    )
     incompatible = model.load_state_dict(state, strict=False)
     missing = [
         key for key in incompatible.missing_keys if "num_batches_tracked" not in key
@@ -129,7 +182,14 @@ def _build_model(
     if (missing or unexpected) and not allow_partial_checkpoint:
         raise RuntimeError(
             "RCDNet checkpoint/model mismatch. "
-            f"missing={missing[:20]} unexpected={unexpected[:20]}"
+            f"missing_count={len(missing)} missing={missing[:20]} "
+            f"unexpected_count={len(unexpected)} unexpected={unexpected[:20]}"
+        )
+    if ignored_legacy:
+        print(
+            "[RCDNet] ignored 80 known dormant cross_mamba tensors from the "
+            "public SECOND checkpoint; all active model tensors remain "
+            "strictly checked."
         )
     if missing or unexpected:
         print(
@@ -138,7 +198,7 @@ def _build_model(
             file=sys.stderr,
         )
     model.to(device).eval()
-    return model, cfg, missing, unexpected
+    return model, cfg, missing, unexpected, ignored_legacy
 
 
 def _build_text_condition(model_id: str, prompt: str, device: torch.device):
@@ -265,7 +325,14 @@ def main() -> None:
     parser.add_argument("--max_samples", type=int, default=0)
     parser.add_argument("--save_images", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--overwrite", action="store_true")
-    parser.add_argument("--allow_partial_checkpoint", action="store_true")
+    parser.add_argument(
+        "--allow_partial_checkpoint",
+        action="store_true",
+        help=(
+            "allow unresolved checkpoint mismatches after exact public-release "
+            "compatibility filtering"
+        ),
+    )
     args = parser.parse_args()
 
     if not 0.0 < args.threshold < 1.0:
@@ -280,7 +347,7 @@ def main() -> None:
     if not checkpoint.is_file():
         raise FileNotFoundError(f"Missing RCDNet checkpoint: {checkpoint}")
 
-    model, cfg, missing, unexpected = _build_model(
+    model, cfg, missing, unexpected, ignored_legacy = _build_model(
         resolve_path(args.rcdnet_root),
         checkpoint,
         args.model_input_size,
@@ -384,6 +451,7 @@ def main() -> None:
             "checkpoint_load": {
                 "missing_keys": missing,
                 "unexpected_keys": unexpected,
+                "ignored_legacy_keys": ignored_legacy,
             },
             "world_size": world_size,
             "save_images": bool(args.save_images),
