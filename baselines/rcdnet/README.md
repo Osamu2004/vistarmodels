@@ -40,11 +40,13 @@ The bootstrap pins official source revision
 `0966e96ff7075476d77442bbf6623ed5086d52da`, downloads the public SECOND
 checkpoint, and builds the official selective-scan CUDA extension.
 
-The public checkpoint also contains 80 legacy `cross_mamba` tensors that are
-neither registered nor executed by the pinned official source. The adapter
-filters only that exact four-stage legacy schema and records the removed names
-under `checkpoint_load.ignored_legacy_keys` in `metrics.json`; missing active
-weights or any other unexpected checkpoint keys still fail by default.
+The public checkpoint also contains 88 legacy tensors: 80 from four unused
+`cross_mamba` blocks and eight `norm2` tensors from decoder blocks whose current
+forward path uses only `norm1` and `norm3`. These tensors are neither registered
+nor executed by the pinned official source. The adapter filters only that exact
+release schema and records the removed names under
+`checkpoint_load.ignored_legacy_keys` in `metrics.json`; missing active weights
+or any other unexpected checkpoint keys still fail by default.
 
 ## Outputs
 

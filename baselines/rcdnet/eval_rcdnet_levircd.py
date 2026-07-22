@@ -41,10 +41,10 @@ SECOND_MEAN = np.asarray([0.439, 0.447, 0.459], dtype=np.float32)
 SECOND_STD = np.asarray([0.193, 0.183, 0.189], dtype=np.float32)
 
 # The public SECOND checkpoint was saved from an earlier module schema that
-# still registered four unused CrossMamba fusion blocks.  The pinned official
-# source no longer registers or executes these blocks; its forward path uses
-# channel_attn_mamba instead.  Keep this compatibility list exact so that a
-# genuinely incompatible checkpoint still fails closed.
+# still registered four unused CrossMamba fusion blocks and decoder norm2
+# layers.  The pinned official source executes channel_attn_mamba instead of
+# CrossMamba, while its decoder uses only norm1 and norm3.  Keep this
+# compatibility list exact so a genuinely incompatible checkpoint fails closed.
 _LEGACY_CROSS_MAMBA_SUFFIXES = (
     "op.CMA_ssm.A_log_1",
     "op.CMA_ssm.A_log_2",
@@ -67,10 +67,19 @@ _LEGACY_CROSS_MAMBA_SUFFIXES = (
     "op.out_proj_e.weight",
     "op.out_proj_rgb.weight",
 )
-_PUBLIC_SECOND_LEGACY_KEYS = frozenset(
+_PUBLIC_SECOND_LEGACY_CROSS_MAMBA_KEYS = frozenset(
     f"backbone.cross_mamba.{stage}.{suffix}"
     for stage in range(4)
     for suffix in _LEGACY_CROSS_MAMBA_SUFFIXES
+)
+_PUBLIC_SECOND_LEGACY_DECODER_NORM2_KEYS = frozenset(
+    f"decode_head.attention_blocks.{stage}.transformer_blocks.0.norm2.{parameter}"
+    for stage in range(4)
+    for parameter in ("bias", "weight")
+)
+_PUBLIC_SECOND_LEGACY_KEYS = (
+    _PUBLIC_SECOND_LEGACY_CROSS_MAMBA_KEYS
+    | _PUBLIC_SECOND_LEGACY_DECODER_NORM2_KEYS
 )
 
 
@@ -132,7 +141,7 @@ def _load_checkpoint(path: Path) -> dict[str, torch.Tensor]:
 def _filter_public_second_legacy_keys(
     state: dict[str, torch.Tensor], model_keys: set[str]
 ) -> tuple[dict[str, torch.Tensor], list[str]]:
-    """Remove only the exact 80-key dormant CrossMamba release schema."""
+    """Remove only the exact 88-key dormant public-checkpoint schema."""
 
     checkpoint_only = set(state).difference(model_keys)
     present_legacy = checkpoint_only.intersection(_PUBLIC_SECOND_LEGACY_KEYS)
@@ -187,9 +196,9 @@ def _build_model(
         )
     if ignored_legacy:
         print(
-            "[RCDNet] ignored 80 known dormant cross_mamba tensors from the "
-            "public SECOND checkpoint; all active model tensors remain "
-            "strictly checked."
+            "[RCDNet] ignored 88 known dormant cross_mamba/norm2 tensors "
+            "from the public SECOND checkpoint; all active model tensors "
+            "remain strictly checked."
         )
     if missing or unexpected:
         print(
