@@ -20,6 +20,7 @@ DEPENDENCIES = {
     "open-clip-torch": "open_clip",
     "scipy": "scipy",
     "imageio": "imageio",
+    "tifffile": "tifffile",
     "fvcore": "fvcore",
     "iopath": "iopath",
     "yacs": "yacs",

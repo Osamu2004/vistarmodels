@@ -110,6 +110,30 @@ OUTPUT_DIR=/root/data/experiment/gsnet_xbd_pre_ld50k_fullvocab_gpu0_tile512 \
 bash run_bash/gsnet_xbd_pre_building.bash
 ```
 
+FLAIR #1 test on physical GPU 0:
+
+```bash
+GPU_IDS=0 \
+NPROC_PER_NODE=1 \
+DATA_ROOT='/root/data/FLAIR-1-2/data/flair#1-test' \
+OUTPUT_DIR=/root/data/experiment/gsnet_flair1_test_ld50k_official640_gpu0 \
+bash run_bash/gsnet_flair.bash
+```
+
+The FLAIR adapter reads the complete official 15,700-patch test split
+directly from its five-band GeoTIFF release and uses bands 1--3 as RGB. It
+matches GSNet's released FLAIR inference path: each native 512 x 512 patch is
+resized to 640 x 640, evaluated with overlapping 384 x 384 local windows and
+a 384 x 384 global view, and restored to 512 x 512 for metrics. Raw labels
+1--12 form the evaluated classes; raw 0, 13--19, and 255 are ignored. The
+script reports mIoU, mAcc, mF1, pixel accuracy, and the 3-pixel boundary WFm,
+and saves class-ID and common-palette RGB prediction/ground-truth masks.
+
+This default run uses the public LandDiscover50K `GSNet_base.pth`. It is not
+the OVRSISBenchV2 ViT-B model retrained on OVRSIS95K. Do not combine its WFm
+with the published OVRSISBenchV2 FLAIR mIoU in one table row; both metrics
+must come from the same checkpoint and preprocessing.
+
 Use `NPROC_PER_NODE=2 GPU_IDS=0,1` for independent two-GPU data parallel
 evaluation. Use `MAX_SAMPLES=2` for a smoke test and `DRY_RUN=1` to print the
 resolved command without loading the model. Do not reuse the historical

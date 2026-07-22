@@ -14,6 +14,16 @@ from PIL import Image
 from tqdm import tqdm
 
 
+BASELINES_DIR = Path(__file__).resolve().parents[1]
+if str(BASELINES_DIR) not in sys.path:
+    sys.path.insert(0, str(BASELINES_DIR))
+
+from binary_boundary_wfm import (  # noqa: E402
+    aggregate_binary_boundary_wfm,
+    score_binary_boundary_wfm,
+)
+
+
 Image.MAX_IMAGE_PIXELS = None
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp")
@@ -893,6 +903,7 @@ def main() -> None:
                 f"prediction={class_prediction.shape}, gt={target.shape}"
             )
         sample_counts = _confusion(prediction, target)
+        sample_wfm = score_binary_boundary_wfm(prediction, target)
         class_histogram = np.bincount(
             class_prediction.reshape(-1),
             minlength=len(class_names),
@@ -946,6 +957,7 @@ def main() -> None:
                 },
                 **sample_counts,
                 **_metrics(sample_counts, foreground),
+                **sample_wfm,
             }
         )
 
@@ -1020,6 +1032,7 @@ def main() -> None:
             },
             **merged_counts,
             **_metrics(merged_counts, foreground),
+            **aggregate_binary_boundary_wfm(merged_rows),
         }
         _write_jsonl(output_root / "predictions.jsonl", merged_rows)
         _write_json(output_root / "metrics.json", result)

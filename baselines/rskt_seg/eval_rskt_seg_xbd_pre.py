@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,16 @@ import numpy as np
 import torch
 from PIL import Image
 from tqdm import tqdm
+
+
+BASELINES_DIR = Path(__file__).resolve().parents[1]
+if str(BASELINES_DIR) not in sys.path:
+    sys.path.insert(0, str(BASELINES_DIR))
+
+from binary_boundary_wfm import (  # noqa: E402
+    aggregate_binary_boundary_wfm,
+    score_binary_boundary_wfm,
+)
 
 from eval_rskt_seg_chn6 import (
     IMAGE_EXTS,
@@ -362,6 +373,7 @@ def main() -> None:
                 f"prediction={prediction.shape}, gt={gt.shape}"
             )
         sample_counts = _confusion(prediction, gt)
+        sample_wfm = score_binary_boundary_wfm(prediction, gt)
         for key in counts:
             counts[key] += sample_counts[key]
 
@@ -400,6 +412,7 @@ def main() -> None:
                 "num_tiles": int(num_tiles),
                 **sample_counts,
                 **_metrics(sample_counts),
+                **sample_wfm,
             }
         )
 
@@ -437,6 +450,7 @@ def main() -> None:
             "num_tiles": sum(int(row["num_tiles"]) for row in merged_rows),
             **merged_counts,
             **_metrics(merged_counts),
+            **aggregate_binary_boundary_wfm(merged_rows),
         }
         _write_jsonl(output_root / "predictions.jsonl", merged_rows)
         _write_json(output_root / "metrics.json", result)

@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 GPU_IDS="${GPU_IDS:-0}"
 NPROC_PER_NODE="${NPROC_PER_NODE:-1}"
-MASTER_PORT="${MASTER_PORT:-29642}"
+MASTER_PORT="${MASTER_PORT:-29643}"
 export CUDA_VISIBLE_DEVICES="${GPU_IDS}"
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
@@ -13,27 +13,26 @@ if ! [[ "${OMP_NUM_THREADS:-}" =~ ^[1-9][0-9]*$ ]]; then
   export OMP_NUM_THREADS=1
 fi
 
-DATA_ROOT="${DATA_ROOT:-/root/data/xview2/test}"
+DATA_ROOT="${DATA_ROOT:-/root/data/FLAIR-1-2/data/flair#1-test}"
 GSNET_ROOT="${GSNET_ROOT:-${ROOT_DIR}/third_party/GSNet}"
 GSNET_WEIGHT_ROOT="${GSNET_WEIGHT_ROOT:-/root/data/weight/gsnet}"
 GSNET_CONFIG="${GSNET_CONFIG:-${GSNET_ROOT}/configs/vitb_384.yaml}"
 GSNET_CHECKPOINT="${GSNET_CHECKPOINT:-${GSNET_WEIGHT_ROOT}/GSNet_base.pth}"
-GSNET_CLASS_JSON="${GSNET_CLASS_JSON:-${ROOT_DIR}/baselines/gsnet/configs/xbd_pre_classes.json}"
-GSNET_FOREGROUND_CLASS="${GSNET_FOREGROUND_CLASS:-building}"
+GSNET_CLASS_JSON="${GSNET_CLASS_JSON:-${ROOT_DIR}/baselines/gsnet/configs/flair_12_classes.json}"
 GSNET_CLIP_VITB="${GSNET_CLIP_VITB:-${GSNET_WEIGHT_ROOT}/pretrained/ViT-B-16.pt}"
 GSNET_RSIB="${GSNET_RSIB:-/root/data/weight/rsib/RSIB.pth}"
 
-INPUT_SIZE="${INPUT_SIZE:-512}"
-TILE_SIZE="${TILE_SIZE:-512}"
 NUM_LAYERS="${NUM_LAYERS:-2}"
 PROMPT_ENSEMBLE="${PROMPT_ENSEMBLE:-single}"
 AMP="${AMP:-fp32}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
 SAVE_IMAGES="${SAVE_IMAGES:-1}"
 OVERWRITE="${OVERWRITE:-0}"
+STRICT_PROTOCOL="${STRICT_PROTOCOL:-1}"
 BOOTSTRAP_GSNET="${BOOTSTRAP_GSNET:-1}"
 GSNET_DOWNLOAD_WEIGHTS="${GSNET_DOWNLOAD_WEIGHTS:-1}"
 CHECK_DEPS="${CHECK_DEPS:-1}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/gsnet_flair1_test_ld50k_official640_gpu${GPU_IDS//,/_}}"
 
 is_truthy() {
   case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
@@ -41,8 +40,6 @@ is_truthy() {
     *) return 1 ;;
   esac
 }
-
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/gsnet_xbd_pre_ld50k_fullvocab_tile${TILE_SIZE}_resize${INPUT_SIZE}_${NPROC_PER_NODE}gpu}"
 
 if ! [[ "${NPROC_PER_NODE}" =~ ^[1-9][0-9]*$ ]]; then
   echo "NPROC_PER_NODE must be positive, got ${NPROC_PER_NODE}." >&2
@@ -53,13 +50,15 @@ if (( ${#GPU_ARRAY[@]} < NPROC_PER_NODE )); then
   echo "GPU_IDS=${GPU_IDS} exposes fewer devices than NPROC_PER_NODE=${NPROC_PER_NODE}." >&2
   exit 2
 fi
+if [[ "${MAX_SAMPLES}" != "0" ]] && ! [[ "${MAX_SAMPLES}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "MAX_SAMPLES must be zero or a positive integer, got ${MAX_SAMPLES}." >&2
+  exit 2
+fi
 
 if is_truthy "${BOOTSTRAP_GSNET}"; then
   GSNET_ROOT="${GSNET_ROOT}" \
   GSNET_WEIGHT_ROOT="${GSNET_WEIGHT_ROOT}" \
   GSNET_CHECKPOINT="${GSNET_CHECKPOINT}" \
-  GSNET_CLASS_JSON="${GSNET_CLASS_JSON}" \
-  GSNET_FOREGROUND_CLASS="${GSNET_FOREGROUND_CLASS}" \
   GSNET_CLIP_VITB="${GSNET_CLIP_VITB}" \
   GSNET_RSIB="${GSNET_RSIB}" \
   GSNET_DOWNLOAD_WEIGHTS="${GSNET_DOWNLOAD_WEIGHTS}" \
@@ -86,25 +85,24 @@ fi
 if is_truthy "${OVERWRITE}"; then
   EXTRA_ARGS+=(--overwrite)
 fi
+if ! is_truthy "${STRICT_PROTOCOL}"; then
+  EXTRA_ARGS+=(--no_strict_protocol)
+fi
 
 CMD=(
   "${PYTHON_BIN}" -m torch.distributed.run
   --standalone
   --nproc_per_node="${NPROC_PER_NODE}"
   --master_port="${MASTER_PORT}"
-  "${ROOT_DIR}/baselines/gsnet/eval_gsnet_binary.py"
-  --dataset xbd_pre
+  "${ROOT_DIR}/baselines/gsnet/eval_gsnet_flair.py"
   --data_root "${DATA_ROOT}"
   --output_dir "${OUTPUT_DIR}"
   --gsnet_root "${GSNET_ROOT}"
   --config "${GSNET_CONFIG}"
   --checkpoint "${GSNET_CHECKPOINT}"
   --class_json "${GSNET_CLASS_JSON}"
-  --foreground_class "${GSNET_FOREGROUND_CLASS}"
   --clip_vitb "${GSNET_CLIP_VITB}"
   --rsib "${GSNET_RSIB}"
-  --input_size "${INPUT_SIZE}"
-  --tile_size "${TILE_SIZE}"
   --num_layers "${NUM_LAYERS}"
   --prompt_ensemble "${PROMPT_ENSEMBLE}"
   --amp "${AMP}"
@@ -112,21 +110,19 @@ CMD=(
   "$@"
 )
 
-echo "[$(date)] GSNet xBD-pre building evaluation"
-echo "[$(date)] setting=LandDiscover50K-trained cross-dataset/out-of-domain"
+echo "[$(date)] GSNet FLAIR #1 evaluation"
+echo "[$(date)] setting=released LandDiscover50K checkpoint, cross-dataset/out-of-domain"
+echo "[$(date)] paper_table_ovrsisbenchv2_comparable=false"
 echo "[$(date)] data_root=${DATA_ROOT}"
-echo "[$(date)] expected_layout=test/images/*_pre_disaster.png + test/labels/*_pre_disaster.json"
 echo "[$(date)] checkpoint=${GSNET_CHECKPOINT}"
-echo "[$(date)] prediction=complete non-background taxonomy argmax, then building-vs-rest collapse"
-echo "[$(date)] class_json=${GSNET_CLASS_JSON} | foreground_model_class=${GSNET_FOREGROUND_CLASS}"
-echo "[$(date)] primary_metric=building_iou"
-echo "[$(date)] boundary_metric=wfm_3px_percent (IDGBR Sobel + 3x3 dilation + Margolin WFm)"
-echo "[$(date)] labels=features.xy WKT rounded and rasterized with cv2.fillPoly"
-echo "[$(date)] inference=native_nonoverlap_tiled | source_tile=${TILE_SIZE} | model_input=${INPUT_SIZE}"
-echo "[$(date)] encoder_internal=384 | padding=zero_right_bottom | metric_size=original"
-echo "[$(date)] prompt_ensemble=${PROMPT_ENSEMBLE} | amp=${AMP}"
+echo "[$(date)] protocol=official flair#1-test | expected_samples=15700 | classes=12 | ignore=raw 0,13-19,255"
+echo "[$(date)] bands=RGB 1-3 of official five-band GeoTIFF"
+echo "[$(date)] preprocessing=native512 -> shortest-edge640 -> 384 local windows + 384 global view -> native512"
+echo "[$(date)] metrics=mIoU,mAcc,mF1,pixel_accuracy,wfm_3px_percent"
+echo "[$(date)] outputs=pred_mask,gt_mask,pred_rgb,gt_rgb,metrics.json,per_image_metrics.csv"
+echo "[$(date)] prompt_ensemble=${PROMPT_ENSEMBLE} | num_layers=${NUM_LAYERS} | amp=${AMP}"
 echo "[$(date)] GPUs=${GPU_IDS} | nproc=${NPROC_PER_NODE} | synchronization=gloo"
-echo "[$(date)] bootstrap=${BOOTSTRAP_GSNET} | auto_download_weights=${GSNET_DOWNLOAD_WEIGHTS}"
+echo "[$(date)] strict_protocol=${STRICT_PROTOCOL} | max_samples=${MAX_SAMPLES} | overwrite=${OVERWRITE}"
 echo "[$(date)] output=${OUTPUT_DIR}"
 
 if is_truthy "${DRY_RUN:-0}"; then

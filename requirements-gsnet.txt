@@ -11,6 +11,7 @@ timm>=0.9
 open-clip-torch>=2.24
 scipy>=1.10
 imageio>=2.34
+tifffile>=2024.5
 matplotlib>=3.7
 setuptools>=69
 ftfy>=6.1

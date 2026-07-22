@@ -1,11 +1,10 @@
-# RSKT-Seg on CHN6-CUG and xBD-pre
+# RSKT-Seg on CHN6-CUG, xBD-pre, and FLAIR #1
 
 This adapter evaluates the official
 [RSKT-Seg](https://github.com/LiBingyu01/RSKT-Seg) DLRSD-trained ViT-L
 checkpoint on CHN6-CUG road segmentation and xBD-pre building extraction.
-Neither target dataset is registered by the official repository, so these
-wrappers supply the two-class vocabularies and compute binary metrics without
-modifying upstream source.
+It also evaluates the checkpoint on the official FLAIR #1 test set using
+GSNet's 12-class label protocol. The wrappers do not modify upstream source.
 
 ## CHN6-CUG protocol
 
@@ -45,6 +44,40 @@ The output folder follows the other segmentation baselines:
 Raw annotation JSON files under `test/labels` are rasterized on the fly.
 Already converted masks under `targets`, `targets_cvt`, or `masks_building`
 are also accepted.
+
+## FLAIR #1 protocol
+
+- Population: all 15,700 native 512x512 patches from the ten official
+  `flair#1-test` domains (193 zones). Strict discovery validates the official
+  per-domain counts before inference.
+- Input: bands 1--3 (RGB) are read from each five-band GeoTIFF. NIR and nDSM
+  are not supplied to the model.
+- Labels: raw IDs 1--12 map to contiguous IDs 0--11. Raw ID 0, IDs 13--19,
+  and 255 are ignored, matching GSNet's FLAIR evaluation protocol.
+- Text classes: the exact official GSNet `flair.json` order is used, including
+  `pervious-surface` and `impervious-surface` for the model prompts.
+- Inference: one native 512x512 patch per RSKT-Seg forward pass. The released
+  DLRSD ViT-L configuration applies its 640-pixel shortest-edge test resize,
+  and predictions are restored to the native 512x512 extent without
+  sliding-window overlap. The official model returns only the first item of
+  `batched_inputs`, so patches are processed sequentially within each GPU.
+- Metrics: mIoU, mACC, mF1, pixel accuracy, per-class scores, and IDGBR-style
+  3-pixel boundary `wfm_3px_percent`. Ignore pixels and the two-pixel boundary
+  support around them are excluded from WFm.
+- Outputs: exact ID masks in `pred_mask` and `gt_mask`, palette-rendered masks
+  in `pred_rgb` and `gt_rgb`, per-image records, domain-level metrics, and the
+  full-run `metrics.json`.
+
+The selected RSKT-Seg checkpoint was trained on DLRSD. RSKT-Seg's official
+repository contains the same FLAIR vocabulary as GSNet, but its released
+reproduction script does not report a FLAIR result. This wrapper therefore
+records the run as cross-dataset/out-of-domain evaluation rather than as an
+official RSKT-Seg FLAIR reproduction.
+
+This default run is also not the OVRSISBenchV2 ViT-B model retrained on
+OVRSIS95K. Its WFm must not be paired with the published OVRSISBenchV2 FLAIR
+mIoU; both values in a comparison row must use the same checkpoint and
+preprocessing.
 
 ## Weights
 
@@ -166,3 +199,24 @@ bash run_bash/rskt_seg_xbd_pre_building.bash
 
 Use `MAX_SAMPLES=2` first to verify the JSON rasterization and qualitative
 building masks before launching all 933 images.
+
+FLAIR #1, two GPUs:
+
+```bash
+cd /root/code/vistarmodels
+
+BOOTSTRAP_RSKT_SEG=0 \
+RSKT_RSIB=/root/data/weight/rsib/RSIB.pth \
+GPU_IDS=0,1 \
+NPROC_PER_NODE=2 \
+DATA_ROOT=/root/data/FLAIR-1-2/data/flair#1-test \
+INPUT_SIZE=640 \
+SAVE_PRED_RGB=1 \
+SAVE_GT_RGB=1 \
+OUTPUT_DIR=/root/data/experiment/rskt_seg_flair1_vitl336_dlrsd_2gpu \
+bash run_bash/rskt_seg_flair.bash
+```
+
+For a smoke test, keep the complete extracted test set in `DATA_ROOT` and set
+`MAX_SAMPLES=2`. The resulting metrics are marked as incomplete and must not
+be reported as the full FLAIR result.
