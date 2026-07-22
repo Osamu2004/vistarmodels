@@ -56,6 +56,9 @@ does not depend on a particular workstation layout.
   currently missing upstream).
 - `baselines/todsynth`: TODSynth training and full-dataset TODSynth/CRFM LoveDA
   inference wrappers (Table 3 candidate; training required).
+- `baselines/segearth_ov`: standalone official training-free SegEarth-OV
+  inference on LoveDA, FLAIR #1, xBD-pre, and CHN6-CUG, with native-extent
+  metrics and restartable saved predictions.
 
 Run CRS-Diff on LoveDA generation using the same `cond_mask` and `gt_rgb`
 folders saved by Vistar LoveDA gen eval:

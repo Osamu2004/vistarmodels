@@ -1,0 +1,630 @@
+"""Dataset and metric protocols for standalone SegEarth-OV evaluation.
+
+The model adapter deliberately lives in ``eval_segearth_ov.py``.  This module
+contains only CPU-testable dataset discovery, label decoding, visualization,
+and confusion-matrix logic shared by LoveDA, FLAIR #1, xBD-pre, and CHN6-CUG.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Sequence
+
+import numpy as np
+from PIL import Image
+
+
+from baselines.flair_protocol import (
+    FLAIR1_EXPECTED_SAMPLES,
+    FLAIR_GSNET_CLASSES,
+    FLAIR_GSNET_MODEL_CLASSES,
+    FLAIR_IGNORE_VISUALIZATION_RGB,
+    FLAIR_VISUAL_PALETTE_U8,
+    IGNORE_INDEX,
+    discover_flair1_test,
+    load_flair_mask_array,
+    load_flair_rgb_u8,
+)
+
+
+Image.MAX_IMAGE_PIXELS = None
+
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp")
+MASK_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
+
+LOVEDA_CLASSES = (
+    "background",
+    "building",
+    "road",
+    "water",
+    "barren",
+    "forest",
+    "agriculture",
+)
+LOVEDA_PALETTE = np.asarray(
+    [
+        [0, 0, 0],
+        [255, 255, 255],
+        [255, 0, 0],
+        [0, 0, 255],
+        [255, 255, 0],
+        [0, 255, 0],
+        [0, 255, 255],
+    ],
+    dtype=np.uint8,
+)
+BINARY_PALETTE = np.asarray([[0, 0, 0], [255, 255, 255]], dtype=np.uint8)
+
+DATASET_SPECS: dict[str, dict[str, Any]] = {
+    "loveda": {
+        "display_name": "LoveDA",
+        "split": "Val",
+        "classes": LOVEDA_CLASSES,
+        "text_groups": (
+            ("background",),
+            ("building", "roof", "house"),
+            ("road",),
+            ("water",),
+            ("barren",),
+            ("forest",),
+            ("agricultural",),
+        ),
+        "palette": LOVEDA_PALETTE,
+        "ignore_index": IGNORE_INDEX,
+        "expected_samples": 1669,
+        "probability_threshold": 0.3,
+        "cls_token_lambda": -0.3,
+        "primary_metric": "miou",
+        "label_protocol": "raw 0 ignored; raw 1..7 mapped to evaluation IDs 0..6",
+    },
+    "flair": {
+        "display_name": "FLAIR#1",
+        "split": "flair#1-test",
+        "classes": tuple(FLAIR_GSNET_CLASSES),
+        "text_groups": tuple((name,) for name in FLAIR_GSNET_MODEL_CLASSES),
+        "palette": np.asarray(FLAIR_VISUAL_PALETTE_U8, dtype=np.uint8),
+        "ignore_index": IGNORE_INDEX,
+        "expected_samples": FLAIR1_EXPECTED_SAMPLES,
+        "probability_threshold": 0.0,
+        "cls_token_lambda": -0.3,
+        "primary_metric": "miou",
+        "label_protocol": "raw 1..12 mapped to 0..11; raw 0,13..19,255 ignored",
+    },
+    "xbd_pre": {
+        "display_name": "xBD-pre",
+        "split": "test/pre-disaster",
+        "classes": ("background", "building"),
+        "text_groups": (("background",), ("building",)),
+        "palette": BINARY_PALETTE,
+        "ignore_index": None,
+        "expected_samples": 933,
+        "probability_threshold": 0.0,
+        "cls_token_lambda": 0.0,
+        "primary_metric": "building_iou",
+        "label_protocol": "features.xy WKT rounded then cv2.fillPoly; nonzero is building",
+    },
+    "chn6_cug": {
+        "display_name": "CHN6-CUG",
+        "split": "val",
+        "classes": ("background", "road"),
+        "text_groups": (("background",), ("road",)),
+        "palette": BINARY_PALETTE,
+        "ignore_index": None,
+        "expected_samples": 903,
+        "probability_threshold": 0.8,
+        "cls_token_lambda": -0.3,
+        "primary_metric": "road_iou",
+        "label_protocol": "zero is background; every nonzero mask value is road",
+    },
+}
+
+
+@dataclass(frozen=True)
+class EvalSample:
+    """One image/ground-truth pair with a collision-free output name."""
+
+    name: str
+    image_path: Path
+    mask_path: Path
+    domain: str = ""
+    zone: str = ""
+    sample_id: str = ""
+
+
+def normalize_path(value: str | Path) -> Path:
+    """Resolve Linux paths and WSL UNC paths without touching the filesystem."""
+
+    text = str(value).strip().strip("\"'").replace("\\", "/")
+    match = re.match(r"^//wsl(?:\.localhost|\$)?/[^/]+(?P<path>/.*)$", text, re.I)
+    if match:
+        text = match.group("path")
+    return Path(text).expanduser().resolve()
+
+
+def read_class_groups(path: Path) -> tuple[tuple[str, ...], ...]:
+    """Read SegEarth-OV's one-class-per-line, comma-alias vocabulary format."""
+
+    groups: list[tuple[str, ...]] = []
+    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            raise ValueError(
+                "Official SegEarth-OV treats every physical line as a class; "
+                f"blank/comment lines are not allowed: {path}:{line_number}"
+            )
+        raw_aliases = line.split(",")
+        aliases = tuple(alias.strip() for alias in raw_aliases)
+        if any(not alias for alias in aliases):
+            raise ValueError(f"Empty class alias in {path}:{line_number}")
+        if list(raw_aliases) != list(aliases):
+            raise ValueError(
+                "Whitespace around comma-separated aliases changes the official "
+                f"text prompt: {path}:{line_number}"
+            )
+        groups.append(aliases)
+    if not groups:
+        raise ValueError(f"SegEarth-OV class file is empty: {path}")
+    return tuple(groups)
+
+
+def validate_class_groups(
+    dataset: str,
+    groups: Sequence[Sequence[str]],
+) -> None:
+    """Require the output-class order needed by each fixed GT protocol."""
+
+    expected = tuple(
+        tuple(str(alias).casefold() for alias in group)
+        for group in DATASET_SPECS[dataset]["text_groups"]
+    )
+    actual = tuple(
+        tuple(str(alias).casefold() for alias in group)
+        for group in groups
+    )
+    if actual != expected:
+        raise ValueError(
+            f"Class-file groups for {dataset} must be {list(expected)}, got {list(actual)}"
+        )
+
+
+def _list_images(directory: Path, *, pre_disaster_only: bool = False) -> list[Path]:
+    if not directory.is_dir():
+        raise NotADirectoryError(f"Image directory does not exist: {directory}")
+    images = [
+        path
+        for path in sorted(directory.iterdir())
+        if path.is_file()
+        and not path.name.startswith(".")
+        and path.suffix.lower() in IMAGE_EXTENSIONS
+        and (not pre_disaster_only or path.stem.endswith("_pre_disaster"))
+    ]
+    if not images:
+        qualifier = " pre-disaster" if pre_disaster_only else ""
+        raise FileNotFoundError(f"No{qualifier} images found under {directory}")
+    return images
+
+
+def _find_same_stem(directory: Path, stem: str) -> Path:
+    for extension in MASK_EXTENSIONS:
+        candidate = directory / f"{stem}{extension}"
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"No mask with stem {stem!r} under {directory}")
+
+
+def discover_loveda(data_root: Path) -> tuple[list[EvalSample], dict[str, Any]]:
+    """Discover the official 1,669-image LoveDA validation split."""
+
+    candidates: list[tuple[str, Path, Path]] = []
+    validation_root = (
+        data_root if data_root.name.casefold() == "val" else data_root / "Val"
+    )
+    for domain in ("Urban", "Rural"):
+        image_dir = validation_root / domain / "images_png"
+        mask_dir = validation_root / domain / "masks_png"
+        if image_dir.is_dir() and mask_dir.is_dir():
+            candidates.append((domain, image_dir, mask_dir))
+    if not candidates:
+        layouts = (
+            ("Val", data_root / "img_dir" / "val", data_root / "ann_dir" / "val"),
+            (data_root.name, data_root / "images_png", data_root / "masks_png"),
+        )
+        for domain, image_dir, mask_dir in layouts:
+            if image_dir.is_dir() and mask_dir.is_dir():
+                candidates.append((domain, image_dir, mask_dir))
+                break
+    if not candidates:
+        raise NotADirectoryError(
+            "Cannot find LoveDA validation data. Expected "
+            f"{validation_root}/{{Urban,Rural}}/{{images_png,masks_png}} or the "
+            "MMSeg img_dir/val + ann_dir/val layout."
+        )
+
+    records: list[EvalSample] = []
+    domain_counts: dict[str, int] = {}
+    for domain, image_dir, mask_dir in candidates:
+        images = _list_images(image_dir)
+        domain_counts[domain] = len(images)
+        for image_path in images:
+            mask_path = _find_same_stem(mask_dir, image_path.stem)
+            safe_domain = re.sub(r"[^A-Za-z0-9_-]+", "_", domain)
+            records.append(
+                EvalSample(
+                    name=f"Val_{safe_domain}_{image_path.stem}",
+                    image_path=image_path,
+                    mask_path=mask_path,
+                    domain=domain,
+                    sample_id=image_path.stem,
+                )
+            )
+    records.sort(key=lambda record: (record.domain.casefold(), record.image_path.name))
+    return records, {
+        "dataset": "LoveDA",
+        "split": "Val",
+        "resolved_data_root": str(data_root),
+        "num_pairs": len(records),
+        "domain_counts": domain_counts,
+        "domains": list(domain_counts),
+    }
+
+
+def discover_flair(data_root: Path, *, strict: bool) -> tuple[list[EvalSample], dict[str, Any]]:
+    records, audit = discover_flair1_test(data_root, strict=strict)
+    return [
+        EvalSample(
+            name=record.output_name,
+            image_path=record.image_path,
+            mask_path=record.mask_path,
+            domain=record.domain,
+            zone=record.zone,
+            sample_id=record.sample_id,
+        )
+        for record in records
+    ], audit
+
+
+def _resolve_xbd_dirs(data_root: Path) -> tuple[Path, Path, str]:
+    split_roots = [(data_root, data_root.name)]
+    if data_root.name.casefold() != "test":
+        split_roots.append((data_root / "test", "test"))
+    checked: list[tuple[Path, Path]] = []
+    layouts = (
+        ("images", "labels"),
+        ("images", "targets"),
+        ("images", "targets_cvt"),
+        ("images", "masks_building"),
+        ("images_pre", "targets_cvt_pre"),
+        ("images_pre", "labels_pre"),
+    )
+    for split_root, split_name in split_roots:
+        for image_name, label_name in layouts:
+            image_dir = split_root / image_name
+            label_dir = split_root / label_name
+            checked.append((image_dir, label_dir))
+            if image_dir.is_dir() and label_dir.is_dir():
+                return image_dir, label_dir, split_name
+    detail = "\n".join(f"  images={a} labels={b}" for a, b in checked)
+    raise NotADirectoryError(f"Cannot find xBD test image/label folders:\n{detail}")
+
+
+def _find_xbd_mask(label_dir: Path, image_path: Path) -> Path:
+    candidates = [label_dir / f"{image_path.stem}.json"]
+    for extension in MASK_EXTENSIONS:
+        candidates.extend(
+            (
+                label_dir / f"{image_path.stem}{extension}",
+                label_dir / f"{image_path.stem}_target{extension}",
+            )
+        )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"No xBD label matching {image_path.name} under {label_dir}")
+
+
+def discover_xbd_pre(data_root: Path) -> tuple[list[EvalSample], dict[str, Any]]:
+    image_dir, label_dir, split = _resolve_xbd_dirs(data_root)
+    images = _list_images(
+        image_dir,
+        pre_disaster_only=image_dir.name.casefold() != "images_pre",
+    )
+    records = [
+        EvalSample(
+            name=image_path.stem,
+            image_path=image_path,
+            mask_path=_find_xbd_mask(label_dir, image_path),
+            sample_id=image_path.stem,
+        )
+        for image_path in images
+    ]
+    return records, {
+        "dataset": "xBD-pre",
+        "split": split,
+        "resolved_data_root": str(data_root),
+        "image_dir": str(image_dir),
+        "label_dir": str(label_dir),
+        "num_pairs": len(records),
+    }
+
+
+def _resolve_chn6_dirs(data_root: Path) -> tuple[Path, Path, str]:
+    split_roots = [(data_root, data_root.name), (data_root / "val", "val")]
+    layouts = (
+        ("images", "gt"),
+        ("images", "labels"),
+        ("images", "masks"),
+        ("image", "label"),
+        ("imgs", "gt"),
+        ("imgs", "masks"),
+        ("image_cvt", "label_cvt"),
+    )
+    checked: list[tuple[Path, Path]] = []
+    for split_root, split_name in split_roots:
+        for image_name, mask_name in layouts:
+            image_dir = split_root / image_name
+            mask_dir = split_root / mask_name
+            checked.append((image_dir, mask_dir))
+            if image_dir.is_dir() and mask_dir.is_dir():
+                return image_dir, mask_dir, split_name
+    detail = "\n".join(f"  images={a} masks={b}" for a, b in checked)
+    raise NotADirectoryError(f"Cannot find CHN6-CUG image/mask folders:\n{detail}")
+
+
+def _find_chn6_mask(mask_dir: Path, image_path: Path) -> Path:
+    stems = [image_path.stem]
+    if "_sat" in image_path.stem:
+        stems.insert(0, image_path.stem.replace("_sat", "_mask"))
+    for stem in stems:
+        try:
+            return _find_same_stem(mask_dir, stem)
+        except FileNotFoundError:
+            pass
+    raise FileNotFoundError(f"No CHN6-CUG mask matching {image_path.name} under {mask_dir}")
+
+
+def discover_chn6_cug(data_root: Path) -> tuple[list[EvalSample], dict[str, Any]]:
+    image_dir, mask_dir, split = _resolve_chn6_dirs(data_root)
+    images = _list_images(image_dir)
+    records = [
+        EvalSample(
+            name=image_path.stem,
+            image_path=image_path,
+            mask_path=_find_chn6_mask(mask_dir, image_path),
+            sample_id=image_path.stem,
+        )
+        for image_path in images
+    ]
+    return records, {
+        "dataset": "CHN6-CUG",
+        "split": split,
+        "resolved_data_root": str(data_root),
+        "image_dir": str(image_dir),
+        "mask_dir": str(mask_dir),
+        "num_pairs": len(records),
+    }
+
+
+def discover_dataset(
+    dataset: str,
+    data_root: Path,
+    *,
+    strict: bool,
+) -> tuple[list[EvalSample], dict[str, Any]]:
+    if dataset == "loveda":
+        records, audit = discover_loveda(data_root)
+    elif dataset == "flair":
+        records, audit = discover_flair(data_root, strict=strict)
+    elif dataset == "xbd_pre":
+        records, audit = discover_xbd_pre(data_root)
+    elif dataset == "chn6_cug":
+        records, audit = discover_chn6_cug(data_root)
+    else:  # pragma: no cover - argparse constrains this
+        raise ValueError(f"Unsupported dataset: {dataset}")
+    expected = int(DATASET_SPECS[dataset]["expected_samples"])
+    if strict and len(records) != expected:
+        raise RuntimeError(
+            f"Invalid full {DATASET_SPECS[dataset]['display_name']} population: "
+            f"expected {expected} samples, found {len(records)}"
+        )
+    audit = dict(audit)
+    audit.update({"strict_protocol": bool(strict), "expected_num_samples": expected})
+    return records, audit
+
+
+def load_rgb(sample: EvalSample, dataset: str) -> np.ndarray:
+    if dataset == "flair":
+        rgb = load_flair_rgb_u8(sample.image_path)
+    else:
+        with Image.open(sample.image_path) as image:
+            rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    if rgb.ndim != 3 or rgb.shape[2] != 3:
+        raise ValueError(f"Expected HWC RGB image at {sample.image_path}, got {rgb.shape}")
+    return np.ascontiguousarray(rgb)
+
+
+def _decode_loveda_rgb(mask_rgb: np.ndarray) -> np.ndarray:
+    # int16 would overflow when squaring a channel difference of 255.
+    values = np.asarray(mask_rgb, dtype=np.int32)[..., :3]
+    difference = values[..., None, :] - LOVEDA_PALETTE.astype(np.int32)[None, None]
+    squared_distance = np.sum(difference * difference, axis=-1)
+    matched = np.min(squared_distance, axis=-1) == 0
+    if not bool(np.all(matched)):
+        unknown = np.unique(values[~matched].reshape(-1, 3), axis=0)[:20].tolist()
+        raise ValueError(f"LoveDA RGB mask contains unsupported colors: {unknown}")
+    return squared_distance.argmin(axis=-1).astype(np.int64)
+
+
+def _load_loveda_mask(path: Path) -> np.ndarray:
+    with Image.open(path) as image:
+        array = np.asarray(image)
+    if array.ndim == 3:
+        return _decode_loveda_rgb(array)
+    if array.ndim != 2:
+        raise ValueError(f"Unsupported LoveDA mask shape {array.shape}: {path}")
+    raw = np.asarray(array, dtype=np.int64)
+    unexpected = (raw < 0) | ((raw > 7) & (raw != IGNORE_INDEX))
+    if bool(np.any(unexpected)):
+        raise ValueError(f"Unexpected LoveDA raw IDs {np.unique(raw[unexpected]).tolist()}: {path}")
+    mapped = np.full(raw.shape, IGNORE_INDEX, dtype=np.int64)
+    valid = (raw >= 1) & (raw <= 7)
+    mapped[valid] = raw[valid] - 1
+    return mapped
+
+
+def load_target(sample: EvalSample, dataset: str, *, height: int, width: int) -> np.ndarray:
+    if dataset == "flair":
+        target = load_flair_mask_array(sample.mask_path, ignore_index=IGNORE_INDEX)
+    elif dataset == "loveda":
+        target = _load_loveda_mask(sample.mask_path)
+    elif dataset == "xbd_pre" and sample.mask_path.suffix.casefold() == ".json":
+        from baselines.rskt_seg.xbd_label_utils import load_xbd_building_mask
+
+        target = load_xbd_building_mask(sample.mask_path, height=height, width=width)
+    else:
+        with Image.open(sample.mask_path) as image:
+            target = (np.asarray(image.convert("L"), dtype=np.uint8) != 0).astype(np.int64)
+    target = np.asarray(target, dtype=np.int64)
+    if target.shape != (height, width):
+        raise ValueError(
+            f"Image/GT shape mismatch for {sample.name}: image={(height, width)}, "
+            f"mask={target.shape} ({sample.mask_path})"
+        )
+    return np.ascontiguousarray(target)
+
+
+def resize_keep_ratio(rgb: np.ndarray, max_size: int) -> np.ndarray:
+    """Match MMSeg ``Resize(scale=(S,S), keep_ratio=True)`` for RGB input."""
+
+    if max_size <= 0:
+        raise ValueError(f"max_size must be positive, got {max_size}")
+    height, width = rgb.shape[:2]
+    scale = min(float(max_size) / float(width), float(max_size) / float(height))
+    # MMCV's rescale helper rounds positive dimensions with ``int(x + .5)``.
+    resized_width = max(1, int(width * scale + 0.5))
+    resized_height = max(1, int(height * scale + 0.5))
+    image = Image.fromarray(np.asarray(rgb, dtype=np.uint8), mode="RGB")
+    return np.asarray(
+        image.resize((resized_width, resized_height), Image.Resampling.BILINEAR),
+        dtype=np.uint8,
+    )
+
+
+def confusion_matrix(
+    prediction: np.ndarray,
+    target: np.ndarray,
+    *,
+    num_classes: int,
+    ignore_index: int | None,
+) -> np.ndarray:
+    prediction = np.asarray(prediction, dtype=np.int64)
+    target = np.asarray(target, dtype=np.int64)
+    if prediction.shape != target.shape:
+        raise ValueError(f"Prediction/target shape mismatch: {prediction.shape} vs {target.shape}")
+    valid = (
+        (target >= 0)
+        & (target < num_classes)
+        & (prediction >= 0)
+        & (prediction < num_classes)
+    )
+    if ignore_index is not None:
+        valid &= target != int(ignore_index)
+    if not bool(np.any(valid)):
+        return np.zeros((num_classes, num_classes), dtype=np.int64)
+    indices = target[valid] * num_classes + prediction[valid]
+    return np.bincount(indices, minlength=num_classes**2).reshape(num_classes, num_classes)
+
+
+def metrics_from_confusion(
+    confusion: np.ndarray,
+    class_names: Sequence[str],
+) -> dict[str, Any]:
+    matrix = np.asarray(confusion, dtype=np.float64)
+    num_classes = len(class_names)
+    if matrix.shape != (num_classes, num_classes):
+        raise ValueError(f"Confusion matrix must be {(num_classes, num_classes)}, got {matrix.shape}")
+    true_positive = np.diag(matrix)
+    gt_count = matrix.sum(axis=1)
+    pred_count = matrix.sum(axis=0)
+    iou_denom = gt_count + pred_count - true_positive
+    f1_denom = gt_count + pred_count
+    iou = np.divide(true_positive, iou_denom, out=np.full(num_classes, np.nan), where=iou_denom > 0)
+    f1 = np.divide(2 * true_positive, f1_denom, out=np.full(num_classes, np.nan), where=f1_denom > 0)
+    accuracy = np.divide(true_positive, gt_count, out=np.full(num_classes, np.nan), where=gt_count > 0)
+    result: dict[str, Any] = {
+        "miou": float(np.nanmean(iou)) if bool(np.any(iou_denom > 0)) else 0.0,
+        "mf1": float(np.nanmean(f1)) if bool(np.any(f1_denom > 0)) else 0.0,
+        "macc": float(np.nanmean(accuracy)) if bool(np.any(gt_count > 0)) else 0.0,
+        "pixel_accuracy": float(true_positive.sum() / max(matrix.sum(), 1.0)),
+        "valid_pixels": int(matrix.sum()),
+    }
+    for class_id, class_name in enumerate(class_names):
+        key = re.sub(r"[^a-z0-9]+", "_", class_name.casefold()).strip("_")
+        result[f"iou_{key}"] = None if np.isnan(iou[class_id]) else float(iou[class_id])
+        result[f"f1_{key}"] = None if np.isnan(f1[class_id]) else float(f1[class_id])
+        result[f"acc_{key}"] = None if np.isnan(accuracy[class_id]) else float(accuracy[class_id])
+    return result
+
+
+def metrics_for_dataset(confusion: np.ndarray, dataset: str) -> dict[str, Any]:
+    """Add the established binary-benchmark aliases to generic metrics."""
+
+    class_names = tuple(str(name) for name in DATASET_SPECS[dataset]["classes"])
+    result = metrics_from_confusion(confusion, class_names)
+    if len(class_names) == 2:
+        for class_name in class_names:
+            key = re.sub(r"[^a-z0-9]+", "_", class_name.casefold()).strip("_")
+            result[f"{key}_iou"] = result[f"iou_{key}"]
+            result[f"{key}_f1"] = result[f"f1_{key}"]
+    primary_metric = str(DATASET_SPECS[dataset]["primary_metric"])
+    if primary_metric not in result:
+        raise RuntimeError(
+            f"Primary metric {primary_metric!r} is absent for dataset {dataset!r}"
+        )
+    return result
+
+
+def colorize_mask(
+    mask: np.ndarray,
+    palette: np.ndarray,
+    *,
+    ignore_index: int | None,
+) -> np.ndarray:
+    ids = np.asarray(mask, dtype=np.int64)
+    valid = (ids >= 0) & (ids < len(palette))
+    output = np.zeros((*ids.shape, 3), dtype=np.uint8)
+    output[valid] = np.asarray(palette, dtype=np.uint8)[ids[valid]]
+    if ignore_index is not None:
+        output[ids == int(ignore_index)] = np.asarray(
+            FLAIR_IGNORE_VISUALIZATION_RGB,
+            dtype=np.uint8,
+        )
+    return output
+
+
+def write_json(path: Path, value: Any) -> None:
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+__all__ = [
+    "BINARY_PALETTE",
+    "DATASET_SPECS",
+    "EvalSample",
+    "IGNORE_INDEX",
+    "LOVEDA_CLASSES",
+    "LOVEDA_PALETTE",
+    "colorize_mask",
+    "confusion_matrix",
+    "discover_dataset",
+    "load_rgb",
+    "load_target",
+    "metrics_from_confusion",
+    "metrics_for_dataset",
+    "normalize_path",
+    "read_class_groups",
+    "resize_keep_ratio",
+    "validate_class_groups",
+    "write_json",
+]
