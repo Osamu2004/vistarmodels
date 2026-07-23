@@ -197,7 +197,7 @@ class VIPSegmenter:
         tau: float = 4.0,
         temperature: float = 1.0,
         probability_threshold: float = 0.0,
-        background_index: int = 0,
+        low_confidence_index: int = 255,
         text_template: str = "openai_imagenet_template",
         crop_size: int = 336,
         stride: int = 112,
@@ -213,6 +213,8 @@ class VIPSegmenter:
             raise ValueError("VIP tau and temperature must be positive")
         if not 0.0 <= probability_threshold <= 1.0:
             raise ValueError("VIP probability threshold must lie in [0,1]")
+        if not 0 <= int(low_confidence_index) <= 255:
+            raise ValueError("VIP low-confidence index must lie in [0,255]")
 
         self.device = device
         self.class_groups = tuple(tuple(group) for group in class_groups)
@@ -226,7 +228,7 @@ class VIPSegmenter:
         self.tau = float(tau)
         self.temperature = float(temperature)
         self.probability_threshold = float(probability_threshold)
-        self.background_index = int(background_index)
+        self.low_confidence_index = int(low_confidence_index)
         self.crop_size = int(crop_size)
         self.stride = int(stride)
 
@@ -363,6 +365,8 @@ class VIPSegmenter:
             )
         probabilities = logits.softmax(dim=1)
         confidence, prediction = probabilities.max(dim=1)
-        prediction[confidence < self.probability_threshold] = self.background_index
+        prediction[
+            confidence < self.probability_threshold
+        ] = self.low_confidence_index
         output = prediction.squeeze(0).to(dtype=torch.uint8).cpu().numpy()
         return np.asarray(output, dtype=np.int64), len(boxes)

@@ -201,3 +201,35 @@ def test_confusion_metrics_ignore_and_binary_primary_names() -> None:
     xbd_metrics = metrics_for_dataset(matrix, "xbd_pre")
     assert xbd_metrics["building_iou"] == xbd_metrics["iou_building"] == 1 / 2
     assert xbd_metrics["background_iou"] == xbd_metrics["iou_background"] == 2 / 3
+
+
+def test_prediction_ignore_is_retained_as_false_negative() -> None:
+    target = np.asarray([[0, 0], [1, 1]], dtype=np.int64)
+    prediction = np.asarray([[0, 255], [1, 255]], dtype=np.int64)
+    matrix = confusion_matrix(
+        prediction,
+        target,
+        num_classes=2,
+        ignore_index=255,
+        prediction_ignore_index=255,
+    )
+    assert matrix.tolist() == [[1, 0, 1], [0, 1, 1]]
+
+    metrics = metrics_from_confusion(matrix, ("building", "road"))
+    assert metrics["iou_building"] == pytest.approx(0.5)
+    assert metrics["iou_road"] == pytest.approx(0.5)
+    assert metrics["pixel_accuracy"] == pytest.approx(0.5)
+    assert metrics["valid_pixels"] == 4
+    assert metrics["rejected_pixels"] == 2
+    assert metrics["rejection_rate"] == pytest.approx(0.5)
+
+
+def test_prediction_ignore_rejects_unexpected_prediction_ids() -> None:
+    with pytest.raises(ValueError, match="invalid class IDs"):
+        confusion_matrix(
+            np.asarray([[7]], dtype=np.int64),
+            np.asarray([[0]], dtype=np.int64),
+            num_classes=2,
+            ignore_index=255,
+            prediction_ignore_index=255,
+        )

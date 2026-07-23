@@ -6,6 +6,16 @@ from pathlib import Path
 from typing import Sequence
 
 
+DATASET_BACKGROUND_INDICES: dict[str, int | None] = {
+    "loveda": 0,
+    "flair": None,
+    "uavid": 0,
+    "xbd_pre": 0,
+    "chn6_cug": 0,
+}
+PREDICTION_IGNORE_INDEX = 255
+
+
 def normalize_path(value: str | Path) -> Path:
     return Path(str(value)).expanduser().resolve()
 
@@ -49,6 +59,38 @@ def flatten_class_groups(
         aliases.extend(str(alias) for alias in group)
         class_indices.extend([class_id] * len(group))
     return tuple(aliases), tuple(class_indices)
+
+
+def resolve_low_confidence_policy(
+    dataset: str,
+    requested_action: str,
+) -> tuple[str, int, int | None]:
+    """Resolve the released VIP background/ignore threshold behavior."""
+
+    if dataset not in DATASET_BACKGROUND_INDICES:
+        raise ValueError(f"Unsupported VIP dataset: {dataset}")
+    if requested_action not in {"auto", "background", "ignore"}:
+        raise ValueError(
+            "VIP low-confidence action must be auto, background, or ignore"
+        )
+    background_index = DATASET_BACKGROUND_INDICES[dataset]
+    resolved_action = requested_action
+    if resolved_action == "auto":
+        resolved_action = (
+            "background" if background_index is not None else "ignore"
+        )
+    if resolved_action == "background":
+        if background_index is None:
+            raise ValueError(
+                f"{dataset} has no evaluated background class; use "
+                "low-confidence action 'ignore'"
+            )
+        return resolved_action, int(background_index), None
+    return (
+        resolved_action,
+        PREDICTION_IGNORE_INDEX,
+        PREDICTION_IGNORE_INDEX,
+    )
 
 
 def compute_square_padding(

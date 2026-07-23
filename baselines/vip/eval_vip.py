@@ -47,6 +47,7 @@ from baselines.segearth_ov.protocols import (  # noqa: E402
 )
 from baselines.vip.protocols import (  # noqa: E402
     read_vip_class_groups,
+    resolve_low_confidence_policy,
     sliding_window_boxes,
 )
 from baselines.vip.vip_model import VIP_SOURCE_REVISION, VIPSegmenter  # noqa: E402
@@ -196,6 +197,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--tau", type=float, default=4.0)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--probability_threshold", type=float, default=0.0)
+    parser.add_argument(
+        "--low_confidence_action",
+        choices=("auto", "background", "ignore"),
+        default="auto",
+        help=(
+            "auto mirrors official VIP: explicit-background datasets map "
+            "low confidence to background, while FLAIR emits ignore ID 255"
+        ),
+    )
     parser.add_argument("--max_samples", type=int, default=0)
     parser.add_argument(
         "--mask_id_base", choices=("auto", "zero", "one"), default="auto"
@@ -244,6 +254,34 @@ def main() -> None:
     num_classes = len(class_names)
     palette = np.asarray(spec["palette"], dtype=np.uint8)
     ignore_index = spec["ignore_index"]
+    try:
+        (
+            low_confidence_action,
+            low_confidence_index,
+            prediction_ignore_index,
+        ) = resolve_low_confidence_policy(
+            args.dataset,
+            str(args.low_confidence_action),
+        )
+    except ValueError as error:
+        raise ValueError(str(error)) from error
+    if (
+        prediction_ignore_index is not None
+        and float(args.probability_threshold) <= 0.0
+    ):
+        # Preserve the established square confusion-matrix format when the
+        # threshold cannot reject any pixels.
+        metric_prediction_ignore_index = None
+    else:
+        metric_prediction_ignore_index = prediction_ignore_index
+    if (
+        metric_prediction_ignore_index is not None
+        and ignore_index is None
+    ):
+        raise ValueError(
+            "Prediction abstention is unsupported for binary datasets without "
+            "an ignore label; use low-confidence action 'background'"
+        )
 
     source_root = normalize_path(args.vip_root)
     backbone_checkpoint = normalize_path(args.backbone_checkpoint)
@@ -305,6 +343,9 @@ def main() -> None:
         "tau": float(args.tau),
         "temperature": float(args.temperature),
         "probability_threshold": float(args.probability_threshold),
+        "low_confidence_action": low_confidence_action,
+        "low_confidence_index": int(low_confidence_index),
+        "prediction_ignore_index": metric_prediction_ignore_index,
         "backbone_checkpoint": str(backbone_checkpoint),
         "dinotxt_checkpoint": str(dinotxt_checkpoint),
         "bpe_vocabulary": str(bpe_vocabulary),
@@ -337,6 +378,8 @@ def main() -> None:
                     for class_id, class_name in enumerate(class_names)
                 ],
                 "ignore_index": ignore_index,
+                "prediction_ignore_index": metric_prediction_ignore_index,
+                "low_confidence_action": low_confidence_action,
                 "label_protocol": spec["label_protocol"],
             },
         )
@@ -381,11 +424,17 @@ def main() -> None:
         tau=float(args.tau),
         temperature=float(args.temperature),
         probability_threshold=float(args.probability_threshold),
-        background_index=0,
+        low_confidence_index=int(low_confidence_index),
         crop_size=int(args.slide_crop),
         stride=int(args.slide_stride),
     )
-    local_confusion = np.zeros((num_classes, num_classes), dtype=np.int64)
+    confusion_columns = num_classes + int(
+        metric_prediction_ignore_index is not None
+    )
+    local_confusion = np.zeros(
+        (num_classes, confusion_columns),
+        dtype=np.int64,
+    )
     local_domain_confusions: dict[str, np.ndarray] = {}
     rows: list[dict[str, Any]] = []
     progress = tqdm(
@@ -411,6 +460,7 @@ def main() -> None:
                 pred_path,
                 expected_shape=(height, width),
                 num_classes=num_classes,
+                prediction_ignore_index=metric_prediction_ignore_index,
             )
             resumed = True
         else:
@@ -431,6 +481,7 @@ def main() -> None:
                 target,
                 palette,
                 ignore_index=ignore_index,
+                prediction_ignore_index=metric_prediction_ignore_index,
                 overlay_alpha=args.overlay_alpha,
             )
         matrix = confusion_matrix(
@@ -438,6 +489,7 @@ def main() -> None:
             target,
             num_classes=num_classes,
             ignore_index=ignore_index,
+            prediction_ignore_index=metric_prediction_ignore_index,
         )
         local_confusion += matrix
         if record.domain:
@@ -454,6 +506,9 @@ def main() -> None:
                 ignore_index=int(ignore_index),
                 ignore_margin=2,
                 num_classes=num_classes,
+                allow_prediction_ignore=(
+                    metric_prediction_ignore_index is not None
+                ),
             )
         rows.append(
             {
@@ -470,6 +525,11 @@ def main() -> None:
                 "model_input_height": int(resized_height),
                 "model_input_width": int(resized_width),
                 "num_slide_windows": len(windows),
+                "num_rejected_pixels": int(
+                    np.sum(prediction == int(prediction_ignore_index))
+                )
+                if prediction_ignore_index is not None
+                else 0,
                 "resumed_from_saved_prediction": resumed,
                 **metrics_for_dataset(matrix, args.dataset),
                 **boundary_metrics,
@@ -545,6 +605,9 @@ def main() -> None:
             "tau": float(args.tau),
             "temperature": float(args.temperature),
             "probability_threshold": float(args.probability_threshold),
+            "low_confidence_action": low_confidence_action,
+            "low_confidence_index": int(low_confidence_index),
+            "prediction_ignore_index": metric_prediction_ignore_index,
             "test_time_augmentation": "none",
             "world_size": world_size,
             "save_pred_mask": True,

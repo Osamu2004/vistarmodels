@@ -71,6 +71,15 @@ zero-threshold argmax. Dataset-specific tuning can be requested with
 `PROBABILITY_THRESHOLD`, `TAU`, and `TEMPERATURE`, but tuned results must be
 reported as such.
 
+`LOW_CONFIDENCE_ACTION=auto` mirrors the released VIP post-processing rule.
+Datasets with an explicit class-0 background (`LoveDA`, `UAVid`, `xBD-pre`,
+and `CHN6-CUG`) map rejected pixels to class 0. FLAIR has no evaluated
+background class, so rejected pixels are saved as ID 255 and retained as
+false negatives in IoU, F1, accuracy, and pixel-accuracy denominators. This
+avoids the incorrect historical behavior where nonzero thresholds changed
+low-confidence FLAIR pixels into class-0 `building` predictions. The default
+threshold remains zero, so the published default path is unchanged.
+
 Every completed run writes `metrics.json`, `run_config.json`,
 `predictions.jsonl`, `per_image_metrics.csv`, class-ID masks, RGB predictions,
 RGB ground truth, and overlays. Primary table values are `miou` for LoveDA,

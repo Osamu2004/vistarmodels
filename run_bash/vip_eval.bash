@@ -61,6 +61,7 @@ LOGIT_SCALE="${LOGIT_SCALE:-40}"
 TAU="${TAU:-4.0}"
 TEMPERATURE="${TEMPERATURE:-1.0}"
 PROBABILITY_THRESHOLD="${PROBABILITY_THRESHOLD:-0.0}"
+LOW_CONFIDENCE_ACTION="${LOW_CONFIDENCE_ACTION:-auto}"
 MAX_SAMPLES="${MAX_SAMPLES:-0}"
 MASK_ID_BASE="${MASK_ID_BASE:-auto}"
 STRICT_PROTOCOL="${STRICT_PROTOCOL:-1}"
@@ -101,6 +102,12 @@ if [[ "${RESIZE_POLICY}" != "release_max_side" ]] && \
   echo "RESIZE_POLICY must be release_max_side or paper_short_side." >&2
   exit 2
 fi
+if [[ "${LOW_CONFIDENCE_ACTION}" != "auto" ]] && \
+   [[ "${LOW_CONFIDENCE_ACTION}" != "background" ]] && \
+   [[ "${LOW_CONFIDENCE_ACTION}" != "ignore" ]]; then
+  echo "LOW_CONFIDENCE_ACTION must be auto, background, or ignore." >&2
+  exit 2
+fi
 IFS=',' read -r -a GPU_ARRAY <<< "${GPU_IDS}"
 if (( ${#GPU_ARRAY[@]} < NPROC_PER_NODE )); then
   echo "GPU_IDS=${GPU_IDS} exposes fewer devices than NPROC_PER_NODE=${NPROC_PER_NODE}." >&2
@@ -135,6 +142,7 @@ CMD=(
   --tau "${TAU}"
   --temperature "${TEMPERATURE}"
   --probability_threshold "${PROBABILITY_THRESHOLD}"
+  --low_confidence_action "${LOW_CONFIDENCE_ACTION}"
   --mask_id_base "${MASK_ID_BASE}"
   "${EXTRA_ARGS[@]}"
   "$@"
@@ -145,7 +153,7 @@ echo "[$(date)] dataset=${DATASET} | data_root=${DATA_ROOT}"
 echo "[$(date)] source=${VIP_ROOT} | model=frozen DINOv3 ViT-L/16 + dino.txt"
 echo "[$(date)] class_file=${CLASS_FILE}"
 echo "[$(date)] resize=${RESIZE_POLICY}:${INPUT_SIZE} | slide=${SLIDE_CROP}/${SLIDE_STRIDE} | metric_size=original"
-echo "[$(date)] logit_scale=${LOGIT_SCALE} | tau=${TAU} | temperature=${TEMPERATURE} | probability_threshold=${PROBABILITY_THRESHOLD}"
+echo "[$(date)] logit_scale=${LOGIT_SCALE} | tau=${TAU} | temperature=${TEMPERATURE} | probability_threshold=${PROBABILITY_THRESHOLD} | low_confidence_action=${LOW_CONFIDENCE_ACTION}"
 echo "[$(date)] metrics=IoU/mIoU,mF1,mAcc,pixel_accuracy,wfm_3px_percent"
 echo "[$(date)] GPUs=${GPU_IDS} | nproc=${NPROC_PER_NODE} | synchronization=gloo"
 echo "[$(date)] strict_protocol=${STRICT_PROTOCOL} | max_samples=${MAX_SAMPLES} | overwrite=${OVERWRITE}"

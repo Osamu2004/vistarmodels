@@ -140,9 +140,14 @@ def _save_visualizations(
     palette: np.ndarray,
     *,
     ignore_index: int | None,
+    prediction_ignore_index: int | None = None,
     overlay_alpha: float,
 ) -> None:
-    pred_rgb = colorize_mask(prediction, palette, ignore_index=None)
+    pred_rgb = colorize_mask(
+        prediction,
+        palette,
+        ignore_index=prediction_ignore_index,
+    )
     gt_rgb = colorize_mask(target, palette, ignore_index=ignore_index)
     valid = np.ones(target.shape, dtype=bool)
     if ignore_index is not None:
@@ -300,6 +305,7 @@ def _validate_cached_prediction(
     *,
     expected_shape: tuple[int, int],
     num_classes: int,
+    prediction_ignore_index: int | None = None,
 ) -> np.ndarray:
     with Image.open(path) as image:
         prediction = np.asarray(image.convert("L"), dtype=np.int64)
@@ -307,8 +313,14 @@ def _validate_cached_prediction(
         raise ValueError(
             f"Cached prediction has shape {prediction.shape}, expected {expected_shape}: {path}"
         )
-    if prediction.size and (prediction.min() < 0 or prediction.max() >= num_classes):
-        raise ValueError(f"Cached prediction contains invalid class IDs: {path}")
+    valid = (prediction >= 0) & (prediction < num_classes)
+    if prediction_ignore_index is not None:
+        valid |= prediction == int(prediction_ignore_index)
+    if prediction.size and not bool(np.all(valid)):
+        values = np.unique(prediction[~valid])[:8].tolist()
+        raise ValueError(
+            f"Cached prediction contains invalid class IDs {values}: {path}"
+        )
     return prediction
 
 

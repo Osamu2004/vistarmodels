@@ -863,23 +863,54 @@ def confusion_matrix(
     *,
     num_classes: int,
     ignore_index: int | None,
+    prediction_ignore_index: int | None = None,
 ) -> np.ndarray:
+    """Build a confusion matrix, optionally retaining prediction abstentions.
+
+    When ``prediction_ignore_index`` is set, the returned matrix has one
+    additional prediction column.  Pixels rejected by the model are recorded
+    in that column, so they remain false negatives for their ground-truth
+    classes instead of disappearing from the metric denominator.
+    """
+
     prediction = np.asarray(prediction, dtype=np.int64)
     target = np.asarray(target, dtype=np.int64)
     if prediction.shape != target.shape:
         raise ValueError(f"Prediction/target shape mismatch: {prediction.shape} vs {target.shape}")
-    valid = (
-        (target >= 0)
-        & (target < num_classes)
-        & (prediction >= 0)
-        & (prediction < num_classes)
-    )
+    valid_target = (target >= 0) & (target < num_classes)
     if ignore_index is not None:
-        valid &= target != int(ignore_index)
-    if not bool(np.any(valid)):
-        return np.zeros((num_classes, num_classes), dtype=np.int64)
-    indices = target[valid] * num_classes + prediction[valid]
-    return np.bincount(indices, minlength=num_classes**2).reshape(num_classes, num_classes)
+        valid_target &= target != int(ignore_index)
+
+    if prediction_ignore_index is None:
+        valid = valid_target & (prediction >= 0) & (prediction < num_classes)
+        if not bool(np.any(valid)):
+            return np.zeros((num_classes, num_classes), dtype=np.int64)
+        indices = target[valid] * num_classes + prediction[valid]
+        return np.bincount(
+            indices, minlength=num_classes**2
+        ).reshape(num_classes, num_classes)
+
+    valid_prediction = (prediction >= 0) & (prediction < num_classes)
+    rejected_prediction = prediction == int(prediction_ignore_index)
+    unexpected = valid_target & ~valid_prediction & ~rejected_prediction
+    if bool(np.any(unexpected)):
+        values = np.unique(prediction[unexpected])[:8].tolist()
+        raise ValueError(
+            "Prediction contains invalid class IDs on valid GT pixels: "
+            f"{values}; expected 0..{num_classes - 1} or "
+            f"{int(prediction_ignore_index)}"
+        )
+    if not bool(np.any(valid_target)):
+        return np.zeros((num_classes, num_classes + 1), dtype=np.int64)
+    prediction_column = np.where(
+        rejected_prediction[valid_target],
+        num_classes,
+        prediction[valid_target],
+    )
+    indices = target[valid_target] * (num_classes + 1) + prediction_column
+    return np.bincount(
+        indices, minlength=num_classes * (num_classes + 1)
+    ).reshape(num_classes, num_classes + 1)
 
 
 def metrics_from_confusion(
@@ -888,22 +919,37 @@ def metrics_from_confusion(
 ) -> dict[str, Any]:
     matrix = np.asarray(confusion, dtype=np.float64)
     num_classes = len(class_names)
-    if matrix.shape != (num_classes, num_classes):
-        raise ValueError(f"Confusion matrix must be {(num_classes, num_classes)}, got {matrix.shape}")
-    true_positive = np.diag(matrix)
+    supported_shapes = (
+        (num_classes, num_classes),
+        (num_classes, num_classes + 1),
+    )
+    if matrix.shape not in supported_shapes:
+        raise ValueError(
+            f"Confusion matrix must be one of {supported_shapes}, got {matrix.shape}"
+        )
+    class_matrix = matrix[:, :num_classes]
+    rejected_pixels = (
+        float(matrix[:, num_classes].sum())
+        if matrix.shape[1] == num_classes + 1
+        else 0.0
+    )
+    true_positive = np.diag(class_matrix)
     gt_count = matrix.sum(axis=1)
-    pred_count = matrix.sum(axis=0)
+    pred_count = class_matrix.sum(axis=0)
     iou_denom = gt_count + pred_count - true_positive
     f1_denom = gt_count + pred_count
     iou = np.divide(true_positive, iou_denom, out=np.full(num_classes, np.nan), where=iou_denom > 0)
     f1 = np.divide(2 * true_positive, f1_denom, out=np.full(num_classes, np.nan), where=f1_denom > 0)
     accuracy = np.divide(true_positive, gt_count, out=np.full(num_classes, np.nan), where=gt_count > 0)
+    valid_pixels = float(matrix.sum())
     result: dict[str, Any] = {
         "miou": float(np.nanmean(iou)) if bool(np.any(iou_denom > 0)) else 0.0,
         "mf1": float(np.nanmean(f1)) if bool(np.any(f1_denom > 0)) else 0.0,
         "macc": float(np.nanmean(accuracy)) if bool(np.any(gt_count > 0)) else 0.0,
-        "pixel_accuracy": float(true_positive.sum() / max(matrix.sum(), 1.0)),
-        "valid_pixels": int(matrix.sum()),
+        "pixel_accuracy": float(true_positive.sum() / max(valid_pixels, 1.0)),
+        "valid_pixels": int(valid_pixels),
+        "rejected_pixels": int(rejected_pixels),
+        "rejection_rate": float(rejected_pixels / max(valid_pixels, 1.0)),
     }
     for class_id, class_name in enumerate(class_names):
         key = re.sub(r"[^a-z0-9]+", "_", class_name.casefold()).strip("_")

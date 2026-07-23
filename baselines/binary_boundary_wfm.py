@@ -251,6 +251,7 @@ def score_semantic_boundary_wfm(
     ignore_index: int = 255,
     ignore_margin: int = WFM_IGNORE_MARGIN,
     num_classes: int | None = None,
+    allow_prediction_ignore: bool = False,
 ) -> dict[str, Any]:
     """Score semantic boundaries while excluding target ignore support.
 
@@ -286,7 +287,7 @@ def score_semantic_boundary_wfm(
     if not bool(np.any(valid)):
         raise ValueError("Semantic boundary WFm requires at least one valid GT pixel")
     invalid_prediction = valid & (prediction_mask == int(ignore_index))
-    if bool(np.any(invalid_prediction)):
+    if bool(np.any(invalid_prediction)) and not bool(allow_prediction_ignore):
         raise ValueError(
             "Prediction uses ignore_index on "
             f"{int(np.sum(invalid_prediction))} valid GT pixels"
@@ -334,6 +335,7 @@ def score_semantic_boundary_wfm(
         "wfm_3px_min_present": float(np.min(present_scores)),
         "wfm_3px_valid_pixels": int(np.sum(valid_eval)),
         "wfm_3px_gt_ignore_pixels": int(np.sum(~valid)),
+        "wfm_3px_pred_rejected_pixels": int(np.sum(invalid_prediction)),
         "wfm_3px_ignore_excluded_pixels": int(np.sum(~valid_eval)),
         "wfm_3px_ignore_margin": int(ignore_margin),
         "wfm_3px_gt_edge_pixels": int(np.sum(target_edge & valid_eval)),
