@@ -1,15 +1,20 @@
-# GSNet cross-domain target-class segmentation
+# GSNet cross-domain segmentation
 
-This adapter evaluates the official AAAI 2025 GSNet release on two
-target-class segmentation protocols already used by the RSKT-Seg adapter:
+This adapter evaluates the official AAAI 2025 GSNet release on four Vistar
+segmentation protocols already used by the RSKT-Seg/SegEarth-OV adapters:
 
 - **CHN6-CUG val:** road versus background.
 - **xBD-pre test:** building versus background, using the same rounded
   `features.xy` WKT rasterization as the RSKT-Seg/SegEarth-OV-compatible
   evaluation.
+- **FLAIR #1 test:** the official 12-class label subset.
+- **UAVid:** all eight Vistar classes over the complete 270-image population.
 
 The official `GSNet_base.pth` checkpoint was trained on LandDiscover50K.
-Both evaluations are therefore cross-dataset/out-of-domain evaluations.
+All four evaluations are therefore cross-dataset/out-of-domain evaluations.
+The public GSNet release has no UAVid configuration or UAVid checkpoint; the
+UAVid entry is an explicit Vistar adaptation rather than an official GSNet
+benchmark reproduction.
 
 ## Foreground prediction protocol
 
@@ -55,6 +60,19 @@ OUTPUT_DIR/
   predictions.jsonl
   metrics.json
 ```
+
+For UAVid, GSNet receives exactly the Vistar eight-class vocabulary in the
+order background clutter, building, road, tree, low vegetation, moving car,
+static car, and human. Background clutter is an evaluated semantic class,
+not an auxiliary negative channel. No extra background, unknown, other, or
+support class is appended.
+
+UAVid frames are evaluated at native extent. Each frame is right/bottom zero
+padded to a multiple of 512, divided into non-overlapping 512-pixel tiles,
+predicted with eight-class argmax, stitched, and cropped back to the original
+shape. GSNet retains its internal 384-pixel CLIP/RSIB encoder resolution.
+Region metrics and 3-pixel WFm are computed once on each reassembled native
+prediction, not independently per tile.
 
 ## Setup
 
@@ -119,6 +137,25 @@ DATA_ROOT='/root/data/FLAIR-1-2/data/flair#1-test' \
 OUTPUT_DIR=/root/data/experiment/gsnet_flair1_test_ld50k_official640_gpu0 \
 bash run_bash/gsnet_flair.bash
 ```
+
+UAVid on physical GPU 1:
+
+```bash
+GPU_IDS=1 \
+NPROC_PER_NODE=1 \
+DATA_ROOT=/root/data/OVSISBenchDataset/uavid \
+BOOTSTRAP_GSNET=0 \
+CHECK_DEPS=1 \
+OUTPUT_DIR=/root/data/experiment/gsnet_uavid_ld50k_vistar8_tile512_resize512_gpu1 \
+bash run_bash/gsnet_uavid.bash
+```
+
+Strict UAVid evaluation requires exactly 270 paired images and labels,
+`TILE_SIZE=512`, `INPUT_SIZE=512`, `NUM_LAYERS=2`,
+`PROMPT_ENSEMBLE=single`, and `AMP=fp32`. Use
+`MAX_SAMPLES=2 STRICT_PROTOCOL=0` with a separate output directory for a
+smoke test. The primary `miou` includes all eight classes; the output also
+records diagnostic `miou_foreground7` without background clutter.
 
 The FLAIR adapter reads the complete official 15,700-patch test split
 directly from its five-band GeoTIFF release and uses bands 1--3 as RGB. It
