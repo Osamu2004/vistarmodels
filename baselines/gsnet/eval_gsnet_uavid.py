@@ -51,7 +51,7 @@ from baselines.segearth_ov.protocols import (  # noqa: E402
     IGNORE_INDEX,
     colorize_mask,
     confusion_matrix,
-    discover_dataset,
+    discover_uavid,
     load_rgb,
     load_target,
     metrics_for_dataset,
@@ -423,10 +423,8 @@ def main() -> None:
         )
 
     strict = not bool(args.no_strict_protocol)
-    records, dataset_audit = discover_dataset(
+    records, dataset_audit = discover_uavid(
         _path(args.data_root),
-        "uavid",
-        strict=False,
         mask_id_base=args.mask_id_base,
     )
     selected_records = (

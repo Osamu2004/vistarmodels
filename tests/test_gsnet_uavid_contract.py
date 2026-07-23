@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 from pathlib import Path
 
@@ -25,6 +26,7 @@ CLASS_JSON = (
     / "configs"
     / "uavid_8_classes.json"
 )
+EVALUATOR = REPO_ROOT / "baselines" / "gsnet" / "eval_gsnet_uavid.py"
 
 
 def _args(**overrides: object) -> argparse.Namespace:
@@ -47,6 +49,17 @@ def test_class_json_matches_vistar_uavid_eight_class_order() -> None:
     assert len(classes) == 8
     assert classes[0] == "background clutter"
     validate_uavid_model_classes(classes)
+
+
+def test_evaluator_binds_directly_to_uavid_discovery() -> None:
+    tree = ast.parse(EVALUATOR.read_text(encoding="utf-8"))
+    called_functions = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "discover_uavid" in called_functions
+    assert "discover_dataset" not in called_functions
 
 
 @pytest.mark.parametrize(
