@@ -1,0 +1,8 @@
+background clutter, other
+building, roof, house
+road, street
+tree, trees
+low vegetation, grass
+moving car, moving vehicle
+static car, parked car
+human, person, pedestrian

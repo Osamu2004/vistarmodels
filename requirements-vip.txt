@@ -1,0 +1,11 @@
+# Install a CUDA-enabled PyTorch build suitable for the GPU before this file.
+# VIP's public release used torch 2.0.0/CUDA 11.6; newer CUDA builds are
+# supported by this adapter and are required for RTX 50-series GPUs.
+numpy<2
+opencv-python-headless>=4.8.0
+pillow>=10.0.0
+scipy>=1.10.0
+tqdm>=4.65.0
+ftfy>=6.2.3
+regex>=2024.9.11
+omegaconf>=2.3.0

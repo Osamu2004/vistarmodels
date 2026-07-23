@@ -1,0 +1,7 @@
+background, other land cover
+building, roof, house
+road, street
+water, river, lake
+barren, bare land, bare soil
+forest, woodland, trees
+agriculture, agricultural land, cropland, farmland

@@ -1,0 +1,12 @@
+building, roof, house
+pervious-surface, permeable surface
+impervious-surface, paved surface
+bare soil, barren land
+water, river, lake
+coniferous, coniferous trees
+deciduous, deciduous trees
+brushwood, shrubland
+vineyard, grape vines
+herbaceous vegetation, grassland
+agricultural land, cropland, farmland
+plowed land, tilled soil
