@@ -1,0 +1,26 @@
+# Install a CUDA-enabled torch/torchvision pair for the GPU first.
+# Use a separate Python 3.10/3.11 environment: upstream GMoE subclasses
+# Transformers internals and is incompatible with arbitrary new releases.
+transformers==4.45.2
+tokenizers>=0.20,<0.21
+accelerate==0.34.2
+numpy>=1.24,<2
+pillow>=10
+scipy>=1.10
+opencv-python-headless>=4.8
+tqdm>=4.65
+einops==0.8.0
+einops-exts==0.0.4
+sentencepiece>=0.1.99
+protobuf>=3.20
+safetensors>=0.4.5
+timm==0.9.16
+open_clip_torch==2.26.1
+ftfy>=6.2
+requests>=2.31
+packaging>=23
+shortuuid>=1.0
+decord==0.6.0
+av>=12
+gdown>=5.2,<6
+pytest>=8,<9

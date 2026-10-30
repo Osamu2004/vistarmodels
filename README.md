@@ -6,6 +6,12 @@ This repository is intentionally separate from the main `vistar` codebase. It
 keeps external comparison methods reproducible without mixing their dependencies
 and source code into the training repository.
 
+RSUniVLM now has a shared-checkpoint adapter for LoveDA Val seven-class
+segmentation and LEVIR-CD binary building-change detection. See
+[the adapter protocol](baselines/rsunivlm/README.md) and
+[the WSL run queue](RUN_QUEUE.md). Code is prepared; real model inference and
+scores are pending WSL validation.
+
 New candidate readiness:
 
 | Candidate | Table | Public task checkpoint | Prepared state |

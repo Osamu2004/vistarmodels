@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-30",
+  "scope": "vistarmodels/baselines/rsunivlm",
+  "upstream_revision": "66dce1dc68b81a6c62f02fb8e5b306571092a864",
+  "status": "static_checks_only",
+  "checks": {
+    "python_ast": "passed",
+    "bash_syntax": "passed",
+    "new_file_whitespace": "passed",
+    "new_document_local_links": "passed"
+  },
+  "tests_executed": false,
+  "model_downloaded": false,
+  "model_loaded": false,
+  "gpu_inference_executed": false,
+  "new_benchmark_scores": false,
+  "pending": [
+    "WSL contract tests",
+    "Dependency imports with transformers 4.45.2",
+    "Official checkpoint and SigLIP loading",
+    "LoveDA seven-class prompt adherence",
+    "LEVIR-CD symmetric-union smoke",
+    "Full benchmark runs and metrics"
+  ],
+  "files": {
+    "RUN_QUEUE.md": "62bb3591605685af076076f5424d934944fe71b9f05fe1bd87613770812ae324",
+    "baselines/rsunivlm/README.md": "3d3dcfa24a273d447ce3adaba59be2f6a2acaa321b35d226506874a4e7ae16c3",
+    "baselines/rsunivlm/WORKLOG.md": "3821b04303dc8c9672b27b153c848e253d763a003b77f304db0c8fd2afd2ed01",
+    "baselines/rsunivlm/__init__.py": "8cf55428f9ab3228ef672f750104b33b6f81c78f4b1899e3a8621b337815073c",
+    "baselines/rsunivlm/evaluate.py": "0fc557842b0b6677b1dc7f76e8343298017586be1030700841bf3727e6abc5ee",
+    "baselines/rsunivlm/model.py": "594305e72cd23301c479df7e6c4e6eb358c17c10b7efac28602d2849aa633adf",
+    "baselines/rsunivlm/protocols.py": "e79617f661d1c10fc6cd894126926d01a87160e5a67b6f28b48cbc7598df1bca",
+    "requirements-rsunivlm.txt": "bc900029561c2236a3bf4e42413b269d1b6237c374341667ae2dcff56b455ff8",
+    "run_bash/rsunivlm_eval.bash": "9f233b1e83d32819cea95b3a78e30a99035ccb61a57ccc4437a2d3d6e58f6512",
+    "run_bash/rsunivlm_levircd.bash": "7a9f3a36facf679532c341c4074727379b54d79cc8e3f8eb2c44cc726260a867",
+    "run_bash/rsunivlm_loveda.bash": "176f594db55750efb1090a9b8023a3bc2b216484faabfe744bf6993e58d3c8a0",
+    "scripts/bootstrap_rsunivlm.sh": "9f53a3b3e546e7f53c61bd8849a4432898694ecc84933dd9c4377ce0ea36bc3e",
+    "tests/test_rsunivlm_protocols.py": "e59fa9eda351103c78aab7cbc6c137e249a4a11f4473e9f758cf22c6f59bce4a",
+    "tools/check_rsunivlm_deps.py": "708c52b785c184f7310b1c31463a990959d8b4174b949fcbb478336e6aa5228f"
+  }
+}
