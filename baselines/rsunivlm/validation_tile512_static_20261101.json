@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-01",
+  "scope": "RSUniVLM LoveDA non-overlapping 512 source tiles",
+  "base_revision": "4add47b",
+  "status": "static_checks_passed_runtime_pending",
+  "python_ast": [
+    "baselines/rsunivlm/evaluate.py",
+    "baselines/rsunivlm/protocols.py",
+    "tests/test_rsunivlm_protocols.py"
+  ],
+  "bash_syntax": [
+    "run_bash/rsunivlm_eval.bash",
+    "run_bash/rsunivlm_loveda.bash",
+    "run_bash/rsunivlm_levircd.bash"
+  ],
+  "git_diff_check": "passed",
+  "unchanged_source_sha256": {
+    "baselines/rsunivlm/model.py": "594305e72cd23301c479df7e6c4e6eb358c17c10b7efac28602d2849aa633adf",
+    "scripts/bootstrap_rsunivlm.sh": "9f53a3b3e546e7f53c61bd8849a4432898694ecc84933dd9c4377ce0ea36bc3e",
+    "tools/check_rsunivlm_deps.py": "708c52b785c184f7310b1c31463a990959d8b4174b949fcbb478336e6aa5228f",
+    "requirements-rsunivlm.txt": "bc900029561c2236a3bf4e42413b269d1b6237c374341667ae2dcff56b455ff8",
+    "run_bash/rsunivlm_levircd.bash": "7a9f3a36facf679532c341c4074727379b54d79cc8e3f8eb2c44cc726260a867"
+  },
+  "unchanged_function_ast": [
+    "baselines/rsunivlm/evaluate.py:score",
+    "baselines/rsunivlm/evaluate.py:load_sample",
+    "baselines/rsunivlm/evaluate.py:save_images",
+    "baselines/rsunivlm/evaluate.py:cached_prediction",
+    "baselines/rsunivlm/protocols.py:decode_rle",
+    "baselines/rsunivlm/protocols.py:restore_grid",
+    "baselines/rsunivlm/protocols.py:fuse_change",
+    "baselines/rsunivlm/protocols.py:discover",
+    "baselines/rsunivlm/protocols.py:input_identity"
+  ],
+  "levircd_prediction_branch_ast_unchanged": true,
+  "source_sha256": {
+    "baselines/rsunivlm/evaluate.py": "ec9b952c034371f4fd38b6186157fb13bf3bd98d861151fc9c1266c0e545aeb0",
+    "baselines/rsunivlm/protocols.py": "c5ac47473c20ce85d8d87710e440fb02ceded465d1d1dbb839467f87b573762e",
+    "tests/test_rsunivlm_protocols.py": "f51ffec53e8cc7f90465f6c7f2857a98e92c222da8ccd252e8d2604bee996e16",
+    "run_bash/rsunivlm_eval.bash": "6be11cfa1acc3b09f287d825cb737663e8a31086531057acdb5815ba4d2fd45c",
+    "run_bash/rsunivlm_loveda.bash": "32e4cc7dbc68ae542a6e3f889887ad485452ace13ee1e12dafe424caaed0c7c6"
+  },
+  "tests_executed": false,
+  "model_loaded": false,
+  "gpu_inference_executed": false,
+  "remote_jobs_started": false,
+  "new_metrics": null,
+  "pending_wsl_regressions": [
+    "four quadrant tile placement and native-extent scoring",
+    "RGB-only source tiles and black border padding",
+    "restore full 512 before trimming partial borders",
+    "partial tile failure and raw-text resume",
+    "whole versus tiled cache identity separation",
+    "CLI default, legacy and invalid tile sizes",
+    "existing LEVIR-CD order and union behavior"
+  ],
+  "external_blocker": "WSL Google Drive download failed; main checkpoint and local SigLIP availability still unverified"
+}

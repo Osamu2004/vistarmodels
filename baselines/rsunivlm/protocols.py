@@ -134,6 +134,23 @@ def restore_grid(grid: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
     return np.asarray(Image.fromarray(grid).resize((width, height), Image.Resampling.NEAREST))
 
 
+def loveda_spatial_settings(tile_size: int) -> dict[str, Any]:
+    """Distinguish the source-image crop from the fixed vision/mask grids."""
+    if tile_size not in (0, 512):
+        raise ValueError("LoveDA uses 512-pixel non-overlapping source tiles, or 0 for legacy whole-image inference")
+    return {
+        "mode": "nonoverlapping_source_tiles" if tile_size else "whole_image",
+        "source_tile_size": tile_size,
+        "source_stride": tile_size,
+        "rgb_padding": "black_right_bottom" if tile_size else "none",
+        "vision_input_size": [384, 384],
+        "vision_resize": "official_SigLipImageProcessor_per_tile" if tile_size else "official_SigLipImageProcessor_whole",
+        "mask_grid_size": GRID_SIZE,
+        "restoration": "nearest_to_tile_then_stitch_crop_to_native" if tile_size else "nearest_to_native_extent",
+        "tta": "none",
+    }
+
+
 def fuse_change(grids: Sequence[np.ndarray]) -> np.ndarray:
     if not grids or any(x.shape != grids[0].shape for x in grids):
         raise ValueError("Change masks must be nonempty with matching shapes")

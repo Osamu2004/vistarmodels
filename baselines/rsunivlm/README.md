@@ -1,7 +1,7 @@
 # RSUniVLM：LoveDA 分割与 LEVIR-CD 变化检测
 
 本目录在同一个官方 `llava-qwen-gmoe` checkpoint 上执行两项任务，不新增训练、LoRA 或任务头。
-当前状态：适配代码与 WSL 验证命令已准备；仅做本机静态检查，尚无真实模型加载、GPU 推理或分数。
+当前状态：LoveDA 已按用户要求改为512×512非重叠源图裁块，对齐Alters的空间裁块方式；WSL验证命令已准备。用户已在WSL克隆官方源码并报告安装Transformers4.45.2等依赖。启动随后在Google Drive权重下载处报network unreachable，尚未完成依赖/权重检查或真实模型加载，没有GPU推理分数。本机仅做静态与配置读取核对。
 用户执行入口统一记录在仓库 [RUN_QUEUE.md](../../RUN_QUEUE.md)。
 
 ## 来源与适配边界
@@ -27,6 +27,7 @@
 | 默认数据 | `/root/data/LoveDA/Val/{Urban,Rural}/{images_png,masks_png}` | `/root/data/LEVIR-CD/test/{A,B,label}` |
 | 完整数量 | 1,669 张 | 官方原始 test 128 对 |
 | 输入 | 一张 RGB | 配准的两张 RGB，按 A→B 顺序 |
+| 源图空间处理 | 512×512非重叠裁块、右/下黑色补齐；每块单独送入官方384处理器 | 整图送入官方384处理器 |
 | 输出 | 七类互斥语义网格 | 二值建筑变化网格 |
 | 类别顺序 | background/building/road/water/barren/forest/agriculture | unchanged/change |
 | GT 处理 | 原始 0、255 忽略；1…7→0…6 | 0 未变化；1 或 255 变化 |
@@ -45,9 +46,22 @@ A→B 与 B→A，将两个二值结果取并集；这是为新增和拆除均�
 `prepare_inputs_for_generation` 丢弃附加参数后退回默认图像级专家；此处是本地适配层绑定，
 不改第三方源码或权重。默认 eager attention，无需 FlashAttention 扩展。
 
-图像经过 checkpoint 自带处理器；不增加滑窗、不拼接双时相图像、不使用 SAM 等额外模型。
-解析后的 24×24 网格使用最近邻恢复到原始 H×W 后评分，不能将输出上采样解释为原生高精度边界。
+图像经过 checkpoint 自带处理器；LoveDA默认先进行512源图裁块，LEVIR-CD保留整图双向处理。
+LoveDA的每块24×24网格先最近邻恢复到512×512，再按原坐标拼接、裁掉右/下补齐区域，最后在原图H×W评分；
+LEVIR-CD的网格直接还原原图。不能将输出上采样解释为原生高精度边界。
 显存和速度仍待真实 WSL 运行验证。
+
+### 2026-11-01：LoveDA改为512裁块
+
+从本机已下载checkpoint的`config.json`与固定官方源码核实：`image_aspect_ratio=square`，视觉塔为SigLIP-so400m-patch14-384；官方`SigLipImageProcessor`默认size=(384,384)，square模式直接调用该处理器。当前LoveDA路径是1024×1024原图→四块512×512源图→每块384×384视觉输入→每块24×24七类RLE→最近邻还原每块512×512→拼回1024×1024评分。512是源图裁块与步长，384是视觉输入，24是每块输出网格，三者分别记录。无重叠、多尺度或翻转TTA；不足整块时仅在右/下补黑，先恢复整块再裁掉补齐区。
+
+这次对齐论文Alters LoveDA主结果记录中的512源图裁块与原尺寸评分，不改变RSUniVLM的原生视觉尺寸、输出网格、权重或提示词。`TILE_SIZE=512`为新默认；`TILE_SIZE=0`保留旧整图路径供追溯，使用独立目录。几何协议写入`run_config.json`、`metrics.json`和缓存身份，禁止把旧整图预测当作新裁块结果。新默认输出目录为`/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle24_v2`。
+
+单次模型调用为一张RGB、granularity=2、float16、eager attention、greedy（do_sample=false、num_beams=1）、use_cache=true，最多8192个新文本token。8192不是扩散采样步数。使用固定七类提示词、Qwen qwen_1_5对话模板；checkpoint生成文件中的temperature/top_p不能据此被称作本入口的随机采样设置，因为入口显式关闭do_sample。以上是代码与元数据所定义的配置，尚未完成WSL实际前向验证。
+
+本机下载目录`/Users/zhouziyu/Downloads/weight/llava-qwen-gmoe`已有complete下载回执，但不代表权重已存在于WSL。该checkpoint的`mm_vision_tower`原值为作者机器绝对路径`/data/liux/siglip-so400m-patch14-384`；若在WSL不存在，需通过`RSUNIVLM_VISION_TOWER`指向实际准备好的本地SigLIP目录。当前依赖检查要求该变量为含`config.json`的本地目录，运行命令不直接填写公开模型ID。当前外部阻塞仍是WSL到drive.google.com的连接失败，不据此推断其他网络服务均不可达。
+
+核对来源：固定官方提交`66dce1dc68b81a6c62f02fb8e5b306571092a864`的`llava/mm_utils.py:314`、`llava/model/multimodal_encoder/siglip_encoder.py:34`和`:538`，以及本仓库`model.py`、`protocols.py`与启动脚本。裁块参照Alters的`eval_loveda_seg_cyclefullema0p99_step300000_cycleema_tile512_step1_seed0`记录及`eval_flux2_loveda.py`的右/下补零、行优先无重叠裁块逻辑；没有复用Alters分数作为RSUniVLM成绩。
 
 ## 安装与运行
 
@@ -57,11 +71,11 @@ A→B 与 B→A，将两个二值结果取并集；这是为新增和拆除均�
 
 ```bash
 # 先按 RUN_QUEUE 准备独立环境与依赖；两个命令使用完全相同的权重路径。
-GPU_IDS=0 MAX_SAMPLES=2 bash run_bash/rsunivlm_loveda.bash
-GPU_IDS=0 MAX_SAMPLES=2 bash run_bash/rsunivlm_levircd.bash
+GPU_IDS=1 TILE_SIZE=512 MAX_SAMPLES=2 bash run_bash/rsunivlm_loveda.bash
+GPU_IDS=1 MAX_SAMPLES=2 bash run_bash/rsunivlm_levircd.bash
 # 冒烟运行通过后，省略 MAX_SAMPLES 继续全量，已完成样本会复用。
-GPU_IDS=0 bash run_bash/rsunivlm_loveda.bash
-GPU_IDS=0 bash run_bash/rsunivlm_levircd.bash
+GPU_IDS=1 TILE_SIZE=512 bash run_bash/rsunivlm_loveda.bash
+GPU_IDS=1 bash run_bash/rsunivlm_levircd.bash
 ```
 
 也可以执行 `bash run_bash/rsunivlm_eval.bash`：默认 `both`，一个进程先 LoveDA、后 LEVIR-CD，
@@ -71,7 +85,7 @@ GPU_IDS=0 bash run_bash/rsunivlm_levircd.bash
 
 常用覆盖项：`RSUNIVLM_ROOT`、`RSUNIVLM_MODEL_PATH`、`RSUNIVLM_VISION_TOWER`
 （本地 SigLIP 目录）、`DATA_ROOT`（单数据集）、`LOVEDA_ROOT`、`LEVIRCD_ROOT`、
-`OUTPUT_DIR`、`MAX_SAMPLES`、`CD_DIRECTION`、`DTYPE`、`ATTENTION`、`MAX_NEW_TOKENS`、
+`OUTPUT_DIR`、`MAX_SAMPLES`、`TILE_SIZE`（LoveDA：512或0）、`CD_DIRECTION`、`DTYPE`、`ATTENTION`、`MAX_NEW_TOKENS`、
 `SAVE_IMAGES`、`BOUNDARY_WFM`、`OVERWRITE`。
 
 - `DRY_RUN=1` 仅打印命令，不下载源码/权重。
@@ -93,13 +107,14 @@ GPU_IDS=0 bash run_bash/rsunivlm_levircd.bash
 - `pred_rgb/*_pred_rgb.png`：LoveDA 固定调色板；LEVIR-CD 黑白变化图。
 - `input`、`gt_mask`、`gt_rgb`、`overlay`：LoveDA 可视化；LEVIR-CD 为
   `input_A`、`input_B`、`gt_mask`、`overlay_A`、`overlay_B`、`error_map`。
-- `raw_text`：每个请求的原始模型文本，即使 RLE 解析失败也保留。
+- `raw_text`：每个请求的原始模型文本，即使 RLE 解析失败也保留；LoveDA裁块文件名含`tile512_y{y}_x{x}`，记录源图坐标、原图大小及补齐信息。
 - `receipts`：已解码预测的校验摘要；`errors`：错误与堆栈。
 
 默认保存图片。`SAVE_IMAGES=0` 仍保留预测 ID 掩码、原始文本和指标，只跳过额外可视化。
 完整的行数、行宽、类别名均须合法，失败立即停止且 `complete=false`，不会用空背景补齐。
 重启时检查模型/源码/提示词/完整输入清单以及逐图掩码摘要；损坏预测可从已存原始文本重新解析，
-中断的双方向任务只补缺失方向。修改 checkpoint、输入或协议后要用新目录或显式 `OVERWRITE=1`。
+中断的LoveDA只补缺失/无效裁块，四块均有效后才发布整图掩码；中断的双方向任务只补缺失方向。
+`MAX_SAMPLES`和进度条计数仍按原图，不按裁块。修改 checkpoint、输入或协议后要用新目录或显式 `OVERWRITE=1`。
 
 权重身份使用小型元数据 SHA-256 以及权重文件大小/mtime；它是恢复兼容性标识，
 不是全权重密码学认证。当前没有真实指标可写入论文。

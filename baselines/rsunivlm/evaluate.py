@@ -45,7 +45,7 @@ from baselines.segearth_ov.protocols import (
 from baselines.rsunivlm.protocols import (
     CD_PROMPT, GRID_SIZE, LOVEDA_PROMPT, PROTOCOL_VERSION,
     Sample, checkpoint_identity, decode_rle, discover, expected_samples,
-    fingerprint, fuse_change, input_identity, palette, restore_grid, source_revision,
+    fingerprint, fuse_change, input_identity, loveda_spatial_settings, palette, restore_grid, source_revision,
 )
 
 
@@ -101,7 +101,8 @@ def cached_prediction(path: Path, receipt: dict[str, Any] | None, *,
 
 
 def query_grid(backend: Any, images: list[Image.Image], prompt: str, dataset: str,
-               raw_path: Path, identity: str, *, overwrite: bool) -> tuple[np.ndarray, bool]:
+               raw_path: Path, identity: str, *, overwrite: bool,
+               spatial_metadata: dict[str, Any] | None = None) -> tuple[np.ndarray, bool]:
     cached = None if overwrite else read_json(raw_path)
     if cached and cached.get("identity") == identity:
         try:
@@ -110,14 +111,59 @@ def query_grid(backend: Any, images: list[Image.Image], prompt: str, dataset: st
             pass
     response = backend.generate(images, prompt)
     # Keep the unmodified text even if strict decoding subsequently fails.
-    write_json(raw_path, {"identity": identity, "prompt": prompt, "response": response})
+    record = {"identity": identity, "prompt": prompt, "response": response}
+    if spatial_metadata is not None:
+        record["spatial"] = spatial_metadata
+    write_json(raw_path, record)
     return decode_rle(response, dataset), False
+
+
+def predict_loveda_tiled(backend: Any, image: Image.Image, sample: Sample,
+                         raw_dir: Path, identity: str, *, tile_size: int,
+                         overwrite: bool) -> tuple[np.ndarray, dict[str, Any]]:
+    """Predict native RGB crops only; each padded crop is restored before trim."""
+    settings = loveda_spatial_settings(tile_size)
+    if not tile_size:
+        raise ValueError("Tiled prediction needs a positive source tile size")
+    width, height = image.size
+    if min(width, height) <= 0 or image.mode != "RGB":
+        raise ValueError("Expected a nonempty RGB source image")
+    prediction = np.empty((height, width), dtype=np.uint8)
+    queries, reused_queries = 0, 0
+    # Iterate row-major like Alters. Only one padded source tile is live at a
+    # time; GT is not read or passed into this function.
+    for y in range(0, height, tile_size):
+        for x in range(0, width, tile_size):
+            valid_h, valid_w = min(tile_size, height-y), min(tile_size, width-x)
+            tile = Image.new("RGB", (tile_size, tile_size), (0, 0, 0))
+            tile.paste(image.crop((x, y, x+valid_w, y+valid_h)), (0, 0))
+            tile_metadata = dict(source_box=[x, y, x+valid_w, y+valid_h],
+                source_extent=[width, height], source_tile_size=tile_size,
+                padding=settings["rgb_padding"], valid_height=valid_h, valid_width=valid_w)
+            tile_id = fingerprint([identity, "loveda_source_tile", tile_metadata])
+            raw_path = raw_dir / f"{sample.name}_tile{tile_size}_y{y}_x{x}_seg.json"
+            grid, reused = query_grid(backend, [tile], LOVEDA_PROMPT, "loveda",
+                raw_path, tile_id, overwrite=overwrite, spatial_metadata=tile_metadata)
+            # Do not resize the descriptor directly to a partial border crop:
+            # that would stretch the prediction for the padded region into GT.
+            restored = restore_grid(grid, (tile_size, tile_size))
+            prediction[y:y+valid_h, x:x+valid_w] = restored[:valid_h, :valid_w]
+            queries += 1
+            reused_queries += int(reused)
+    return prediction, dict(queries=queries, reused_queries=reused_queries,
+                            num_tiles=queries, source_tile_size=tile_size)
 
 
 def predict_sample(backend: Any, images: list[Image.Image], sample: Sample, dataset: str,
                    raw_dir: Path, identity: str, *, cd_direction: str,
-                   overwrite: bool) -> tuple[np.ndarray, dict[str, Any]]:
+                   overwrite: bool, loveda_tile_size: int = 512) -> tuple[np.ndarray, dict[str, Any]]:
     if dataset == "loveda":
+        loveda_spatial_settings(loveda_tile_size)
+        if len(images) != 1:
+            raise ValueError("LoveDA segmentation takes exactly one RGB source image")
+        if loveda_tile_size:
+            return predict_loveda_tiled(backend, images[0], sample, raw_dir, identity,
+                                       tile_size=loveda_tile_size, overwrite=overwrite)
         grid, reused = query_grid(backend, images, LOVEDA_PROMPT, dataset,
                                   raw_dir / f"{sample.name}_seg.json", identity, overwrite=overwrite)
         return restore_grid(grid, (images[0].height, images[0].width)), {
@@ -207,6 +253,8 @@ def score(prediction: np.ndarray, target: np.ndarray, dataset: str,
 
 def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
                      base_identity: dict[str, Any]) -> dict[str, Any]:
+    tile_size = args.loveda_tile_size if dataset == "loveda" else 0
+    spatial = loveda_spatial_settings(tile_size) if dataset == "loveda" else None
     root_value = args.data_root or (args.loveda_root if dataset == "loveda" else args.levircd_root)
     split = "val" if dataset == "loveda" else args.split
     samples, audit = discover(dataset, normalize_path(root_value), split)
@@ -227,6 +275,8 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
         "classes": list(LOVEDA_CLASSES) if dataset == "loveda" else ["unchanged", "change"],
         "label_protocol": "raw0/255 ignored; raw1..7 -> 0..6" if dataset == "loveda" else "raw0 unchanged; raw1/255 change",
     }
+    if spatial is not None:
+        protocol.update(loveda_spatial=spatial, restoration=spatial["restoration"])
     config_id = fingerprint(protocol)
     output = normalize_path(args.output_dir)
     if args.dataset == "both":
@@ -262,6 +312,8 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
             "official_upstream_benchmark_result": False,
             "protocol_note": "VISTAR adapter; no fine-tuning; upstream training includes LoveDA and LEVIR-MCI; not asserted to be zero-shot",
         }
+        if spatial is not None:
+            result["loveda_spatial"] = spatial
         write_json(output / "metrics.json", result)
         progress = tqdm(selected, desc=f"RSUniVLM {dataset}/{split}", unit="image")
         for sample in progress:
@@ -281,6 +333,7 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
                     prediction, query_info = predict_sample(
                         backend, images, sample, dataset, dirs["raw_text"], item_id,
                         cd_direction=args.cd_direction, overwrite=args.overwrite,
+                        loveda_tile_size=tile_size,
                     )
                     save_prediction(pred_path, prediction if dataset == "loveda" else prediction * 255)
                     write_json(receipt_path, {"identity": item_id,
@@ -292,6 +345,10 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
                 row = {"sample": sample.name, "reused_prediction": reused,
                        "height": target.shape[0], "width": target.shape[1],
                        "seconds": time.monotonic() - started, **query_info, **metrics}
+                if dataset == "loveda":
+                    row["source_tile_size"] = tile_size
+                    row["num_tiles"] = (((images[0].height+tile_size-1)//tile_size)
+                                        * ((images[0].width+tile_size-1)//tile_size)) if tile_size else 1
                 rows.append(row)
                 with (output / "progress.jsonl").open("a", encoding="utf-8") as handle:
                     handle.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
@@ -364,6 +421,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_new_tokens", type=int, default=8192)
     parser.add_argument("--cd_direction", choices=("symmetric_union", "forward"), default="symmetric_union")
     parser.add_argument("--max_samples", type=int, default=0)
+    parser.add_argument("--loveda_tile_size", type=int, choices=(0, 512), default=512,
+                        help="Native LoveDA source crop size; 512 aligns with Alters, 0 reproduces whole-image processing")
     parser.add_argument("--allow_nonstandard_population", action="store_true")
     parser.add_argument("--save_images", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--boundary_wfm", action=argparse.BooleanOptionalAction, default=True)
@@ -398,7 +457,10 @@ def main() -> None:
             expected = expected_samples(dataset, split)
             if len(samples) != expected and not args.allow_nonstandard_population:
                 raise ValueError(f"{dataset}: {len(samples)} samples != expected {expected}")
-            print(json.dumps({"preflight": "passed (paths only; model not loaded)", **audit, "model": base}, indent=2))
+            info = {"preflight": "passed (paths only; model not loaded)", **audit, "model": base}
+            if dataset == "loveda":
+                info["loveda_spatial"] = loveda_spatial_settings(args.loveda_tile_size)
+            print(json.dumps(info, indent=2))
         return
     backend = LazyModel(args)
     for dataset in datasets:

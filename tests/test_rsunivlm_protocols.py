@@ -15,7 +15,7 @@ import pytest
 from PIL import Image
 
 from baselines.rsunivlm.evaluate import (
-    cached_prediction, evaluate_dataset, predict_sample, score,
+    cached_prediction, evaluate_dataset, parse_args, predict_sample, score,
 )
 from baselines.rsunivlm.model import keep_pixel_expert_during_generation
 from baselines.rsunivlm.protocols import (
@@ -41,7 +41,8 @@ def args(root: Path, output: Path, **overrides: object) -> argparse.Namespace:
     values = dict(dataset="loveda", data_root=str(root), loveda_root=str(root), levircd_root=str(root),
                   split="test", output_dir=str(output), max_samples=0,
                   allow_nonstandard_population=True, cd_direction="symmetric_union",
-                  overwrite=False, save_images=True, boundary_wfm=False)
+                  overwrite=False, save_images=True, boundary_wfm=False,
+                  loveda_tile_size=0)
     values.update(overrides)
     return argparse.Namespace(**values)
 
@@ -153,6 +154,107 @@ def test_loveda_fake_inference_has_no_gt_input_and_is_restartable(tmp_path: Path
     # Changed checkpoint/source identity must not reuse this prediction.
     with pytest.raises(RuntimeError, match="different model/data/prompt/source"):
         evaluate_dataset(options, "loveda", FakeModel([]), {"checkpoint": "different"})
+
+
+def test_loveda_tile512_preserves_quadrants_and_scores_native_extent(tmp_path: Path) -> None:
+    data, output = tmp_path / "data", tmp_path / "output"
+    make_loveda(data)
+    folder = data / "Val" / "Urban"
+    image = np.empty((1024, 1024, 3), dtype=np.uint8)
+    target = np.empty((1024, 1024), dtype=np.uint8)
+    for class_id, (y, x) in enumerate(((0, 0), (0, 512), (512, 0), (512, 512))):
+        image[y:y+512, x:x+512] = 40 * (class_id + 1)
+        target[y:y+512, x:x+512] = class_id + 1
+    Image.fromarray(image).save(folder / "images_png" / "1.png")
+    Image.fromarray(target).save(folder / "masks_png" / "1.png")
+    backend = FakeModel([rle(f"{name}*24") for name in ("background", "building", "road", "water")])
+    options = args(data, output, loveda_tile_size=512)
+    result = evaluate_dataset(options, "loveda", backend, {})
+    assert result["complete"] and result["processed_samples"] == 1
+    assert result["scores"]["pixel_accuracy"] == 1
+    assert len(backend.calls) == 4
+    for index, (images, prompt) in enumerate(backend.calls):
+        assert len(images) == 1 and images[0].mode == "RGB" and images[0].size == (512, 512)
+        assert np.all(np.asarray(images[0]) == 40 * (index + 1))
+        assert prompt == LOVEDA_PROMPT
+    saved = np.asarray(Image.open(output / "pred_mask" / "Val_Urban_1_pred_mask.png"))
+    np.testing.assert_array_equal(saved, target - 1)
+    row = json.loads((output / "predictions.jsonl").read_text())
+    assert row["height"] == row["width"] == 1024
+    assert row["num_tiles"] == row["queries"] == 4 and row["source_tile_size"] == 512
+    spatial = result["loveda_spatial"]
+    assert spatial["source_stride"] == 512 and spatial["vision_input_size"] == [384, 384]
+    assert spatial["mask_grid_size"] == 24
+    evaluate_dataset(options, "loveda", FakeModel([]), {})
+    assert json.loads((output / "predictions.jsonl").read_text())["reused_prediction"]
+
+
+def test_loveda_border_tiles_pad_black_then_restore_before_trimming(tmp_path: Path) -> None:
+    # Both border strips are smaller than half a tile. Resizing a grid directly
+    # to the valid strip would incorrectly insert its right/bottom half there.
+    source = Image.new("RGB", (600, 530), (123, 123, 123))
+    sample = Sample("border", (tmp_path / "rgb.png",), tmp_path / "gt.png")
+    response = "\n".join(["building*12, road*12"] * 12 + ["water*12, forest*12"] * 12)
+    backend = FakeModel([response] * 4)
+    prediction, info = predict_sample(backend, [source], sample, "loveda", tmp_path, "run",
+                                     cd_direction="symmetric_union", overwrite=False, loveda_tile_size=512)
+    assert prediction.shape == (530, 600) and info["num_tiles"] == 4
+    assert np.all(prediction[512:, 512:] == 1)
+    assert np.all(prediction[:256, 512:] == 1) and np.all(prediction[256:512, 512:] == 3)
+    assert np.all(prediction[512:, :256] == 1) and np.all(prediction[512:, 256:512] == 2)
+    for (images, _), (valid_h, valid_w) in zip(backend.calls, ((512, 512), (512, 88), (18, 512), (18, 88))):
+        tile = np.asarray(images[0])
+        assert tile.shape == (512, 512, 3)
+        assert np.all(tile[:valid_h, :valid_w] == 123)
+        assert np.all(tile[valid_h:] == 0) and np.all(tile[:, valid_w:] == 0)
+    raw = json.loads((tmp_path / "border_tile512_y512_x512_seg.json").read_text())
+    assert raw["spatial"]["source_box"] == [512, 512, 600, 530]
+    assert raw["spatial"]["source_extent"] == [600, 530]
+
+
+def test_loveda_failed_tile_retries_only_missing_or_invalid_responses(tmp_path: Path) -> None:
+    data, output = tmp_path / "data", tmp_path / "output"
+    make_loveda(data)
+    folder = data / "Val" / "Urban"
+    Image.new("RGB", (1024, 1024), (123, 123, 123)).save(folder / "images_png" / "1.png")
+    Image.new("L", (1024, 1024), 2).save(folder / "masks_png" / "1.png")
+    options = args(data, output, loveda_tile_size=512)
+    with pytest.raises(ValueError):
+        evaluate_dataset(options, "loveda", FakeModel([rle("building*24"), "bad tile"]), {})
+    assert not json.loads((output / "metrics.json").read_text())["complete"]
+    assert not list((output / "pred_mask").glob("*.png"))
+    failed = output / "raw_text" / "Val_Urban_1_tile512_y0_x512_seg.json"
+    assert json.loads(failed.read_text())["response"] == "bad tile"
+    retry = FakeModel([rle("building*24")] * 3)
+    result = evaluate_dataset(options, "loveda", retry, {})
+    assert result["complete"] and result["scores"]["pixel_accuracy"] == 1
+    assert len(retry.calls) == 3
+    row = json.loads((output / "predictions.jsonl").read_text())
+    assert row["queries"] == 4 and row["reused_queries"] == 1
+
+
+def test_loveda_whole_image_cache_cannot_be_used_for_tiled_evaluation(tmp_path: Path) -> None:
+    data, output = tmp_path / "data", tmp_path / "output"
+    make_loveda(data)
+    evaluate_dataset(args(data, output), "loveda", FakeModel([rle("building*24")]), {})
+    with pytest.raises(RuntimeError, match="different model/data/prompt/source"):
+        evaluate_dataset(args(data, output, loveda_tile_size=512), "loveda", FakeModel([]), {})
+
+
+@pytest.mark.parametrize("tile_size", [None, "0", "512"])
+def test_loveda_cli_default_and_legacy_mode(monkeypatch, tile_size: str | None) -> None:
+    argv = ["evaluate.py", "--dataset", "loveda", "--output_dir", "/tmp/rsunivlm"]
+    if tile_size is not None:
+        argv += ["--loveda_tile_size", tile_size]
+    monkeypatch.setattr("sys.argv", argv)
+    assert parse_args().loveda_tile_size == (512 if tile_size is None else int(tile_size))
+
+
+def test_loveda_cli_rejects_unapproved_tile_size(monkeypatch) -> None:
+    monkeypatch.setattr("sys.argv", ["evaluate.py", "--dataset", "loveda", "--output_dir", "/tmp/rsunivlm",
+                                     "--loveda_tile_size", "256"])
+    with pytest.raises(SystemExit):
+        parse_args()
 
 
 def test_failure_preserves_text_but_never_publishes_a_complete_score(tmp_path: Path) -> None:

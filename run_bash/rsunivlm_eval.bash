@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 DATASET="${RSUNIVLM_DATASET:-both}"
+TILE_SIZE="${TILE_SIZE:-512}"
 GPU_IDS="${GPU_IDS:-0}"
 if [[ "${NPROC_PER_NODE:-1}" != "1" || "${GPU_IDS}" == *,* ]]; then
   echo "RSUniVLM uses one process/one GPU per output; launch separate dataset jobs for two GPUs." >&2
@@ -14,7 +15,11 @@ export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 export RSUNIVLM_ROOT="${RSUNIVLM_ROOT:-${ROOT_DIR}/third_party/RSUniVLM}"
 export RSUNIVLM_MODEL_PATH="${RSUNIVLM_MODEL_PATH:-/root/data/weight/rsunivlm/llava-qwen-gmoe}"
-OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_${DATASET}_native_rle24_v1}"
+if [[ "${DATASET}" == "levircd" ]]; then
+  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_levircd_native_rle24_v1}"
+else
+  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_${DATASET}_native_tile${TILE_SIZE}_rle24_v2}"
+fi
 
 CMD=("${PYTHON_BIN}" "${ROOT_DIR}/baselines/rsunivlm/evaluate.py"
   --dataset "${DATASET}" --source_root "${RSUNIVLM_ROOT}"
@@ -25,6 +30,7 @@ CMD=("${PYTHON_BIN}" "${ROOT_DIR}/baselines/rsunivlm/evaluate.py"
   --dtype "${DTYPE:-float16}" --attention "${ATTENTION:-eager}"
   --max_new_tokens "${MAX_NEW_TOKENS:-8192}"
   --max_samples "${MAX_SAMPLES:-0}"
+  --loveda_tile_size "${TILE_SIZE}"
   --cd_direction "${CD_DIRECTION:-symmetric_union}")
 if [[ -n "${DATA_ROOT:-}" ]]; then CMD+=(--data_root "${DATA_ROOT}"); fi
 if [[ -n "${RSUNIVLM_VISION_TOWER:-}" ]]; then CMD+=(--vision_tower "${RSUNIVLM_VISION_TOWER}"); fi
