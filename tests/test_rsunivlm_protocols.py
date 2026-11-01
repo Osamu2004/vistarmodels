@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +20,7 @@ from baselines.rsunivlm.evaluate import (
 )
 from baselines.rsunivlm.model import keep_pixel_expert_during_generation
 from baselines.rsunivlm.protocols import (
-    CD_PROMPT, LOVEDA_PROMPT, Sample, decode_rle, discover, fuse_change, restore_grid,
+    CD_PROMPT, LOVEDA_PROMPT, Sample, decode_rle, discover, fuse_change, restore_grid, source_revision,
 )
 
 
@@ -64,6 +65,35 @@ def make_levir(root: Path) -> None:
         directory.mkdir(parents=True)
         shape = (48, 72) if folder == "label" else (48, 72, 3)
         Image.fromarray(np.full(shape, value, dtype=np.uint8)).save(directory / "case.png")
+
+
+@pytest.fixture
+def source_checkout(tmp_path: Path, monkeypatch) -> tuple[Path, str]:
+    root = tmp_path / "upstream"
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    (root / "source.py").write_text("VALUE = 1\n")
+    (root / "tracked.pyc").write_bytes(b"original bytecode fixture")
+    subprocess.run(["git", "-C", str(root), "add", "source.py", "tracked.pyc"], check=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.name=Protocol Test",
+                    "-c", "user.email=protocol-test@example.invalid", "commit", "-qm", "fixture"], check=True)
+    revision = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+    monkeypatch.setattr("baselines.rsunivlm.protocols.UPSTREAM_COMMIT", revision)
+    return root, revision
+
+
+@pytest.mark.parametrize("filename", ["source.py", "tracked.pyc"])
+def test_pinned_source_allows_modified_tracked_files(source_checkout, filename: str) -> None:
+    root, revision = source_checkout
+    (root / filename).write_bytes(b"local change\n")
+    assert subprocess.check_output(["git", "-C", str(root), "status", "--porcelain"], text=True).strip()
+    assert source_revision(root) == revision
+
+
+def test_source_revision_still_checks_pinned_commit(source_checkout, monkeypatch) -> None:
+    root, _ = source_checkout
+    monkeypatch.setattr("baselines.rsunivlm.protocols.UPSTREAM_COMMIT", "0" * 40)
+    with pytest.raises(RuntimeError, match="!= pinned"):
+        source_revision(root)
 
 
 def test_seven_class_decode_and_native_extent() -> None:

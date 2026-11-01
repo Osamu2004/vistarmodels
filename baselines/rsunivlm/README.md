@@ -1,13 +1,14 @@
 # RSUniVLM：LoveDA 分割与 LEVIR-CD 变化检测
 
 本目录在同一个官方 `llava-qwen-gmoe` checkpoint 上执行两项任务，不新增训练、LoRA 或任务头。
-当前状态：LoveDA的512×512非重叠源图裁块已在本地e25159f实现。用户WSL已创建固定官方源码干净副本并通过源码/GMoE导入、依赖、双权重路径与CUDA检查，但随后evaluate.py报不认识--loveda_tile_size，说明正在运行的外层适配器尚缺512更新。按RUN_QUEUE的1.5导入离线包并确认--help，再继续两原图冒烟。尚无模型加载或推理成功回执，没有GPU分数；本机不运行模型或测试。
+当前状态：LoveDA的512×512源图裁块CLI已在用户WSL更新。新官方源码副本仍因工作区修改检查退出，用户明确要求取消此项检查；本次已删除预检与bootstrap对已跟踪文件修改的拦截，固定提交版本校验保留。更新后继续使用现有源码目录；尚无真实模型加载/推理成功回执，没有GPU分数。本机只做静态核查，不运行模型或测试。
 用户执行入口统一记录在仓库 [RUN_QUEUE.md](../../RUN_QUEUE.md)。
 
 ## 来源与适配边界
 
 - [官方源码](https://github.com/xuliu-cyber/RSUniVLM)，固定提交
   `66dce1dc68b81a6c62f02fb8e5b306571092a864`。
+  按用户2026-11-01要求，允许该提交下的本地文件修改；`source_revision`仅记录提交版本，不再声明工作区未修改。
 - [官方 checkpoint](https://drive.google.com/drive/folders/1TtaoOPmh167gpgHHWRNBMCaA7t_XZ4Vg)，
   默认保存至 `/root/data/weight/rsunivlm/llava-qwen-gmoe`。
   用户实际解压目录为`/root/data/weight/llava-qwen-gmoe`，按RUN_QUEUE设置`RSUNIVLM_MODEL_PATH`覆盖脚本默认值。

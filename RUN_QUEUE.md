@@ -4,7 +4,7 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
-状态（2026-11-01最新用户回执）：已从本地Git对象创建RSUniVLM_clean_66dce1d并切到固定官方提交；最新运行已通过固定提交、官方GMoE导入、主模型元数据、SigLIP路径及依赖/CUDA检查。当前失败为外层适配器`evaluate.py: error: unrecognized arguments: --loveda_tile_size 512`，其--help尚无此选项，说明WSL运行的适配器仍缺512裁块更新。模型未加载或前向、无分数；按1.5导入离线代码包后再继续2。不能通过删除参数来把旧整图推理当作512裁块。
+状态（2026-11-01最新用户回执）：512裁块CLI已更新，但固定官方提交的新副本仍因工作区修改检查退出。用户明确要求取消“已跟踪文件有修改”检查；本次已从source_revision与bootstrap两处删除该拦截，保留Git提交版本校验。无需再克隆源码，更新后按2使用现有目录重跑。此修改本机只做静态核查，WSL真实模型加载/前向与评分仍待回执，无新分数。
 协议与输出见 [baseline README](baselines/rsunivlm/README.md)。
 
 工作目录假设为 `/root/code/vistarmodels`；如实际克隆目录不同，先改下面的 `cd`。
@@ -110,7 +110,9 @@ PY
 
 SDK镜像下载因文件元数据兼容报错，随后切换HF-Mirror resolve URL的HTTP流式下载。PID99478、工具会话44487已正常退出（exit0），下载与校验耗时221.32秒，全部9个官方文件共3,515,156,215字节完整。LFS文件按官方SHA256、普通文件按官方Git blob SHA1核对，JSON及safetensors数据偏移检查通过。完成回执：`/Users/zhouziyu/Downloads/weight/siglip-so400m-patch14-384/download_receipt.json`（complete=true）；脚本：`/Users/zhouziyu/code/vistar/output/downloads/siglip_so400m_20261101/download_siglip.py`。这是本机下载与哈希校验完成；随后用户报告已解压到WSL的`/root/data/weight/siglip-so400m-patch14-384`，WSL实际层级/哈希与模型加载尚待核对，未产生GPU推理结果。
 
-### 1.4 官方源码有本地修改：本地干净副本（无需联网）
+### 1.4 历史处理：创建本地源码副本（当前无需再执行）
+
+用户现已明确取消已跟踪文件修改检查；更新本次代码后直接使用现有源码目录，本小节仅保留此前处理记录，不再作为启动条件。固定提交版本检查保留。
 
 用户最新日志显示权重目录已补齐，当前是源码完整性检查失败。检查器读取固定commit与`git status --porcelain --untracked-files=no`；未跟踪的pycache不是该报错依据。尚无diff回执，不推断具体文件或更改原因。不关闭检查，不reset/clean/stash原目录；只从其现有Git对象创建新副本，保留全部原修改。用户WSL执行：
 
@@ -147,6 +149,8 @@ python baselines/rsunivlm/evaluate.py --help
 通过条件：verify与快进导入成功，帮助中出现`--loveda_tile_size {0,512}`。随后按2重跑两原图。若有本地修改或非快进，保留Git报错，不reset/clean/强制覆盖。包基于已有RSUniVLM集成提交e5c58f8；正式WSL单元回归按1执行，本机仍只做静态和bundle完整性检查，未运行测试或模型。
 
 ### 2. 两样本冒烟，先检查模型输出（单 GPU，串行）
+
+本次按用户要求取消工作区修改拦截：在WSL先`git pull --ff-only`更新。已有`RSUniVLM_clean_66dce1d`副本继续使用，无需重新克隆；固定提交不匹配仍会报错。可在WSL执行`python -m pytest tests/test_rsunivlm_protocols.py -q`检查修改后的行为，本机不运行测试。
 
 需已导入`e25159f`（或后续版本）的512裁块代码。命令同时显式传入`--loveda_tile_size 512`，旧代码会报未识别参数并停止，避免把旧整图运行误当成512裁块。主权重使用用户已解压的`/root/data/weight/llava-qwen-gmoe`；SigLIP也须完整。
 

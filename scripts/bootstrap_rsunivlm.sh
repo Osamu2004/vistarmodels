@@ -16,10 +16,6 @@ if [[ ! -d "${RSUNIVLM_ROOT}/.git" ]]; then
   echo "[RSUniVLM] Expected official Git checkout at ${RSUNIVLM_ROOT}; existing content preserved." >&2
   exit 1
 fi
-if [[ -n "$(git -C "${RSUNIVLM_ROOT}" status --porcelain --untracked-files=no)" ]]; then
-  echo "[RSUniVLM] Official tracked source is modified; existing content preserved." >&2
-  exit 1
-fi
 if [[ "$(git -C "${RSUNIVLM_ROOT}" rev-parse HEAD)" != "${PIN}" ]]; then
   git -C "${RSUNIVLM_ROOT}" fetch --depth 1 origin "${PIN}"
   git -C "${RSUNIVLM_ROOT}" checkout --detach "${PIN}"

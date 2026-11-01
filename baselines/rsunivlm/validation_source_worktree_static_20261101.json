@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-01",
+  "base_revision": "80e0277",
+  "request": "Remove tracked working-tree modification checks; retain pinned commit validation",
+  "status": "static_checks_passed_wsl_runtime_pending",
+  "python_ast": [
+    "baselines/rsunivlm/protocols.py",
+    "tests/test_rsunivlm_protocols.py"
+  ],
+  "bash_syntax": [
+    "scripts/bootstrap_rsunivlm.sh",
+    "run_bash/rsunivlm_eval.bash",
+    "run_bash/rsunivlm_loveda.bash",
+    "run_bash/rsunivlm_levircd.bash"
+  ],
+  "only_protocol_function_changed": "source_revision",
+  "pinned_commit_check_retained": true,
+  "runtime_worktree_checks_removed": [
+    "source_revision",
+    "bootstrap_rsunivlm.sh"
+  ],
+  "unchanged_sha256": {
+    "baselines/rsunivlm/evaluate.py": "ec9b952c034371f4fd38b6186157fb13bf3bd98d861151fc9c1266c0e545aeb0",
+    "baselines/rsunivlm/model.py": "594305e72cd23301c479df7e6c4e6eb358c17c10b7efac28602d2849aa633adf",
+    "tools/check_rsunivlm_deps.py": "708c52b785c184f7310b1c31463a990959d8b4174b949fcbb478336e6aa5228f",
+    "requirements-rsunivlm.txt": "bc900029561c2236a3bf4e42413b269d1b6237c374341667ae2dcff56b455ff8",
+    "run_bash/rsunivlm_eval.bash": "6be11cfa1acc3b09f287d825cb737663e8a31086531057acdb5815ba4d2fd45c",
+    "run_bash/rsunivlm_loveda.bash": "32e4cc7dbc68ae542a6e3f889887ad485452ace13ee1e12dafe424caaed0c7c6",
+    "run_bash/rsunivlm_levircd.bash": "7a9f3a36facf679532c341c4074727379b54d79cc8e3f8eb2c44cc726260a867"
+  },
+  "tests_executed": false,
+  "model_loaded": false,
+  "gpu_inference_executed": false,
+  "pending_wsl_regressions": [
+    "modified tracked Python source allowed",
+    "modified tracked bytecode allowed",
+    "incorrect pinned commit rejected"
+  ],
+  "new_scores": null
+}
