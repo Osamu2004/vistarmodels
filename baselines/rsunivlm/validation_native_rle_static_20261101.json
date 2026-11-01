@@ -1,0 +1,69 @@
+{
+  "date": "2026-11-01",
+  "base_revision": "20900fd",
+  "status": "static_checks_passed_wsl_runtime_pending",
+  "scope": "Native rectangular RLE and explicit greedy-generation attention mask",
+  "official_source_revision": "66dce1dc68b81a6c62f02fb8e5b306571092a864",
+  "official_references": [
+    "https://github.com/xuliu-cyber/RSUniVLM/blob/66dce1dc68b81a6c62f02fb8e5b306571092a864/app.py",
+    "https://github.com/xuliu-cyber/RSUniVLM/blob/66dce1dc68b81a6c62f02fb8e5b306571092a864/llava/model/multimodal_encoder/siglip_encoder.py",
+    "https://github.com/xuliu-cyber/RSUniVLM/blob/66dce1dc68b81a6c62f02fb8e5b306571092a864/llava/model/language_model/llava_qwen_gmoe.py"
+  ],
+  "python_ast": [
+    "baselines/rsunivlm/protocols.py",
+    "baselines/rsunivlm/model.py",
+    "baselines/rsunivlm/evaluate.py",
+    "tests/test_rsunivlm_protocols.py"
+  ],
+  "bash_syntax": [
+    "run_bash/rsunivlm_eval.bash",
+    "run_bash/rsunivlm_loveda.bash",
+    "run_bash/rsunivlm_levircd.bash"
+  ],
+  "unchanged_function_ast": [
+    "baselines/rsunivlm/protocols.py:discover",
+    "baselines/rsunivlm/protocols.py:normalize_label",
+    "baselines/rsunivlm/protocols.py:label_map",
+    "baselines/rsunivlm/protocols.py:fuse_change",
+    "baselines/rsunivlm/protocols.py:expected_samples",
+    "baselines/rsunivlm/protocols.py:source_revision",
+    "baselines/rsunivlm/protocols.py:checkpoint_identity",
+    "baselines/rsunivlm/protocols.py:input_identity",
+    "baselines/rsunivlm/protocols.py:palette",
+    "baselines/rsunivlm/evaluate.py:score",
+    "baselines/rsunivlm/evaluate.py:load_sample",
+    "baselines/rsunivlm/evaluate.py:save_images",
+    "baselines/rsunivlm/evaluate.py:cached_prediction",
+    "baselines/rsunivlm/evaluate.py:save_prediction",
+    "baselines/rsunivlm/model.py:keep_pixel_expert_during_generation"
+  ],
+  "unchanged_file_sha256": {
+    "tools/check_rsunivlm_deps.py": "708c52b785c184f7310b1c31463a990959d8b4174b949fcbb478336e6aa5228f",
+    "scripts/bootstrap_rsunivlm.sh": "68e89a4907441d639fd84b947844e9189aa0712819a6f0f2048409dbe2e01df5",
+    "requirements-rsunivlm.txt": "bc900029561c2236a3bf4e42413b269d1b6237c374341667ae2dcff56b455ff8",
+    "baselines/binary_boundary_wfm.py": "838044f7b0b5f5446e343cef55f31a1f8c11391a7212afd455b6d999b33edd5b",
+    "baselines/segearth_ov/protocols.py": "2082658e51f96bf361cada2c5c4c258f535b7c2cf29b0e3fb0ea1215a675e94c",
+    "baselines/levircd_common.py": "f40e3ca5c7d33caab1ca63421b63c74484075dfe7fddc6937d0518ebafbbeb84"
+  },
+  "prompts_and_upstream_pin_unchanged": true,
+  "protocol_version": 2,
+  "rle_grid_policy": "native_rectangular",
+  "maximum_descriptor_side": 64,
+  "restoration": "OpenCV INTER_NEAREST, matching official pixel alignment",
+  "loveda_output_directory": "/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3",
+  "tests_executed": false,
+  "model_loaded": false,
+  "gpu_inference_executed": false,
+  "new_scores": null,
+  "wsl_validation_pending": [
+    "23x24 and 24x23 descriptors",
+    "official expanded-patch pixel alignment",
+    "reject ragged, invalid and unbounded RLE",
+    "reject token-budget truncation even if rectangular",
+    "raw-text cache and descriptor-shape counts after resume",
+    "different-size forward/reverse grids restored before binary union",
+    "attention mask and neutral greedy parameters",
+    "no remaining meta parameters after real checkpoint load"
+  ],
+  "limitations": "Actual failing WSL response text was not provided; its row widths and termination are not yet verified."
+}

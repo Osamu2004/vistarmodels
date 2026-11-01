@@ -4,14 +4,14 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
-状态（2026-11-01最新用户回执）：512裁块CLI已更新，但固定官方提交的新副本仍因工作区修改检查退出。用户明确要求取消“已跟踪文件有修改”检查；本次已从source_revision与bootstrap两处删除该拦截，保留Git提交版本校验。无需再克隆源码，更新后按2使用现有目录重跑。此修改本机只做静态核查，WSL真实模型加载/前向与评分仍待回执，无新分数。
+状态（2026-11-01最新WSL附件498838a7）：已生成模型文本，首张影像内某个裁块因旧解析器要求24行、收到23行而停止；没有完成整图评分。核对官方app.py后改为按实际矩形行列解码与OpenCV最近邻恢复，保留一致行宽、正计数、已知类别和token截断检查；实际尺寸与EOS/预算写入原文记录。补attention_mask、greedy中性参数与加载后meta参数核对。协议版本2，LoveDA改用下方v3独立输出目录；本机只静态检查，真实新协议结果待WSL回执。
 协议与输出见 [baseline README](baselines/rsunivlm/README.md)。
 
 工作目录假设为 `/root/code/vistarmodels`；如实际克隆目录不同，先改下面的 `cd`。
 LoveDA 保存路径沿用 `/root/data/LoveDA`，LEVIR-CD 默认 `/root/data/LEVIR-CD`；
 用户已解压的主模型目录为 `/root/data/weight/llava-qwen-gmoe`；本队列显式覆盖脚本旧默认路径。
 
-本次用户授权改为512×512非重叠源图裁块，对齐论文Alters：1024原图→四块512→每块官方SigLIP384输入→每块24×24七类RLE→最近邻还原每块512→拼回1024评分。右/下不足处补黑，先恢复整块再裁掉补齐区。batch1、FP16/eager、pixel expert2、greedy/beam1、最多8192新token保持不变，LEVIR-CD整图双向并集保持不变。
+本次用户授权改为512×512非重叠源图裁块，对齐论文Alters：1024原图→四块512→每块官方SigLIP384输入→每块七类RLE实际矩形（名义24×24）→OpenCV最近邻还原每块512→拼回1024评分。右/下不足处补黑，先恢复整块再裁掉补齐区。batch1、FP16/eager、pixel expert2、greedy/beam1、最多8192新token保持不变，LEVIR-CD整图双向并集保持不变。
 
 权重路径：主模型使用`/root/data/weight/llava-qwen-gmoe`，视觉塔使用用户刚报告解压的`/root/data/weight/siglip-so400m-patch14-384`。checkpoint原配置中作者的`/data/liux/siglip-so400m-patch14-384`由RSUNIVLM_VISION_TOWER覆盖，无需改主checkpoint配置。主模型元数据通过，SigLIP在Mac的大小/哈希已校验，WSL解压内容与真实模型加载仍待启动回执。保留`BOOTSTRAP_RSUNIVLM=0`，不反复触发主权重下载。
 
@@ -148,6 +148,12 @@ python baselines/rsunivlm/evaluate.py --help
 
 通过条件：verify与快进导入成功，帮助中出现`--loveda_tile_size {0,512}`。随后按2重跑两原图。若有本地修改或非快进，保留Git报错，不reset/clean/强制覆盖。包基于已有RSUniVLM集成提交e5c58f8；正式WSL单元回归按1执行，本机仍只做静态和bundle完整性检查，未运行测试或模型。
 
+### 1.6 本次RLE矩形协议修复（当前需更新）
+
+先在WSL执行`git pull --ff-only`，可运行`python -m pytest tests/test_rsunivlm_protocols.py -q`完成协议回归。解码对齐官方app.py的实际矩形布局与cv2.INTER_NEAREST像素对齐；23×24等行宽一致且正常结束的描述符允许直接还原，未通过格式或预算检查仍停止，不补行/背景。保留24×24提示词、固定权重、512源图裁块/384视觉输入与既有评分数学实现。新输出目录v3与旧v2分开；旧失败文本保留。不要在旧v2目录中使用OVERWRITE混跑。
+
+加载日志会额外显示`[RSUniVLM] Loaded model: no remaining meta parameters.`；官方被替换为Identity的SigLIP pooling head可能在初始加载时仍打印meta-copy警告，此日志不能替代物化检查。实际有meta参数时列名停止，不用空权重补齐。raw_text记录grid_shape及generation的sequence_tokens/ended_with_eos/hit_token_limit；metrics.json汇总descriptor_shape_counts，重启恢复也保留这些计数。达到MAX_NEW_TOKENS且无EOS的文本不作为完整矩形评分。当前修复只有静态回执，未在本机运行模型或测试。
+
 ### 2. 两样本冒烟，先检查模型输出（单 GPU，串行）
 
 本次按用户要求取消工作区修改拦截：在WSL先`git pull --ff-only`更新。已有`RSUniVLM_clean_66dce1d`副本继续使用，无需重新克隆；固定提交不匹配仍会报错。可在WSL执行`python -m pytest tests/test_rsunivlm_protocols.py -q`检查修改后的行为，本机不运行测试。
@@ -166,17 +172,17 @@ RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
 RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
 RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
 BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=2 SAVE_IMAGES=1 \
-OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle24_v2 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3 \
 bash run_bash/rsunivlm_loveda.bash --loveda_tile_size 512
 # LoveDA通过后，需要LEVIR-CD时再串行执行：
 GPU_IDS=1 BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=2 bash run_bash/rsunivlm_levircd.bash
 ```
 
-LoveDA 输出：`/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle24_v2`，与旧整图目录分开。
-LEVIR-CD 输出：`/root/data/experiment/rsunivlm_levircd_test_native_rle24_symmetric_union_v1`。
+LoveDA 输出：`/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3`，与旧整图目录分开。
+LEVIR-CD 输出：`/root/data/experiment/rsunivlm_levircd_test_native_rle_symmetric_union_v2`。
 通过条件：两份 `metrics.json` 均 `complete=true`、`processed_samples=2`、
 `is_full_benchmark=false`；检查 `pred_mask`、`pred_rgb` 和 `raw_text` 是否符合预期。
-LoveDA两张1024原图应有8份裁块文本，逐图记录`source_tile_size=512,num_tiles=4`；完整预测与GT尺寸相同。
+LoveDA两张1024原图应有8份裁块文本，逐图记录`source_tile_size=512,num_tiles=4`；完整预测与GT尺寸相同，metrics.json的descriptor_shape_counts总数应为8；具体形状不强制全部24×24。
 RLE 不合法、显存不足或 CUDA 导入失败则停止，不继续全量。
 
 ### 3. 复用冒烟结果，分别跑全量
@@ -191,7 +197,7 @@ RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
 RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
 RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
 BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=0 SAVE_IMAGES=1 \
-OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle24_v2 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3 \
 bash run_bash/rsunivlm_loveda.bash --loveda_tile_size 512
 # 如需LEVIR-CD，复用步骤1导出的权重路径：
 GPU_IDS=1 BOOTSTRAP_RSUNIVLM=0 bash run_bash/rsunivlm_levircd.bash
@@ -213,7 +219,7 @@ source /root/anaconda3/etc/profile.d/conda.sh
 conda activate vistar_rsunivlm
 GPU_IDS=1 TILE_SIZE=512 BOOTSTRAP_RSUNIVLM=0 \
 LOVEDA_ROOT=/root/data/LoveDA LEVIRCD_ROOT=/root/data/LEVIR-CD \
-OUTPUT_DIR=/root/data/experiment/rsunivlm_shared_checkpoint_both_tile512_v2 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_shared_checkpoint_both_tile512_rle_v3 \
 bash run_bash/rsunivlm_eval.bash
 ```
 

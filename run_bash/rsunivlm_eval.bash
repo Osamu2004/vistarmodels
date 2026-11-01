@@ -16,9 +16,9 @@ export PYTHONUNBUFFERED=1
 export RSUNIVLM_ROOT="${RSUNIVLM_ROOT:-${ROOT_DIR}/third_party/RSUniVLM}"
 export RSUNIVLM_MODEL_PATH="${RSUNIVLM_MODEL_PATH:-/root/data/weight/rsunivlm/llava-qwen-gmoe}"
 if [[ "${DATASET}" == "levircd" ]]; then
-  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_levircd_native_rle24_v1}"
+  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_levircd_native_rle_v2}"
 else
-  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_${DATASET}_native_tile${TILE_SIZE}_rle24_v2}"
+  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_${DATASET}_native_tile${TILE_SIZE}_rle_v3}"
 fi
 
 CMD=("${PYTHON_BIN}" "${ROOT_DIR}/baselines/rsunivlm/evaluate.py"

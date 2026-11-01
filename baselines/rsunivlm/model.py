@@ -62,6 +62,10 @@ class RSUniVLM:
             torch_dtype=dtype, attn_implementation=attention,
             device_map=str(self.device), **kwargs,
         )
+        meta_parameters = [name for name, value in self.model.named_parameters() if value.is_meta]
+        if meta_parameters:
+            raise RuntimeError("Unmaterialized model parameters after loading: " + ", ".join(meta_parameters[:8]))
+        print("[RSUniVLM] Loaded model: no remaining meta parameters.", flush=True)
         self.model.eval()
         # The official builder hardcodes float16 for the vision tower.
         self.model.get_vision_tower().to(device=self.device, dtype=self.dtype)
@@ -71,6 +75,7 @@ class RSUniVLM:
         self.image_token_index = IMAGE_TOKEN_INDEX
         self.template = conv_templates["qwen_1_5"]
         self.max_new_tokens = max_new_tokens
+        self.last_generation: dict[str, Any] = {}
 
     def generate(self, images: list[Any], instruction: str) -> str:
         if len(images) not in (1, 2) or not instruction.startswith("[SEG]"):
@@ -91,10 +96,22 @@ class RSUniVLM:
         with self.torch.inference_mode():
             output = self.model.generate(
                 tokens, images=pixels, image_sizes=[image.size for image in images],
+                attention_mask=self.torch.ones_like(tokens, dtype=self.torch.bool),
                 modalities=["image"] * len(images), granularity=2,
                 do_sample=False, num_beams=1, max_new_tokens=self.max_new_tokens,
+                temperature=1.0, top_p=1.0, top_k=50,
                 use_cache=True, pad_token_id=self.tokenizer.eos_token_id,
             )
+        eos = self.model.generation_config.eos_token_id
+        eos_ids = set(eos if isinstance(eos, (list, tuple)) else [eos])
+        eos_ids.add(self.tokenizer.eos_token_id)
+        token_count = int(output.shape[-1])
+        ended_with_eos = bool(token_count and int(output[0, -1].item()) in eos_ids)
+        self.last_generation = {
+            "sequence_tokens": token_count, "max_new_tokens": self.max_new_tokens,
+            "ended_with_eos": ended_with_eos, "hit_token_limit": token_count >= self.max_new_tokens,
+            "attention_mask": "all_valid_single_prompt", "decoding": "greedy",
+        }
         # The official GMoE generate uses inputs_embeds and returns new tokens;
         # it does not prepend input_ids. Do not slice by prompt length.
         return self.tokenizer.batch_decode(output, skip_special_tokens=True)[0].strip()

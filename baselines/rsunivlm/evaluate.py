@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 import hashlib
 import io
@@ -43,7 +44,7 @@ from baselines.segearth_ov.protocols import (
     normalize_path,
 )
 from baselines.rsunivlm.protocols import (
-    CD_PROMPT, GRID_SIZE, LOVEDA_PROMPT, PROTOCOL_VERSION,
+    CD_PROMPT, GRID_SIZE, LOVEDA_PROMPT, MAX_DESCRIPTOR_SIDE, PROTOCOL_VERSION, RLE_GRID_POLICY,
     Sample, checkpoint_identity, decode_rle, discover, expected_samples,
     fingerprint, fuse_change, input_identity, loveda_spatial_settings, palette, restore_grid, source_revision,
 )
@@ -100,22 +101,38 @@ def cached_prediction(path: Path, receipt: dict[str, Any] | None, *,
         return None
 
 
+def decode_saved_response(record: dict[str, Any], dataset: str) -> np.ndarray:
+    generation = record.get("generation") or {}
+    if generation.get("hit_token_limit") and not generation.get("ended_with_eos"):
+        raise ValueError("Generation reached MAX_NEW_TOKENS without EOS; refusing a truncated mask")
+    return decode_rle(record["response"], dataset, grid_size=None)
+
+
 def query_grid(backend: Any, images: list[Image.Image], prompt: str, dataset: str,
                raw_path: Path, identity: str, *, overwrite: bool,
                spatial_metadata: dict[str, Any] | None = None) -> tuple[np.ndarray, bool]:
     cached = None if overwrite else read_json(raw_path)
     if cached and cached.get("identity") == identity:
         try:
-            return decode_rle(cached["response"], dataset), True
+            return decode_saved_response(cached, dataset), True
         except (ValueError, KeyError):
             pass
     response = backend.generate(images, prompt)
     # Keep the unmodified text even if strict decoding subsequently fails.
     record = {"identity": identity, "prompt": prompt, "response": response}
+    generation = getattr(backend, "last_generation", None)
+    if isinstance(generation, dict):
+        record["generation"] = generation
     if spatial_metadata is not None:
         record["spatial"] = spatial_metadata
     write_json(raw_path, record)
-    return decode_rle(response, dataset), False
+    try:
+        grid = decode_saved_response(record, dataset)
+    except (ValueError, KeyError) as exc:
+        write_json(raw_path, {**record, "decode_error": str(exc)})
+        raise
+    write_json(raw_path, {**record, "grid_shape": list(grid.shape), "grid_policy": RLE_GRID_POLICY})
+    return grid, False
 
 
 def predict_loveda_tiled(backend: Any, image: Image.Image, sample: Sample,
@@ -130,6 +147,7 @@ def predict_loveda_tiled(backend: Any, image: Image.Image, sample: Sample,
         raise ValueError("Expected a nonempty RGB source image")
     prediction = np.empty((height, width), dtype=np.uint8)
     queries, reused_queries = 0, 0
+    descriptor_shapes: list[list[int]] = []
     # Iterate row-major like Alters. Only one padded source tile is live at a
     # time; GT is not read or passed into this function.
     for y in range(0, height, tile_size):
@@ -147,11 +165,13 @@ def predict_loveda_tiled(backend: Any, image: Image.Image, sample: Sample,
             # Do not resize the descriptor directly to a partial border crop:
             # that would stretch the prediction for the padded region into GT.
             restored = restore_grid(grid, (tile_size, tile_size))
+            descriptor_shapes.append(list(grid.shape))
             prediction[y:y+valid_h, x:x+valid_w] = restored[:valid_h, :valid_w]
             queries += 1
             reused_queries += int(reused)
     return prediction, dict(queries=queries, reused_queries=reused_queries,
-                            num_tiles=queries, source_tile_size=tile_size)
+                            num_tiles=queries, source_tile_size=tile_size,
+                            descriptor_shapes=descriptor_shapes)
 
 
 def predict_sample(backend: Any, images: list[Image.Image], sample: Sample, dataset: str,
@@ -167,7 +187,7 @@ def predict_sample(backend: Any, images: list[Image.Image], sample: Sample, data
         grid, reused = query_grid(backend, images, LOVEDA_PROMPT, dataset,
                                   raw_dir / f"{sample.name}_seg.json", identity, overwrite=overwrite)
         return restore_grid(grid, (images[0].height, images[0].width)), {
-            "queries": 1, "reused_queries": int(reused),
+            "queries": 1, "reused_queries": int(reused), "descriptor_shapes": [list(grid.shape)],
         }
     grids, reused_count = [], 0
     directions = ("forward", "reverse") if cd_direction == "symmetric_union" else ("forward",)
@@ -180,8 +200,10 @@ def predict_sample(backend: Any, images: list[Image.Image], sample: Sample, data
         )
         grids.append(grid)
         reused_count += int(reused)
-    return restore_grid(fuse_change(grids), (images[0].height, images[0].width)), {
+    restored = [restore_grid(grid, (images[0].height, images[0].width)) for grid in grids]
+    return fuse_change(restored), {
         "queries": len(directions), "reused_queries": reused_count,
+        "descriptor_shapes": [list(grid.shape) for grid in grids],
     }
 
 
@@ -271,7 +293,9 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
         "dataset_population": fingerprint(input_manifest), "discovered_samples": total,
         "prompt": LOVEDA_PROMPT if dataset == "loveda" else CD_PROMPT,
         "cd_direction": args.cd_direction if dataset == "levircd" else None,
-        "grid_size": GRID_SIZE, "restoration": "nearest_to_native_extent",
+        "nominal_grid_size": GRID_SIZE, "rle_grid_policy": RLE_GRID_POLICY,
+        "max_descriptor_side": MAX_DESCRIPTOR_SIDE, "restoration": "nearest_to_native_extent",
+        "nearest_implementation": "opencv_INTER_NEAREST",
         "classes": list(LOVEDA_CLASSES) if dataset == "loveda" else ["unchanged", "change"],
         "label_protocol": "raw0/255 ignored; raw1..7 -> 0..6" if dataset == "loveda" else "raw0 unchanged; raw1/255 change",
     }
@@ -306,6 +330,8 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
         rows: list[dict[str, Any]] = []
         result: dict[str, Any] = {
             "model": "RSUniVLM", "dataset": audit["dataset"], "split": split,
+            "protocol_version": PROTOCOL_VERSION, "rle_grid_policy": RLE_GRID_POLICY,
+            "nominal_grid_size": GRID_SIZE,
             "complete": False, "is_full_benchmark": False, "discovered_samples": total,
             "selected_samples": len(selected), "expected_samples": expected,
             "identity": config_id, "metric_scale": "0..1 (percent fields explicitly suffixed)",
@@ -323,12 +349,13 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
                 item_id = fingerprint([config_id, input_identity(sample)])
                 pred_path = dirs["pred_mask"] / f"{sample.name}_pred_mask.png"
                 receipt_path = dirs["receipts"] / f"{sample.name}.json"
+                saved_receipt = read_json(receipt_path)
                 prediction = None if args.overwrite else cached_prediction(
-                    pred_path, read_json(receipt_path), identity=item_id,
+                    pred_path, saved_receipt, identity=item_id,
                     shape=target.shape, num_classes=len(classes),
                 )
                 reused = prediction is not None
-                query_info: dict[str, Any] = {}
+                query_info: dict[str, Any] = {"descriptor_shapes": saved_receipt.get("descriptor_shapes", [])} if reused else {}
                 if prediction is None:
                     prediction, query_info = predict_sample(
                         backend, images, sample, dataset, dirs["raw_text"], item_id,
@@ -337,7 +364,8 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
                     )
                     save_prediction(pred_path, prediction if dataset == "loveda" else prediction * 255)
                     write_json(receipt_path, {"identity": item_id,
-                               "prediction_sha256": hashlib.sha256(prediction.tobytes()).hexdigest()})
+                               "prediction_sha256": hashlib.sha256(prediction.tobytes()).hexdigest(),
+                               "descriptor_shapes": query_info["descriptor_shapes"]})
                 if args.save_images:
                     save_images(dirs, sample, images, prediction, target, dataset)
                 item_confusion, metrics = score(prediction, target, dataset, boundary_wfm=args.boundary_wfm)
@@ -369,9 +397,10 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
             if boundary_rows:
                 scores.update(aggregate_binary_boundary_wfm(boundary_rows))
         full = total == expected and len(rows) == total
+        shape_counts = Counter(f"{shape[0]}x{shape[1]}" for row in rows for shape in row.get("descriptor_shapes", []))
         result.update({"complete": True, "is_full_benchmark": full,
                        "processed_samples": len(rows), "scores": scores,
-                       "confusion_matrix": confusion.tolist()})
+                       "confusion_matrix": confusion.tolist(), "descriptor_shape_counts": dict(shape_counts)})
         atomic_text(output / "predictions.jsonl", "".join(json.dumps(x, allow_nan=False) + "\n" for x in rows))
         csv_rows = []
         for class_id, name in enumerate(classes):
@@ -392,6 +421,10 @@ class LazyModel:
     """Read and rescore caches without loading CUDA weights unnecessarily."""
     def __init__(self, args: argparse.Namespace) -> None:
         self.args, self.model = args, None
+
+    @property
+    def last_generation(self) -> dict[str, Any]:
+        return getattr(self.model, "last_generation", {})
 
     def generate(self, images: list[Image.Image], prompt: str) -> str:
         if self.model is None:

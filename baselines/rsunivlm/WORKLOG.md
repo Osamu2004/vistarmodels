@@ -1,5 +1,13 @@
 # RSUniVLM 接入记录
 
+## 2026-11-01：对齐官方实际矩形RLE解码，补齐生成与加载审计
+
+用户附件498838a7的WSL回执已出现Model Class并返回文本，但首张影像内某个裁块被旧decode_rle强制24行拒绝（收到23行），整图未完成。原始文本未随附件提供，不能断言该23行的宽度一定一致。核对固定官方提交app.py::parse_output_string，官方按返回的实际矩形行列构建掩码再nearest还原，并未硬性检查24行；先前本适配的该约束比官方更严。
+
+评分查询改用native_rectangular解码：正计数、已知类别、一致行宽、每边1…64；合法23×24等直接按官方OpenCV INTER_NEAREST像素对齐还原裁块，不补造第24行、不填背景。保留decode_rle(grid_size=24)严格工具模式。记录每份原文的实际尺寸/生成token数/EOS/预算，达到预算且无EOS的文本仍拒绝；逐图、恢复receipt与汇总保留descriptor_shape_counts。双向CD在各自恢复原图后取并集，在同尺寸网格情形，先还原再并集与先并集再按同一最近邻还原等价；v3的OpenCV像素对齐与旧v2的PIL版本独立记录，不将旧预测混入新协议。
+
+补显式attention_mask及greedy中性采样参数。固定官方SigLIP源码会将pooling head替换Identity，本机仅只读主checkpoint safetensors头确认包含421个视觉张量且无head张量；不据此声称WSL权重全部已物化。新增完整加载后剩余meta参数检查，实际结果待WSL回执。协议版本2，默认LoveDA新目录native_tile512_rle_v3；保留v2失败原文，旧缓存不混用。新增WSL回归，本机只AST/Bash/差异核查，未运行测试、模型或GPU，无新评分。
+
 ## 2026-11-01：按用户要求取消已跟踪文件修改检查
 
 最新WSL回执确认512 CLI已更新，但新副本仍报已跟踪文件有修改。核对官方固定提交的Git树发现其中实际跟踪30个cpython-310.pyc文件；Python3.10导入可能改写这些已跟踪缓存，先前新建副本无法持久避免此类误报。具体WSL差异列表尚未收到，不能将所有实际修改都断言为pyc。

@@ -10,15 +10,16 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 from PIL import Image
 
 from baselines.rsunivlm.evaluate import (
-    cached_prediction, evaluate_dataset, parse_args, predict_sample, score,
+    cached_prediction, evaluate_dataset, parse_args, predict_sample, query_grid, score,
 )
-from baselines.rsunivlm.model import keep_pixel_expert_during_generation
+from baselines.rsunivlm.model import RSUniVLM, keep_pixel_expert_during_generation
 from baselines.rsunivlm.protocols import (
     CD_PROMPT, LOVEDA_PROMPT, Sample, decode_rle, discover, fuse_change, restore_grid, source_revision,
 )
@@ -121,6 +122,91 @@ def test_quoted_labels_and_code_fence() -> None:
     assert np.all(grid[:, :12] == 0) and np.all(grid[:, 12:] == 6)
 
 
+@pytest.mark.parametrize("height,width", [(23, 24), (24, 23), (24, 24), (25, 24)])
+def test_native_rle_preserves_actual_rectangle_without_padding(height: int, width: int) -> None:
+    text = "\n".join([f"building*{width}"] * (height-1) + [f"road*{width}"])
+    grid = decode_rle(text, "loveda", grid_size=None)
+    assert grid.shape == (height, width)
+    assert np.all(grid[:-1] == 1) and np.all(grid[-1] == 2)
+    restored = restore_grid(grid, (512, 512))
+    assert restored.shape == (512, 512) and set(np.unique(restored)) == {1, 2}
+
+
+@pytest.mark.parametrize("text", [
+    "\n".join(["building*24"] * 22 + ["building*23"]),
+    "\n".join(["building*24"] * 65), "building*65", "building*0", "unknown*24",
+])
+def test_native_rle_still_rejects_ragged_unbounded_or_invalid_masks(text: str) -> None:
+    with pytest.raises(ValueError):
+        decode_rle(text, "loveda", grid_size=None)
+
+
+def test_descriptor_restoration_matches_official_expanded_patch_decoder() -> None:
+    cv2 = pytest.importorskip("cv2")
+    grid = (np.arange(23 * 24).reshape(23, 24) % 7).astype(np.uint8)
+    expanded = np.repeat(np.repeat(grid, 20, axis=0), 20, axis=1)
+    expected = cv2.resize(expanded, (512, 512), interpolation=cv2.INTER_NEAREST)
+    np.testing.assert_array_equal(restore_grid(grid, (512, 512)), expected)
+
+
+def test_native_rle_raw_text_shape_and_cache(tmp_path: Path) -> None:
+    response = "\n".join(["building*24"] * 23)
+    path = tmp_path / "raw.json"
+    image = Image.new("RGB", (512, 512))
+    grid, reused = query_grid(FakeModel([response]), [image], LOVEDA_PROMPT, "loveda", path, "run", overwrite=False)
+    assert grid.shape == (23, 24) and not reused
+    record = json.loads(path.read_text())
+    assert record["response"] == response and record["grid_shape"] == [23, 24]
+    cached, reused = query_grid(FakeModel([]), [image], LOVEDA_PROMPT, "loveda", path, "run", overwrite=False)
+    np.testing.assert_array_equal(cached, grid)
+    assert reused
+
+
+def test_token_limit_without_eos_cannot_publish_a_native_rectangle(tmp_path: Path) -> None:
+    response = "\n".join(["building*24"] * 23)
+    backend = FakeModel([response])
+    backend.last_generation = {"hit_token_limit": True, "ended_with_eos": False}
+    path = tmp_path / "raw.json"
+    with pytest.raises(ValueError, match="MAX_NEW_TOKENS"):
+        query_grid(backend, [Image.new("RGB", (512, 512))], LOVEDA_PROMPT,
+                   "loveda", path, "run", overwrite=False)
+    record = json.loads(path.read_text())
+    assert record["response"] == response and "MAX_NEW_TOKENS" in record["decode_error"]
+    assert "grid_shape" not in record
+
+
+def test_generation_supplies_attention_mask_and_reports_completion() -> None:
+    torch = pytest.importorskip("torch")
+    captured = {}
+
+    class Template:
+        roles = ("user", "assistant")
+        def append_message(self, *args):
+            pass
+        def get_prompt(self):
+            return "prompt"
+
+    def generate(tokens, **kwargs):
+        captured.update(kwargs)
+        assert tokens.tolist() == [[2, -200, 3]]
+        return torch.tensor([[5, 9, 151645]])
+
+    model = RSUniVLM.__new__(RSUniVLM)
+    model.torch, model.device, model.dtype = torch, torch.device("cpu"), torch.float32
+    model.context_len, model.max_new_tokens = 100, 8192
+    model.template, model.processor, model.image_token_index = Template(), None, -200
+    model.model = SimpleNamespace(config=None, generation_config=SimpleNamespace(eos_token_id=[151645]), generate=generate)
+    model.tokenizer = SimpleNamespace(eos_token_id=151645, batch_decode=lambda output, **kwargs: ["building*24"])
+    model.tokenizer_image_token = lambda *args, **kwargs: torch.tensor([2, -200, 3])
+    model.process_images = lambda *args: torch.zeros((1, 3, 16, 16))
+    assert model.generate([Image.new("RGB", (512, 512))], LOVEDA_PROMPT) == "building*24"
+    assert captured["attention_mask"].dtype == torch.bool
+    assert captured["attention_mask"].tolist() == [[True, True, True]]
+    assert captured["do_sample"] is False and captured["num_beams"] == 1
+    assert (captured["temperature"], captured["top_p"], captured["top_k"]) == (1.0, 1.0, 50)
+    assert model.last_generation["ended_with_eos"] and not model.last_generation["hit_token_limit"]
+
+
 def test_symmetric_cd_uses_both_orders_and_reuses_raw_text(tmp_path: Path) -> None:
     a, b = Image.new("RGB", (72, 48), "black"), Image.new("RGB", (72, 48), "white")
     sample = Sample("case", (tmp_path / "A", tmp_path / "B"), tmp_path / "label")
@@ -128,13 +214,23 @@ def test_symmetric_cd_uses_both_orders_and_reuses_raw_text(tmp_path: Path) -> No
     result, details = predict_sample(backend, [a, b], sample, "levircd", tmp_path, "run",
                                      cd_direction="symmetric_union", overwrite=False)
     assert np.all(result == 1)
-    assert details == {"queries": 2, "reused_queries": 0}
+    assert details == {"queries": 2, "reused_queries": 0, "descriptor_shapes": [[24, 24], [24, 24]]}
     assert backend.calls[0] == ([a, b], CD_PROMPT)
     assert backend.calls[1] == ([b, a], CD_PROMPT)
     cached, details = predict_sample(FakeModel([]), [a, b], sample, "levircd", tmp_path, "run",
                                      cd_direction="symmetric_union", overwrite=False)
     np.testing.assert_array_equal(cached, result)
     assert details["reused_queries"] == 2
+
+
+def test_change_union_restores_different_native_grids_before_fusion(tmp_path: Path) -> None:
+    a, b = Image.new("RGB", (72, 48)), Image.new("RGB", (72, 48))
+    sample = Sample("case", (tmp_path / "A", tmp_path / "B"), tmp_path / "label")
+    backend = FakeModel(["\n".join(["building*24"] * 23), rle("others*23")])
+    result, details = predict_sample(backend, [a, b], sample, "levircd", tmp_path, "run",
+                                     cd_direction="symmetric_union", overwrite=False)
+    assert result.shape == (48, 72) and np.all(result == 1)
+    assert details["descriptor_shapes"] == [[23, 24], [24, 23]]
 
 
 def test_change_union_cannot_introduce_semantic_class_ids() -> None:
@@ -197,7 +293,9 @@ def test_loveda_tile512_preserves_quadrants_and_scores_native_extent(tmp_path: P
         target[y:y+512, x:x+512] = class_id + 1
     Image.fromarray(image).save(folder / "images_png" / "1.png")
     Image.fromarray(target).save(folder / "masks_png" / "1.png")
-    backend = FakeModel([rle(f"{name}*24") for name in ("background", "building", "road", "water")])
+    responses = [rle(f"{name}*24") for name in ("background", "building", "road", "water")]
+    responses[0] = "\n".join(["background*24"] * 23)
+    backend = FakeModel(responses)
     options = args(data, output, loveda_tile_size=512)
     result = evaluate_dataset(options, "loveda", backend, {})
     assert result["complete"] and result["processed_samples"] == 1
@@ -214,8 +312,10 @@ def test_loveda_tile512_preserves_quadrants_and_scores_native_extent(tmp_path: P
     assert row["num_tiles"] == row["queries"] == 4 and row["source_tile_size"] == 512
     spatial = result["loveda_spatial"]
     assert spatial["source_stride"] == 512 and spatial["vision_input_size"] == [384, 384]
-    assert spatial["mask_grid_size"] == 24
-    evaluate_dataset(options, "loveda", FakeModel([]), {})
+    assert spatial["nominal_mask_grid_size"] == 24 and spatial["mask_grid_policy"] == "native_rectangular"
+    assert result["descriptor_shape_counts"] == {"23x24": 1, "24x24": 3}
+    restored_result = evaluate_dataset(options, "loveda", FakeModel([]), {})
+    assert restored_result["descriptor_shape_counts"] == result["descriptor_shape_counts"]
     assert json.loads((output / "predictions.jsonl").read_text())["reused_prediction"]
 
 

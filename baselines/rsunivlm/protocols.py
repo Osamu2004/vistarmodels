@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+import cv2
 import numpy as np
-from PIL import Image
 
 from baselines.levircd_common import discover_samples
 from baselines.segearth_ov.protocols import (
@@ -28,7 +28,9 @@ UPSTREAM_URL = "https://github.com/xuliu-cyber/RSUniVLM"
 UPSTREAM_COMMIT = "66dce1dc68b81a6c62f02fb8e5b306571092a864"
 OFFICIAL_WEIGHT_URL = "https://drive.google.com/drive/folders/1TtaoOPmh167gpgHHWRNBMCaA7t_XZ4Vg"
 GRID_SIZE = 24
-PROTOCOL_VERSION = 1
+MAX_DESCRIPTOR_SIDE = 64
+RLE_GRID_POLICY = "native_rectangular"
+PROTOCOL_VERSION = 2
 CD_CLASSES = ("others", "building")
 LOVEDA_PROMPT = (
     "[SEG] Please segment this remote-sensing image into the following classes: "
@@ -90,8 +92,12 @@ def label_map(dataset: str) -> dict[str, int]:
     return mapping
 
 
-def decode_rle(text: str, dataset: str, *, grid_size: int = GRID_SIZE) -> np.ndarray:
-    """Decode exactly one complete square grid, with bounded allocations."""
+def decode_rle(text: str, dataset: str, *, grid_size: int | None = GRID_SIZE) -> np.ndarray:
+    """Decode a complete rectangle; optional grid_size retains strict square mode.
+
+    The official demo restores the dimensions actually emitted by the model.
+    Native mode never adds rows or pads ragged rows to make a valid rectangle.
+    """
     if not isinstance(text, str) or len(text) > 1_000_000:
         raise ValueError("Expected a bounded text segmentation response")
     value = text.strip()
@@ -103,12 +109,17 @@ def decode_rle(text: str, dataset: str, *, grid_size: int = GRID_SIZE) -> np.nda
     rows = [line.strip() for line in value.splitlines() if line.strip()]
     if rows and rows[0].casefold() in ("mask:", "segmentation mask:", "[seg]"):
         rows = rows[1:]
-    if len(rows) != grid_size:
+    if grid_size is not None and not 1 <= grid_size <= MAX_DESCRIPTOR_SIDE:
+        raise ValueError("Invalid requested descriptor grid size")
+    if not 1 <= len(rows) <= MAX_DESCRIPTOR_SIDE:
+        raise ValueError(f"Expected 1..{MAX_DESCRIPTOR_SIDE} RLE rows, received {len(rows)}")
+    if grid_size is not None and len(rows) != grid_size:
         raise ValueError(f"Expected {grid_size} RLE rows, received {len(rows)}")
     mapping = label_map(dataset)
-    grid = np.empty((grid_size, grid_size), dtype=np.uint8)
+    decoded_rows: list[list[int]] = []
+    width = grid_size
     for row_index, row in enumerate(rows):
-        cursor = 0
+        values: list[int] = []
         for item in row.split(","):
             match = re.fullmatch(r"\s*([A-Za-z][A-Za-z _'-]*)\s*\*\s*([0-9]+)\s*", item)
             if match is None:
@@ -118,20 +129,24 @@ def decode_rle(text: str, dataset: str, *, grid_size: int = GRID_SIZE) -> np.nda
             if key not in mapping:
                 raise ValueError(f"Unknown {dataset} label {label!r} at row {row_index + 1}")
             count = int(count_text)
-            if count <= 0 or cursor + count > grid_size:
+            if count <= 0 or len(values) + count > (width or MAX_DESCRIPTOR_SIDE):
                 raise ValueError(f"RLE count exceeds row width at row {row_index + 1}")
-            grid[row_index, cursor:cursor + count] = mapping[key]
-            cursor += count
-        if cursor != grid_size:
-            raise ValueError(f"RLE row {row_index + 1} has width {cursor}, expected {grid_size}")
-    return grid
+            values.extend([mapping[key]] * count)
+        if width is None:
+            width = len(values)
+        if len(values) != width:
+            raise ValueError(f"RLE row {row_index + 1} has width {len(values)}, expected {width}")
+        decoded_rows.append(values)
+    return np.asarray(decoded_rows, dtype=np.uint8)
 
 
 def restore_grid(grid: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
     height, width = shape
     if height <= 0 or width <= 0:
         raise ValueError(f"Invalid native image extent: {shape}")
-    return np.asarray(Image.fromarray(grid).resize((width, height), Image.Resampling.NEAREST))
+    # Match official app.py's INTER_NEAREST pixel alignment. Its integer
+    # patch expansion is unnecessary when resizing class IDs directly.
+    return cv2.resize(grid, (width, height), interpolation=cv2.INTER_NEAREST)
 
 
 def loveda_spatial_settings(tile_size: int) -> dict[str, Any]:
@@ -145,7 +160,10 @@ def loveda_spatial_settings(tile_size: int) -> dict[str, Any]:
         "rgb_padding": "black_right_bottom" if tile_size else "none",
         "vision_input_size": [384, 384],
         "vision_resize": "official_SigLipImageProcessor_per_tile" if tile_size else "official_SigLipImageProcessor_whole",
-        "mask_grid_size": GRID_SIZE,
+        "nominal_mask_grid_size": GRID_SIZE,
+        "mask_grid_policy": RLE_GRID_POLICY,
+        "max_descriptor_side": MAX_DESCRIPTOR_SIDE,
+        "nearest_implementation": "opencv_INTER_NEAREST",
         "restoration": "nearest_to_tile_then_stitch_crop_to_native" if tile_size else "nearest_to_native_extent",
         "tta": "none",
     }
