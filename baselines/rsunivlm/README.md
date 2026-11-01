@@ -1,7 +1,7 @@
 # RSUniVLM：LoveDA 分割与 LEVIR-CD 变化检测
 
 本目录在同一个官方 `llava-qwen-gmoe` checkpoint 上执行两项任务，不新增训练、LoRA 或任务头。
-当前状态：LoveDA 已按用户要求改为512×512非重叠源图裁块，对齐Alters的空间裁块方式；WSL验证命令已准备。用户已在WSL克隆官方源码并报告安装Transformers4.45.2等依赖。启动随后在Google Drive权重下载处报network unreachable，尚未完成依赖/权重检查或真实模型加载，没有GPU推理分数。本机仅做静态与配置读取核对。
+当前状态：LoveDA的512×512非重叠源图裁块已在本地e25159f实现。用户WSL已创建固定官方源码干净副本并通过源码/GMoE导入、依赖、双权重路径与CUDA检查，但随后evaluate.py报不认识--loveda_tile_size，说明正在运行的外层适配器尚缺512更新。按RUN_QUEUE的1.5导入离线包并确认--help，再继续两原图冒烟。尚无模型加载或推理成功回执，没有GPU分数；本机不运行模型或测试。
 用户执行入口统一记录在仓库 [RUN_QUEUE.md](../../RUN_QUEUE.md)。
 
 ## 来源与适配边界
@@ -10,6 +10,7 @@
   `66dce1dc68b81a6c62f02fb8e5b306571092a864`。
 - [官方 checkpoint](https://drive.google.com/drive/folders/1TtaoOPmh167gpgHHWRNBMCaA7t_XZ4Vg)，
   默认保存至 `/root/data/weight/rsunivlm/llava-qwen-gmoe`。
+  用户实际解压目录为`/root/data/weight/llava-qwen-gmoe`，按RUN_QUEUE设置`RSUNIVLM_MODEL_PATH`覆盖脚本默认值。
 - [论文](https://arxiv.org/html/2412.05679)：掩码为 24×24 语义描述符，按行输出 `class*count`。
   官方变化检测定量结果来自 WHU-CD，不能当作 LEVIR-CD 成绩。
 - [官方 app.py](https://github.com/xuliu-cyber/RSUniVLM/blob/66dce1dc68b81a6c62f02fb8e5b306571092a864/app.py)
@@ -59,7 +60,7 @@ LEVIR-CD的网格直接还原原图。不能将输出上采样解释为原生高
 
 单次模型调用为一张RGB、granularity=2、float16、eager attention、greedy（do_sample=false、num_beams=1）、use_cache=true，最多8192个新文本token。8192不是扩散采样步数。使用固定七类提示词、Qwen qwen_1_5对话模板；checkpoint生成文件中的temperature/top_p不能据此被称作本入口的随机采样设置，因为入口显式关闭do_sample。以上是代码与元数据所定义的配置，尚未完成WSL实际前向验证。
 
-本机下载目录`/Users/zhouziyu/Downloads/weight/llava-qwen-gmoe`已有complete下载回执，但不代表权重已存在于WSL。该checkpoint的`mm_vision_tower`原值为作者机器绝对路径`/data/liux/siglip-so400m-patch14-384`；若在WSL不存在，需通过`RSUNIVLM_VISION_TOWER`指向实际准备好的本地SigLIP目录。当前依赖检查要求该变量为含`config.json`的本地目录，运行命令不直接填写公开模型ID。当前外部阻塞仍是WSL到drive.google.com的连接失败，不据此推断其他网络服务均不可达。
+本机下载目录`/Users/zhouziyu/Downloads/weight/llava-qwen-gmoe`已有complete下载回执；用户随后报告已解压至WSL的`/root/data/weight/llava-qwen-gmoe`，内容完整性仍待WSL检查。该checkpoint的`mm_vision_tower`原值为作者机器绝对路径`/data/liux/siglip-so400m-patch14-384`；若在WSL不存在，需通过`RSUNIVLM_VISION_TOWER`指向实际准备好的本地SigLIP目录。当前依赖检查要求该变量为含`config.json`的本地目录，运行命令不直接填写公开模型ID。当前外部阻塞仍是WSL到drive.google.com的连接失败，不据此推断其他网络服务均不可达。
 
 核对来源：固定官方提交`66dce1dc68b81a6c62f02fb8e5b306571092a864`的`llava/mm_utils.py:314`、`llava/model/multimodal_encoder/siglip_encoder.py:34`和`:538`，以及本仓库`model.py`、`protocols.py`与启动脚本。裁块参照Alters的`eval_loveda_seg_cyclefullema0p99_step300000_cycleema_tile512_step1_seed0`记录及`eval_flux2_loveda.py`的右/下补零、行优先无重叠裁块逻辑；没有复用Alters分数作为RSUniVLM成绩。
 

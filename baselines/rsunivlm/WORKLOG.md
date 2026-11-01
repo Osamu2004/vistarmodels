@@ -1,5 +1,33 @@
 # RSUniVLM 接入记录
 
+## 2026-11-01：干净官方源码检查通过，WSL适配器仍缺512更新
+
+用户日志确认本地克隆RSUniVLM_clean_66dce1d成功并切到66dce1d；重新运行已通过官方源码/GMoE导入、依赖、主模型元数据与CUDA检查。随后evaluate.py的argparse报不认识--loveda_tile_size 512，帮助列表也缺该参数，因此当前WSL适配器缺本地e25159f的512裁块更新；具体WSL HEAD未知，不将第三方源码checkout误当成外层适配器已更新。模型尚未加载和前向，无任何新分数。
+
+提供基于e5c58f8的离线bundle，包含已静态核对的e25159f实现和当前运行记录；先verify/快进导入，再用--help确认512参数，之后沿用新源码根目录与本地双权重路径跑两原图。保留512参数作为旧代码守卫，不让删除参数后整图运行被误报为512对齐。GitHub此前推送连接失败/超时，交付以本地离线包验证为准；未在本机执行测试/模型或远端作业。
+
+## 2026-11-01：WSL权重路径齐备，官方源码被修改而退出
+
+用户ls回执确认SigLIP配置576字节与model.safetensors约3.3GiB直接位于指定WSL目录，主模型元数据/所列依赖/GPU1 CUDA检查通过；本次源码检查报`Official RSUniVLM tracked source has local modifications`，未执行模型加载或推理。检查逻辑先验证固定commit，再检查已跟踪文件状态，不能把该错误归因于未跟踪pycache；未收到具体diff，因此不臆测变更原因、不删除或覆盖原目录。
+
+提供无需联网的本地git clone --no-hardlinks --no-checkout方案，从已有Git对象创建RSUniVLM_clean_66dce1d副本并切到固定官方提交，RSUNIVLM_ROOT显式指向副本后再跑两原图/512裁块；主模型与视觉塔路径及指标协议不变。保留原源码修改与完整性检查。未修改源码校验规则，未在本机或远端执行模型/测试/克隆；新副本和推理成功仍待用户WSL回执。
+
+## 2026-11-01：用户报告SigLIP已解压至WSL，继续LoveDA冒烟
+
+用户报告`\\wsl.localhost\Ubuntu-22.04\root\data\weight\siglip-so400m-patch14-384`已解压，对应Linux路径`/root/data/weight/siglip-so400m-patch14-384`。将当前状态从WSL缺视觉塔更新为用户报告已解压、待核对目录层级与真实模型加载；不把用户解压陈述当作WSL哈希验证或推理通过。继续提供GPU1、512源图裁块、Val两原图、保存图片、BOOTSTRAP_RSUNIVLM=0命令，主模型路径仍为`/root/data/weight/llava-qwen-gmoe`。本机未连接WSL、未启动推理，未改数值配置。
+
+## 2026-11-01：本机SigLIP下载与校验完成
+
+按用户明确要求使用HF-Mirror下载至`/Users/zhouziyu/Downloads/weight/siglip-so400m-patch14-384`。SDK镜像元数据不兼容后改用镜像resolve URL的HTTP流式下载；固定官方/镜像一致的9fdffc58快照，9个官方文件共3,515,156,215字节完成，模型权重3,511,950,624字节。全部官方文件大小/哈希核对通过，JSON与safetensors偏移检查通过；权重SHA256为ea2abad2b7f8a9c1aa5e49a244d5d57ffa71c56f720c94bc5d240ef4d6e1d94a。目标目录download_receipt.json已complete=true。进程正常退出，未加载模型、未运行测试或GPU推理；WSL仍需用户复制该完整目录，不能将本机下载成功当作WSL推理通过。
+
+## 2026-11-01：WSL依赖与主模型元数据通过，缺SigLIP
+
+用户回执列出主模型层级中的config.json、tokenizer.json、model.safetensors，并报告Torch2.11.0+cu130、Torchvision0.26.0+cu130、Transformers4.45.2等依赖导入通过；上游固定提交66dce1d及GMoE导入通过，GPU1 RTX5090D可见，主checkpoint元数据通过。脚本因`/root/data/weight/siglip-so400m-patch14-384/config.json`不存在而退出；未到模型加载与前向，不记推理成功或精度结果。官方源码216行的SyntaxWarning并非本次退出原因。先前gdown SSL错误不影响已解压主模型的路径选择，当前仅提供官方SigLIP下载命令，保留BOOTSTRAP_RSUNIVLM=0。记录属于用户WSL回执，本机未连接该机器、未运行模型或测试。
+
+## 2026-11-01：用户报告WSL解压路径
+
+用户将主模型解压至`\\wsl.localhost\Ubuntu-22.04\root\data\weight\llava-qwen-gmoe`，对应Linux目录`/root/data/weight/llava-qwen-gmoe`。更新RUN_QUEUE的所有当前主权重命令与README路径说明，显式通过RSUNIVLM_MODEL_PATH覆盖脚本旧默认值。主模型无需因目录差异重新下载；文件是否直接位于该层、SigLIP完整性和真实模型加载仍待WSL检查。未连接用户WSL、未启动推理、未修改模型数值配置。
+
 ## 2026-11-01：LoveDA源图裁块对齐Alters
 
 用户要求使用512裁块。默认改为512×512、步长512，按行优先逐块送入原生SigLIP384处理器，严格解码每块24×24七类RLE；每块最近邻恢复512后拼接、裁回原尺寸并评分。不足整块仅右/下补黑，与Alters公开评估路径一致。保留TILE_SIZE=0旧整图路径；新默认输出目录含tile512/v2，几何协议参与缓存身份，逐块文本带坐标并支持部分恢复，所有块成功后才写完整预测。LEVIR-CD整图与双向并集分支不变。
