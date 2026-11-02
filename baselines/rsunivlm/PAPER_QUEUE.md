@@ -1,5 +1,7 @@
 # RSUniVLM七数据集队列
 
+**2026-11-03当前默认已改为原论文的逐类别语义查询。** LoveDA/FLAIR/UAVid各类独立二值预测，others为该次查询背景；xBD/CHN6只查询其前景。默认不做格式重试，token上限32000；512裁块、双GPU和正整数batch保持。按各类全样本TP/FP/FN求mIoU，结果注明独立查询口径；官方表7的多类评分脚本未公开，`table7_protocol_verified=false`，不将它宣称为完全复现。多类不强行融合，不生成互斥语义WFm；二值集合仍有标准IoU/WFm。详见[NATIVE_SEMANTIC.md](NATIVE_SEMANTIC.md)及RUN_QUEUE最新命令。下文一次多类RLE/8192/格式重试等属于历史`legacy_categorical`接口说明。
+
 **当前SECOND实现更新：按用户要求保留六类、改为无方向类别查询，每类输入一对图像一次，不预测反向、不OR预测；仍报告六类mIoU_c/mF1_c。详见[SECOND_UNDIRECTED.md](SECOND_UNDIRECTED.md)。新入口只跑SECOND，先4对核对；WSL回归/真实模型尚待执行。下方旧七类/双向错误记录继续保留，不能与新方案混用。**
 
 **当前修改范围：LEVIR已改为官方建筑变化提示词、仅A/B单向、二值输出；核对用专用入口与独立目录，见[LEVIR_FORWARD.md](LEVIR_FORWARD.md)及RUN_QUEUE。WSL合成测试和真实前向尚待执行；SECOND仍未验证，不在此入口中。**

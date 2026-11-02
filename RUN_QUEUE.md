@@ -4,6 +4,52 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-03 当前：按原论文逐类别查询
+
+用户要求对齐表7（Vaihingen54.46、UDD5 65.41、VDD49.60）的类别处理。当前默认已从一次枚举全部类别改为论文附录逐类提示，官方演示二值还原，others为查询背景；先按固定类别累计全数据TP/FP/FN，再求类别mIoU。表7具体多类合并/评分脚本未公开，结果明确`metric_scope=independent_class_queries`、`table7_protocol_verified=false`，不据三个汇报值猜测作者隐藏规则。详见`baselines/rsunivlm/NATIVE_SEMANTIC.md`。本次不改变评测集为那三个集合，仍处理我们的五个分割集及两类变化任务。
+
+新包 `rsunivlm_native_classwise_20261103.zip` 含完整代码历史、路径保护安装器，不含模型/数据。当前代码尚无WSL测试或真实推理回执；本机仅静态和Git传输检查。先等待现有队列退出，再更新，不在运行中改源码：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m zipfile -e ./rsunivlm_native_classwise_20261103.zip ./rsunivlm_native_classwise_update
+python ./rsunivlm_native_classwise_update/install_offline.py --repo . \
+  --bundle ./rsunivlm_native_classwise_update/rsunivlm_native_classwise_20261103.bundle
+
+python -m pytest tests/test_rsunivlm_native_semantic.py \
+  tests/test_rsunivlm_paper_queue.py tests/test_rsunivlm_second_undirected.py \
+  tests/test_rsunivlm_levircd_forward.py tests/test_rsunivlm_flair_background.py -q
+~~~
+
+先用FLAIR32张开发核对，双卡各16张/类；这个32只供检查，不写正式分数。通过后再跑下面独立正式目录。
+
+~~~bash
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=32 PLAN_ONLY=0 \
+SEMANTIC_MODE=native_classwise FORMAT_RETRIES=0 MAX_NEW_TOKENS=32000 \
+DATASETS=flair DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_native_flair_tile512_bs16_smoke32_v1 \
+bash run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+通过条件：flair/metrics.json complete=true、processed_samples=32；每图有12张0/1预测掩码，raw_text中的query_class与论文首轮提示一致，无一次列出12类的请求；未读取GT选择查询。默认只允许一次原始模板。若RLE失败，保留原始回答和失败记录，不用背景填充，不继续正式队列。真实吞吐和显存需回执；逐类调用次数会增加。
+
+正式七集队列：
+
+~~~bash
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 PLAN_ONLY=0 \
+SEMANTIC_MODE=native_classwise FORMAT_RETRIES=0 MAX_NEW_TOKENS=32000 \
+DATASETS=loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second \
+DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1 \
+bash run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+只保存必要类别预测掩码和原文/评分回执；有效同协议预测/原文可续跑，旧一次多类RLE不能导入。LoveDA1669/FLAIR15700/UAVid270的多类全群体完成看complete=true、is_full_query_population=true；标准互斥多类协议仍未核验，standard_metrics_available=false、is_full_benchmark=false，不是缺图。二值集合xBD933、CHN6 903及现有变化集合按其既有指标/全群体核对。根complete表示所有请求已完成；根“全部标准基准完成”标志仍受多类协议待核对限制，不自动更新论文数值。
+
+本次STEP不改变SECOND用户指定的六类无方向定义，不把原论文WHU二值变化指标冒充SECOND六类指标。LEVIR仍每对一次，不反向OR。下面v2总队列及FLAIR背景ID12小节为历史接口；只有显式`SEMANTIC_MODE=legacy_categorical`时才是那套一次多类输出，不能套入本次原生逐类目录。
+
 ### 2026-11-03：FLAIR 的 others 按背景处理
 
 用户明确要求将 `others` 视为背景。FLAIR 新增预测背景 ID12，原十二类 0..11 和 GT 映射保持；有效 GT 上预测背景计入该类漏分，不当 ignore 丢弃。混淆矩阵 12×13，十二类均值不增加背景；边界评分保留背景/前景交界。文档：`baselines/rsunivlm/FLAIR_BACKGROUND.md`。当前只完成本机静态核查，WSL 测试和真实模型效果待回执。

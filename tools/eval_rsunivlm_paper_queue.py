@@ -23,12 +23,13 @@ sys.path.insert(0,str(ROOT))
 from baselines.rsunivlm import evaluate as storage
 from baselines.rsunivlm.protocols import fingerprint,checkpoint_identity,source_revision
 from tools import rsunivlm_paper_protocol as protocol
+from tools import rsunivlm_native_semantic as native
 from tools.rsunivlm_batch_import import resolve_output_root
 
 
 def source_identity():
     names=["tools/eval_rsunivlm_paper_queue.py","tools/rsunivlm_paper_protocol.py","tools/rsunivlm_paper_worker.py",
-           "tools/rsunivlm_batch_runtime.py","baselines/rsunivlm/model.py","baselines/rsunivlm/protocols.py",
+           "tools/rsunivlm_batch_runtime.py","tools/rsunivlm_native_semantic.py","baselines/rsunivlm/model.py","baselines/rsunivlm/protocols.py",
            "baselines/rsunivlm/evaluate.py","baselines/segearth_ov/protocols.py","baselines/flair_protocol.py",
            "baselines/binary_boundary_wfm.py","baselines/levircd_common.py","tools/rsunivlm_batch_import.py",
            "baselines/rskt_seg/xbd_label_utils.py",
@@ -42,15 +43,17 @@ def parse_args():
     parser.add_argument("--gpu_ids",default="0,1")
     parser.add_argument("--batch_size",type=int,default=16,help="Positive tile-sequence batch per GPU, no fixed upper bound")
     parser.add_argument("--tile_size",type=int,default=512,choices=(512,))
-    parser.add_argument("--output_dir",default="/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1")
+    parser.add_argument("--output_dir",default="/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1")
+    parser.add_argument("--semantic_mode",choices=("native_classwise","legacy_categorical"),default="native_classwise",
+        help="Paper per-class queries; legacy multiclass-RLE adapter remains explicit")
     parser.add_argument("--data_roots_json",default="",help="JSON object overriding dataset root paths")
     parser.add_argument("--source_root",default=os.environ.get("RSUNIVLM_ROOT",str(ROOT/"third_party/RSUniVLM")))
     parser.add_argument("--model_path",default=os.environ.get("RSUNIVLM_MODEL_PATH","/root/data/weight/llava-qwen-gmoe"))
     parser.add_argument("--vision_tower",default=os.environ.get("RSUNIVLM_VISION_TOWER","/root/data/weight/siglip-so400m-patch14-384"))
     parser.add_argument("--dtype",default="float16",choices=("float16","bfloat16"))
     parser.add_argument("--attention",default="eager",choices=("eager","sdpa","flash_attention_2"))
-    parser.add_argument("--max_new_tokens",type=int,default=8192)
-    parser.add_argument("--format_retries",type=int,default=2,choices=(0,1,2))
+    parser.add_argument("--max_new_tokens",type=int,default=32000)
+    parser.add_argument("--format_retries",type=int,default=0,choices=(0,1,2))
     parser.add_argument("--max_samples",type=int,default=0,help="First N per dataset, development only; 0 means full")
     parser.add_argument("--allow_nonstandard_population",action="store_true")
     parser.add_argument("--plan_only",action="store_true")
@@ -69,6 +72,7 @@ def upstream_files(source_root):
 
 
 def build_plan(args):
+    semantic_mode=args.semantic_mode
     datasets=args.datasets.split(",")
     if not datasets or len(set(datasets))!=len(datasets) or any(name not in protocol.DATASETS for name in datasets):
         raise ValueError(f"Choose distinct datasets from {protocol.DATASETS}")
@@ -87,7 +91,7 @@ def build_plan(args):
             for sample in samples:
                 if Path(sample.name).name!=sample.name or sample.name in (".","..") or "\\" in sample.name:
                     raise ValueError(f"Unsafe sample name: {sample.name}")
-            entries.append(dict(dataset=dataset,root=roots[dataset],contract=protocol.spec(dataset),audit=audit,
+            entries.append(dict(dataset=dataset,root=roots[dataset],contract=native.contract(dataset) if native.enabled(semantic_mode,dataset) else protocol.spec(dataset),audit=audit,
                 samples=[dict(sample=sample.serialize(),files=protocol.metadata(sample)) for sample in samples]))
             print(f"[preflight] {dataset}: {len(samples)} samples; {protocol.spec(dataset)['split']}",flush=True)
         except Exception as error:
@@ -102,15 +106,19 @@ def build_plan(args):
             vision.append(item)
     settings=dict(source_root=str(Path(args.source_root).resolve()),model_path=str(Path(args.model_path).resolve()),
         vision_tower=str(Path(args.vision_tower).resolve()),dtype=args.dtype,attention=args.attention,max_new_tokens=args.max_new_tokens)
-    value=dict(schema="rsunivlm_paper_queue_v1",datasets=datasets,world_size=len(gpus),batch_size=args.batch_size,
+    value=dict(schema="rsunivlm_paper_queue_v2",datasets=datasets,world_size=len(gpus),batch_size=args.batch_size,semantic_mode=semantic_mode,
         tile_size=args.tile_size,format_retries=args.format_retries,strict_population=not args.allow_nonstandard_population,
         source_revision=source_revision(Path(args.source_root)),upstream_code_sha256=upstream_files(args.source_root),
         checkpoint=checkpoint_identity(Path(args.model_path).resolve()),
         vision_files=vision,model_settings=settings,code_sha256=source_identity(),
         populations={entry["dataset"]:fingerprint(entry["samples"]) for entry in entries},
-        prediction_background={name:protocol.background_policy(name) for name in datasets if protocol.background_policy(name)},
+        prediction_background={name:protocol.background_policy(name) for name in datasets
+            if not native.enabled(semantic_mode,name) and protocol.background_policy(name)},
+        native_semantic={name:native.settings(name,args.format_retries) for name in datasets if native.enabled(semantic_mode,name)},
         prompts={name:({key:[protocol.prompt(name,index,query_key=key) for index in range(args.format_retries+1)]
                 for key,_,_ in protocol.SECOND_QUERIES} if name=="second" else
+                {key:[native.prompt(name,key,index) for index in range(args.format_retries+1)] for key,_,_ in native.queries(name)}
+                if native.enabled(semantic_mode,name) else
                 [protocol.prompt(name,index) for index in range(args.format_retries+1)]) for name in datasets},
         second_query=(dict(policy="six_class_undirected_queries_v1",classes=[dict(key=key,id=index,name=name)
             for key,index,name in protocol.SECOND_QUERIES],input_order=["T1","T2"],reverse_query=False,
@@ -188,17 +196,21 @@ def merge(plan):
         names=[row["sample"] for row in rows]
         if len(set(names))!=len(names) or set(names)-set(selected): raise ValueError(f"Duplicate/foreign samples in {dataset}")
         complete=not failures and set(names)==set(selected)
-        full=complete and len(selected)==len(all_names)==entry["contract"]["expected"] and plan["protocol"]["strict_population"]
-        scores=aggregate(dataset,rows)
+        full_population=complete and len(selected)==len(all_names)==entry["contract"]["expected"] and plan["protocol"]["strict_population"]
+        is_native=native.enabled(plan["protocol"].get("semantic_mode"),dataset)
+        standard_available=entry["contract"].get("standard_exclusive_metrics_available",True)
+        full=full_population and standard_available
+        scores=aggregate(dataset,rows,semantic_mode=plan["protocol"].get("semantic_mode","legacy_categorical"))
         result=dict(dataset=dataset,identity=fingerprint([plan["identity"],dataset]),complete=complete,is_full_benchmark=full,
+            is_full_query_population=full_population if is_native else None,standard_metrics_available=standard_available,
             expected_samples=entry["contract"]["expected"],discovered_samples=len(all_names),selected_samples=len(selected),
             processed_samples=len(rows),errors=failures,scores=scores,metric_scale="0..1",contract=entry["contract"],
             note="VISTAR RSUniVLM adapter; includes trained-on LoveDA/UAVid; LEVIR overlap unverified; not an official zero-shot result")
-        if dataset!="second":
+        if dataset!="second" and standard_available:
             import numpy as np
             result["confusion_matrix"]=sum((np.asarray(row["confusion_matrix"],np.int64) for row in rows),
                                           protocol.empty_confusion(dataset)).tolist()
-            if dataset=="flair":
+            if dataset=="flair" and not is_native:
                 result["confusion_matrix_columns"]=entry["contract"]["classes"]+["background"]
         storage.write_json(root/dataset/"metrics.json",result)
         results[dataset]=result
@@ -206,6 +218,7 @@ def merge(plan):
                           primary_metric=entry["contract"]["primary"],value=scores.get(entry["contract"]["primary"]),
                           wfm_3px=scores.get("wfm_3px")))
     summary=dict(complete=all(value["complete"] for value in results.values()),requested_datasets=list(results),
+                 standard_metrics_available=all(value["standard_metrics_available"] for value in results.values()),
                  is_full_benchmark=set(results)==set(protocol.DATASETS) and
                      all(value["is_full_benchmark"] for value in results.values()),results=results)
     storage.write_json(root/"paper_summary.json",summary)

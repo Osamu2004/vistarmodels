@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-03",
+  "requested_reference": "RSUniVLM Table 7 class handling: Vaihingen 54.46, UDD5 65.41, VDD 49.60",
+  "upstream_commit": "66dce1dc68b81a6c62f02fb8e5b306571092a864",
+  "upstream_tree_truncated": false,
+  "upstream_file_count": 155,
+  "read_upstream_sources": [
+    {
+      "path": "app.py",
+      "sha256": "fe5195ee0e03307e18b0b5ab37dc34dcf8c68c98bc6b2df880b6c498cde5db53",
+      "url": "https://github.com/xuliu-cyber/RSUniVLM/blob/66dce1dc68b81a6c62f02fb8e5b306571092a864/app.py"
+    },
+    {
+      "path": "llava/eval/evaluate_interleave.py",
+      "sha256": "575adad0add519a125ec5e440ed62a84a39ed3fba2c1da1f6327a2b0accaa593",
+      "url": "https://github.com/xuliu-cyber/RSUniVLM/blob/66dce1dc68b81a6c62f02fb8e5b306571092a864/llava/eval/evaluate_interleave.py"
+    },
+    {
+      "path": "llava/eval/model_vqa.py",
+      "sha256": "9c20af1b16dd0243be8b3f08cd29e1cfa0d4865c9946436768702122aead47e8",
+      "url": "https://github.com/xuliu-cyber/RSUniVLM/blob/66dce1dc68b81a6c62f02fb8e5b306571092a864/llava/eval/model_vqa.py"
+    },
+    {
+      "path": "llava/train/llava_trainer_eval.py",
+      "sha256": "6aef9c670707d4658995ea975db33424826c603568e55e2cacb6e33f2211eee6",
+      "url": "https://github.com/xuliu-cyber/RSUniVLM/blob/66dce1dc68b81a6c62f02fb8e5b306571092a864/llava/train/llava_trainer_eval.py"
+    }
+  ],
+  "verified_public_behavior": [
+    "single named-category prompt",
+    "others background, other RLE labels foreground",
+    "integer patch20 expansion then OpenCV nearest resize",
+    "FP16 greedy; pixel granularity2; max_new_tokens32000"
+  ],
+  "table7_protocol_verified": false,
+  "missing_details": [
+    "multiclass scoring/fusion script",
+    "exact class inclusion and aggregation used for Table 7"
+  ],
+  "implemented_scoring": "pool TP/FP/FN per fixed dataset class, then average nonempty class IoU; independent query masks remain overlapping",
+  "static_python_ast": [
+    "tools/rsunivlm_native_semantic.py",
+    "tools/rsunivlm_paper_worker.py",
+    "tools/eval_rsunivlm_paper_queue.py",
+    "tests/test_rsunivlm_native_semantic.py"
+  ],
+  "bash_syntax": [
+    "run_bash/rsunivlm_paper_queue.bash"
+  ],
+  "protected_identical_to_head": [
+    "tools/rsunivlm_paper_protocol.py",
+    "baselines/flair_protocol.py",
+    "baselines/segearth_ov/protocols.py",
+    "baselines/binary_boundary_wfm.py",
+    "baselines/rsunivlm/model.py",
+    "baselines/rsunivlm/protocols.py",
+    "tools/rsunivlm_batch_runtime.py",
+    "assets/splits/second_bisrnet_dynamic_earth_val.txt",
+    "configs/rsunivlm/paper_data_roots.json"
+  ],
+  "source_sha256": {
+    "tools/rsunivlm_native_semantic.py": "5791997303b77ff94e85031e6594a210b631bb3a058f81860c59114ea254347b",
+    "tools/rsunivlm_paper_worker.py": "6a65e331784003eb22df01bc9a07bd500bb7f57ca880ea20ac6088936d5e9b4a",
+    "tools/eval_rsunivlm_paper_queue.py": "9d5cf7134624d8c98a31f617e8844db948add5f35f98439ef2e1fbe7b1eb2153",
+    "tests/test_rsunivlm_native_semantic.py": "6266b576883da31efb97b878e5b421427b96563c1f3d8c6afa967ffc094ee99a"
+  },
+  "numerical_tests_run": false,
+  "model_forward_run": false,
+  "wsl_validation": "pending",
+  "paper_numbers_modified": false
+}

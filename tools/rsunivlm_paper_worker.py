@@ -29,7 +29,10 @@ def query_directions(dataset):
     return ("single_pair",) if dataset=="second" else ("forward",) if dataset=="levircd" else ("mask",)
 
 
-def aggregate(dataset,rows):
+def aggregate(dataset,rows,semantic_mode="legacy_categorical"):
+    from tools import rsunivlm_native_semantic as native
+    if native.enabled(semantic_mode,dataset) or (rows and rows[0].get("native_semantic_query")):
+        return native.aggregate(dataset,rows)
     contract=protocol.spec(dataset)
     if dataset=="second":
         counts={str(index):{key:sum(row["class_counts"][str(index)][key] for row in rows)
@@ -142,6 +145,9 @@ class Engine:
 
     def evaluate(self,entry,output):
         dataset=entry["dataset"]
+        from tools import rsunivlm_native_semantic as native
+        if native.enabled(self.plan["protocol"].get("semantic_mode"),dataset):
+            return native.evaluate(self,entry,output)
         contract=protocol.spec(dataset)
         size=self.plan["protocol"]["tile_size"]
         budget=self.plan["protocol"]["format_retries"]
