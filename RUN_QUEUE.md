@@ -6,6 +6,30 @@
 
 ### 当前交付：论文七集队列，任意正整数batch，双GPU分片
 
+2026-11-02数据路径更新：用户提供UAVid新路径`/root/data/uavid`，已写入`configs/rsunivlm/paper_data_roots.json`。上次WSL预检通过LoveDA1669、CHN6-CUG903、LEVIR-CD128、SECOND593；UAVid旧路径、FLAIR、xBD-pre失败，模型未加载。新UAVid尚待预检，FLAIR/xBD-pre实际路径仍待定位；不要将当前状态写成七集可运行或完成。先单独检查UAVid，不使用非标准群体开关：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+# 兼容尚未拉到新JSON的WSL；仅覆盖UAVid路径，保留其他字段。
+python - <<'PY'
+import json
+from pathlib import Path
+p = Path('configs/rsunivlm/paper_data_roots.json')
+d = json.loads(p.read_text())
+d['uavid'] = '/root/data/uavid'
+p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + '\n')
+PY
+
+GPU_IDS=0,1 BATCH_SIZE=16 DATASETS=uavid PLAN_ONLY=1 \
+DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
+bash run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+通过条件：输出UAVid270个配对且预检成功；本命令不启动模型或GPU作业。评估器支持`/root/data/uavid/{Images,Labels}`，以及其中再嵌套一层`uavid/{Images,Labels}`等既有布局；目录存在但内容不匹配仍应失败，不用猜测式重命名或复制数据。以下七集正式命令须等全部路径预检通过后执行。
+
 512分块已与Alters源码核对，见`baselines/rsunivlm/ALTERS_TILING.md`；本次没有修改运行代码或协议，不需要为这份核对记录重跑已有预测。新增合成回归仅在WSL运行，不加载权重：
 
 ~~~bash
@@ -34,6 +58,7 @@ python -m pip install 'rasterio>=1.3,<1.5' 'tifffile>=2023.7,<2025'
 
 # 路径/群体预检，无模型加载或GPU作业
 GPU_IDS=0,1 BATCH_SIZE=16 PLAN_ONLY=1 \
+DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
 bash run_bash/rsunivlm_paper_queue.bash
 
 # 可选WSL合成回归；本机没有运行这些测试
@@ -41,6 +66,7 @@ python -m pytest tests/test_rsunivlm_paper_queue.py -q
 
 # 正式完整七集；每张卡最多16个tile序列，改变16为任意正整数即可
 GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 \
+DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
 OUTPUT_DIR=/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1 \
 bash run_bash/rsunivlm_paper_queue.bash
 ~~~

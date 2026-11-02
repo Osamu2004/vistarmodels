@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：用户提供UAVid新WSL路径
+
+用户七集预检回执：LoveDA1669、CHN6-CUG903、LEVIR-CD128、SECOND593发现成功；FLAIR目录缺失、UAVid旧目录布局不匹配、xBD-pre布局不匹配，build_plan在模型加载前停止。随后用户提供`\\wsl.localhost\Ubuntu-22.04\root\data\uavid`，对应`/root/data/uavid`。仅将配置JSON的UAVid字段及当前命令/说明更新；Python数值源码、旧默认值、模型、512裁块、标签规则和270群体要求不变。运行必须显式传DATA_ROOTS_JSON；命令在RUN_QUEUE，附只覆盖UAVid键的WSL兼容更新方式。
+
+本机无法连接该WSL，不将路径声明写成目录/数量/内容核验通过。新UAVid单集预检待用户执行；FLAIR和xBD-pre路径仍未解决，未启动新推理或测试。
+
 ## 2026-11-02：按Alters实际源码核对512源图分块
 
 检查LoveDA/UAVid/CHN6/SECOND四套裁块函数、xBD对CHN6的导入、LEVIR对SECOND的复用，以及FLAIR原生512检查。四套ceil/pad/coords的AST一致；RGB为[0,1]补0，等同队列PIL补黑；左上原点、512步长、右下边缘补齐、原生拼接裁回都一致。LoveDA已填结果沿用论文实验来源核对文档，不把旧256脚本默认值当主表运行配置。未发现需要更改队列裁块数值路径的差异；保留384 SigLIP/RLE网格与Alters内部预测分辨率的区别。
