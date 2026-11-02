@@ -1,5 +1,13 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：WSL单图回退生效，旧断点后继续到166张
+
+用户回传ec6929f路径的运行日志：模型加载无残留meta，首次实际batch3中1例与serial不同，按既定策略使用该组全部serial并将后续固定batch1。Val_Rural_2685的4裁块raw_reused=1，两个初始water缺计数经过重试后整图完成；随后2686与2687也完成，最新进度166/1669。该回执证明实际恢复已越过旧163断点，不能再记为“只有静态、WSL尚未运行”；合成回归是否在WSL执行仍未提供，完整基准尚未完成。
+
+首图generate=27.33s、verify=9.71s，后两图generate=6.50/8.43s、verify=0，均为日志墙钟阶段时间。进度条约8s/image，显示余时3h20–30m，仅为动态估计。cached=0是PNG未复用，不能抵消raw_reused；miou=0.0547/0.0511/0.2134对应三张图，不写为全量分数。核验两路完整原文仍未取得，差异原因未定，不直接归为浮点误差。回执归档receipts/wsl_loveda_v5_serial_fallback_progress166_20261102.json。
+
+本次仅保存用户证据、更新队列和状态说明；运行代码、权重、配置、已有离线包不变，不代启动/中断WSL、不在本机运行测试或模型。以用户回执时运行中表述，无SSH/PID实时核验。最终1669张结果待继续回传。
+
 ## 2026-11-02：首个新合批与单图不一致，改为复用参考并持久回退batch1
 
 用户从离线包更新后回传：模型加载完成且无残留meta，v5处理163/1669后在BatchBackend.generate_batch的核验分支报Batched/single predictions differ。此处不是meta warning或CUDA OOM导致中断。没有取得batch_verification.json两份原文，不能确定具体差异或实际子集batch大小，更不能直接归为FP16误差。回执归档receipts/wsl_loveda_v5_batch_mismatch_20261102.json。

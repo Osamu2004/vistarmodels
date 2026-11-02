@@ -4,6 +4,12 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
+### 最新WSL进度：回退与格式恢复已运行到166/1669
+
+用户回执时任务正在继续：首次实际batch3有1/3与单图不一致，已统一采用单图参考并固定batch1；Val_Rural_2685成功完成，越过旧163张断点。该图4裁块复用1份原文，另外2个缺计数water回答经过既有重试后恢复，随后Val_Rural_2686/2687均完成。后两图生成分别6.50s/8.43s，verify=0；首次27.33s含核验9.71s，不作为稳定吞吐。进度条剩余约3h20–30m，仅为当时动态估计。
+
+这确认WSL恢复路径实际运行，不等于完整1669张或合批提速通过。cached=0表示未复用现成PNG，不能据此认定v4原文未复用；miou字段是单张图值，不是全量汇总。回执归档`baselines/rsunivlm/receipts/wsl_loveda_v5_serial_fallback_progress166_20261102.json`。状态为用户回执时运行中，本机没有WSL会话或PID，不冒充实时监控。保留运行中的代码/配置，无需为这份文档记录更新当前作业；最终仍需processed_samples=1669、complete=true和is_full_benchmark=true。
+
 ### 最新恢复：合批与单图不一致时，使用单图答案继续
 
 用户WSL回执：v5完成163/1669后，在首次新合批的单图核验处停止，`Batched/single predictions differ`。已加载模型且无残留meta；本次触发终止的是核验分支。没有取得`batch_verification.json`原文，不能认定是浮点差异还是合批实现问题，也不知道当时实际batch是否为4（未完成子集可能更小）。失败回执在`baselines/rsunivlm/receipts/wsl_loveda_v5_batch_mismatch_20261102.json`。
@@ -21,7 +27,7 @@ git pull --ff-only ./rsunivlm_serial_fallback_20261102.bundle main
 git log -1 --oneline
 ~~~
 
-然后运行下方完整batch4命令（保持VERIFY_BATCH=1，不关闭核验）。如果希望从头采用原单图路径，可将TILE_BATCH_SIZE改1并用独立`..._v5_bs1`输出，仍保留别名及v4导入。依赖/环境/GPU1单进程/只保存掩码与全1669完成条件不变。实际修正后运行、吞吐、全量指标待WSL回执；Git离线导入校验不代替模型验证。
+然后运行下方完整batch4命令（保持VERIFY_BATCH=1，不关闭核验）。如果希望从头采用原单图路径，可将TILE_BATCH_SIZE改1并用独立`..._v5_bs1`输出，仍保留别名及v4导入。依赖/环境/GPU1单进程/只保存掩码与全1669完成条件不变。后续用户已回传166张运行中回执，见本节顶部；全量指标仍待回执，Git离线导入校验不代替模型验证。
 
 ### 历史离线更新：包含343db0f目录冲突修复的完整main包
 
