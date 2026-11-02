@@ -8,12 +8,13 @@
 
 用户明确“不是二值变化，类别也要，只是无方向”。当前SECOND已改为water/bare land/low vegetation/tree/building/playground六类分别查询，每类每块只输入一次(T1,T2)，不交换时相、不对预测做OR；保留六类mIoU_c/mF1_c。类别可以重叠，例如树木变建筑，两类变化都计入。GT仍是两份原始0..6语义标注，不做整体二值化。详见`baselines/rsunivlm/SECOND_UNDIRECTED.md`。状态：本机静态核对，WSL测试/真实前向尚待执行。
 
-新完整离线包`output/offline/rsunivlm_second_undirected6_20261102.bundle`，不含权重/数据；先导入，再在WSL回归和检查4对：
+新完整离线包`output/offline/rsunivlm_second_undirected6_20261102.zip`含完整Git bundle、标准库导入脚本及校验文件，不含权重/数据。用户手动修改过路径JSON，直接git pull会因该本地改动停止；使用随包脚本仅临时恢复该配置的HEAD内容、做ff-only导入，并在成功或失败时原样恢复用户JSON，同时保留临时备份。其余本地修改仍受Git保护，不stash/reset/stage或强制覆盖。先导入，再在WSL回归和检查4对：
 
 ~~~bash
 cd /root/code/vistarmodels
-git bundle verify ./rsunivlm_second_undirected6_20261102.bundle
-git pull --ff-only ./rsunivlm_second_undirected6_20261102.bundle main
+unzip -n ./rsunivlm_second_undirected6_20261102.zip -d ./rsunivlm_second_update
+python ./rsunivlm_second_update/install_offline.py --repo . \
+  --bundle ./rsunivlm_second_update/rsunivlm_second_undirected6_20261102.bundle
 source /root/anaconda3/etc/profile.d/conda.sh
 conda activate vistar_rsunivlm
 
