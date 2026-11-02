@@ -34,7 +34,7 @@ CMD=("${PYTHON_BIN}" "${ROOT_DIR}/baselines/rsunivlm/evaluate.py"
   --cd_direction "${CD_DIRECTION:-symmetric_union}")
 if [[ -n "${DATA_ROOT:-}" ]]; then CMD+=(--data_root "${DATA_ROOT}"); fi
 if [[ -n "${RSUNIVLM_VISION_TOWER:-}" ]]; then CMD+=(--vision_tower "${RSUNIVLM_VISION_TOWER}"); fi
-if [[ "${SAVE_IMAGES:-1}" == "0" ]]; then CMD+=(--no-save_images); fi
+if [[ "${SAVE_IMAGES:-0}" == "0" ]]; then CMD+=(--no-save_images); fi
 if [[ "${BOUNDARY_WFM:-1}" == "0" ]]; then CMD+=(--no-boundary_wfm); fi
 if [[ "${ALLOW_NONSTANDARD_POPULATION:-0}" == "1" ]]; then CMD+=(--allow_nonstandard_population); fi
 if [[ "${OVERWRITE:-0}" == "1" ]]; then CMD+=(--overwrite); fi

@@ -1,0 +1,183 @@
+{
+  "evidence_origin": "user_pasted_wsl_log",
+  "received_date": "2026-11-02",
+  "source_attachment_id": "af748b60-abc2-4ede-bd0c-ce9ebd32a131",
+  "source_attachment_sha256": "33be1dd4301aad3087da48fda5e11d746fab6a6d656304b368e63529b2b3a041",
+  "reported_metrics": {
+    "output_dir": "/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3",
+    "model": "RSUniVLM",
+    "dataset": "LoveDA",
+    "split": "val",
+    "protocol_version": 2,
+    "rle_grid_policy": "native_rectangular",
+    "nominal_grid_size": 24,
+    "complete": true,
+    "is_full_benchmark": false,
+    "discovered_samples": 1669,
+    "selected_samples": 2,
+    "expected_samples": 1669,
+    "identity": "d54f2007512c0bfab87b6535f7bb306d8de82749130e43458eb042fe1a538156",
+    "metric_scale": "0..1 (percent fields explicitly suffixed)",
+    "official_upstream_benchmark_result": false,
+    "protocol_note": "VISTAR adapter; no fine-tuning; upstream training includes LoveDA and LEVIR-MCI; not asserted to be zero-shot",
+    "loveda_spatial": {
+      "mode": "nonoverlapping_source_tiles",
+      "source_tile_size": 512,
+      "source_stride": 512,
+      "rgb_padding": "black_right_bottom",
+      "vision_input_size": [
+        384,
+        384
+      ],
+      "vision_resize": "official_SigLipImageProcessor_per_tile",
+      "nominal_mask_grid_size": 24,
+      "mask_grid_policy": "native_rectangular",
+      "max_descriptor_side": 64,
+      "nearest_implementation": "opencv_INTER_NEAREST",
+      "restoration": "nearest_to_tile_then_stitch_crop_to_native",
+      "tta": "none"
+    },
+    "processed_samples": 2,
+    "scores": {
+      "miou": 0.07573674719147297,
+      "mf1": 0.1152656939935149,
+      "macc": 0.15897706686958865,
+      "pixel_accuracy": 0.41625404357910156,
+      "valid_pixels": 2097152,
+      "rejected_pixels": 0,
+      "rejection_rate": 0.0,
+      "iou_background": 0.41130346006810636,
+      "f1_background": 0.5828703347021593,
+      "acc_background": 0.9902045156291083,
+      "iou_building": 0.048740630810148323,
+      "f1_building": 0.09295078187730052,
+      "acc_building": 0.04968004554995623,
+      "iou_road": 0.0,
+      "f1_road": 0.0,
+      "acc_road": 0.0,
+      "iou_water": 0.07011313946205605,
+      "f1_water": 0.13103874137514432,
+      "acc_water": 0.072954906908056,
+      "iou_barren": 0.0,
+      "f1_barren": 0.0,
+      "acc_barren": 0.0,
+      "iou_forest": 0.0,
+      "f1_forest": 0.0,
+      "acc_forest": 0.0,
+      "iou_agriculture": 0.0,
+      "f1_agriculture": 0.0,
+      "acc_agriculture": 0.0,
+      "wfm_3px": 0.021966964029079314,
+      "wfm_3px_percent": 2.1966964029079312,
+      "wfm_3px_nonedge": 0.9585645581213871,
+      "wfm_3px_edge": 0.021966964029079314,
+      "wfm_3px_mean": 0.4902657610752332,
+      "wfm_3px_nonedge_num_images": 2,
+      "wfm_3px_edge_num_images": 2,
+      "wfm_edge_size": 3,
+      "wfm_beta": 1.0,
+      "wfm_aggregate": "min",
+      "wfm_num_samples": 2,
+      "wfm_protocol": {
+        "name": "IDGBR_3px_boundary_WFm",
+        "edge_extraction": "Sobel ksize=3, gradient magnitude > 0",
+        "dilation_kernel": [
+          3,
+          3
+        ],
+        "dilation_iterations": 1,
+        "weighted_f_measure": "Margolin",
+        "beta": 1.0,
+        "sigma": 5.0,
+        "class_names": [
+          "non_edge",
+          "edge"
+        ],
+        "per_class_aggregation": "mean_over_gt_present_images",
+        "aggregate": "minimum_of_positive_image_averaged_binary_class_scores"
+      }
+    },
+    "confusion_matrix": [
+      [
+        854900,
+        2119,
+        0,
+        6338,
+        0,
+        0,
+        0
+      ],
+      [
+        111827,
+        5846,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        80990,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        155052,
+        0,
+        0,
+        12202,
+        0,
+        0,
+        0
+      ],
+      [
+        40188,
+        149,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        293898,
+        0,
+        0,
+        441,
+        0,
+        0,
+        0
+      ],
+      [
+        533202,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "descriptor_shape_counts": {
+      "23x24": 7,
+      "24x24": 1
+    }
+  },
+  "prediction_counts_over_valid_pixels": [
+    2070057,
+    8114,
+    0,
+    18981,
+    0,
+    0,
+    0
+  ],
+  "prediction_background_percent": 98.70800971984863,
+  "runtime_executed_by_this_turn": false,
+  "full_benchmark_verified": false,
+  "quality_diagnosis": "background-heavy predictions; cause unconfirmed"
+}

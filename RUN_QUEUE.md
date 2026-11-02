@@ -4,7 +4,9 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
-状态（2026-11-01最新WSL附件498838a7）：已生成模型文本，首张影像内某个裁块因旧解析器要求24行、收到23行而停止；没有完成整图评分。核对官方app.py后改为按实际矩形行列解码与OpenCV最近邻恢复，保留一致行宽、正计数、已知类别和token截断检查；实际尺寸与EOS/预算写入原文记录。补attention_mask、greedy中性参数与加载后meta参数核对。协议版本2，LoveDA改用下方v3独立输出目录；本机只静态检查，真实新协议结果待WSL回执。
+状态（2026-11-02用户WSL附件af748b60）：v3两张原图完整跑通，processed_samples=2、complete=true、is_full_benchmark=false；8个裁块中7个23×24、1个24×24；加载后没有残留meta参数。用户回执汇总mIoU=7.5737%、mF1=11.5266%、像素准确率41.6254%，有效像素预测背景占98.7080%。这只是两样本诊断，未完成全量，低分原因仍待原始输出/输入排查。进度条0.3073为最后一张图分数，不是合并分数。回执与统计见baselines/rsunivlm/receipts/wsl_loveda_smoke2_20261102.json。
+
+按用户最新节省空间要求：运行脚本默认SAVE_IMAGES=0，只保存pred_mask预测掩码；RLE文本、逐图回执、评分日志保留，不再保存输入/GT/彩色/叠加/错误图。旧v3预测身份保持，可复用；不主动删除已有图片。本次没有重新推理或启动全量，代码修改仅存图默认开关。下方已有命令均改为SAVE_IMAGES=0，现有WSL代码也支持此参数。
 协议与输出见 [baseline README](baselines/rsunivlm/README.md)。
 
 工作目录假设为 `/root/code/vistarmodels`；如实际克隆目录不同，先改下面的 `cd`。
@@ -171,7 +173,7 @@ DATA_ROOT=/root/data/LoveDA SPLIT=val \
 RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
 RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
 RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
-BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=2 SAVE_IMAGES=1 \
+BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=2 SAVE_IMAGES=0 \
 OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3 \
 bash run_bash/rsunivlm_loveda.bash --loveda_tile_size 512
 # LoveDA通过后，需要LEVIR-CD时再串行执行：
@@ -181,7 +183,7 @@ GPU_IDS=1 BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=2 bash run_bash/rsunivlm_levircd.bash
 LoveDA 输出：`/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3`，与旧整图目录分开。
 LEVIR-CD 输出：`/root/data/experiment/rsunivlm_levircd_test_native_rle_symmetric_union_v2`。
 通过条件：两份 `metrics.json` 均 `complete=true`、`processed_samples=2`、
-`is_full_benchmark=false`；检查 `pred_mask`、`pred_rgb` 和 `raw_text` 是否符合预期。
+`is_full_benchmark=false`；检查 `pred_mask` 和 `raw_text` 是否符合预期。
 LoveDA两张1024原图应有8份裁块文本，逐图记录`source_tile_size=512,num_tiles=4`；完整预测与GT尺寸相同，metrics.json的descriptor_shape_counts总数应为8；具体形状不强制全部24×24。
 RLE 不合法、显存不足或 CUDA 导入失败则停止，不继续全量。
 
@@ -196,7 +198,7 @@ DATA_ROOT=/root/data/LoveDA SPLIT=val \
 RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
 RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
 RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
-BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=0 SAVE_IMAGES=1 \
+BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=0 SAVE_IMAGES=0 \
 OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3 \
 bash run_bash/rsunivlm_loveda.bash --loveda_tile_size 512
 # 如需LEVIR-CD，复用步骤1导出的权重路径：
