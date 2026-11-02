@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：FLAIR 15,700对预检通过
+
+用户贴出WSL回执：`[preflight] flair: 15700 samples; flair#1-test`，最终`Preflight passed; no model loaded and no GPU process started.`。此前UAVid单集预检占用原请求目录；当前FLAIR单集的datasets/populations/prompts等身份不同，解析器正常保留原目录并另用`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_pfa2f270f4177`，不是推理错误，不需清理或覆盖。请求GPU0/1、batch16仅为计划配置，未进行CUDA前向。
+
+归档用户原文关键字段并更新PAPER_QUEUE/RUN_QUEUE状态。六集各自预检通过，仍缺xBD-pre实际路径及七集共同完整预检；没有新模型成绩，本轮未改数值源码、数据根配置、预测或论文。
+
 ## 2026-11-02：UAVid预检通过，用户提供FLAIR新路径
 
 用户贴出WSL回执：`[preflight] uavid: 270 samples; OVSISBench/all 270 paired assets`，随后`Preflight passed; no model loaded and no GPU process started.`，输出目录`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1`，请求GPU0/1、每卡batch16。仅证明路径/配对/标签预检通过，不是推理或显存/精度验证；归档小回执，不复制数据或预测。

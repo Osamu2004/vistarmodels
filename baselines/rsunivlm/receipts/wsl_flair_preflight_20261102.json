@@ -1,0 +1,25 @@
+{
+  "schema": "rsunivlm_user_preflight_receipt_v1",
+  "date": "2026-11-02",
+  "evidence": "User pasted WSL terminal output in this conversation",
+  "host": "PC-20250412AZHP",
+  "dataset": "flair",
+  "user_supplied_root": "/root/data/flair#1-test",
+  "discovered_samples": 15700,
+  "split": "flair#1-test",
+  "preflight_passed": true,
+  "requested_output_dir": "/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1",
+  "actual_output_dir": "/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_pfa2f270f4177",
+  "existing_directory_preserved": true,
+  "reported_differing_fields": [
+    "identity", "protocol.datasets", "protocol.populations.flair",
+    "protocol.populations.uavid", "protocol.prompts.flair", "protocol.prompts.uavid"
+  ],
+  "requested_gpu_ids": ["0", "1"],
+  "requested_batch_per_gpu": 16,
+  "model_loaded": false,
+  "gpu_process_started": false,
+  "inference_completed": false,
+  "scores": null,
+  "live_remote_reverification": false
+}

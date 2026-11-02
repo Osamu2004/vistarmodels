@@ -6,9 +6,9 @@
 
 ### 当前交付：论文七集队列，任意正整数batch，双GPU分片
 
-2026-11-02最新状态：用户WSL已预检通过UAVid新路径`/root/data/uavid`的270对，未加载模型或启动GPU作业；结合之前回执，目前五集路径发现成功（LoveDA1669、UAVid270、CHN6-CUG903、LEVIR-CD128、SECOND593）。用户新提供FLAIR路径`/root/data/flair#1-test`，已更新本地配置，但15,700对尚待WSL预检；xBD-pre路径仍未确定。不将此状态写成七集可运行或完成。
+2026-11-02最新状态：用户WSL已预检通过UAVid新路径`/root/data/uavid`的270对，以及FLAIR新路径`/root/data/flair#1-test`的15,700对，均未加载模型或启动GPU作业。结合之前回执，六集各自已预检通过（LoveDA1669、FLAIR15700、UAVid270、CHN6-CUG903、LEVIR-CD128、SECOND593）；xBD-pre路径仍未确定，七集整套预检和正式推理尚未完成。FLAIR单集预检因与先前UAVid配置不同，正常另存到`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_pfa2f270f4177`，保留原目录，无需删除或覆盖。回执见`baselines/rsunivlm/receipts/wsl_flair_preflight_20261102.json`。
 
-FLAIR无需重新下载代码包即可同步路径并单独检查；仅覆盖FLAIR键，保留其余配置：
+下面保留已通过的FLAIR路径同步及单集预检命令供重查；仅覆盖FLAIR键，保留其余配置：
 
 ~~~bash
 cd /root/code/vistarmodels
