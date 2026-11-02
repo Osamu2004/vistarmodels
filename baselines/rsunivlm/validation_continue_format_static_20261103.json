@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-03",
+  "change": "Continue remaining samples after format budget exhaustion",
+  "python_ast": [
+    "tools/rsunivlm_native_semantic.py",
+    "tools/rsunivlm_paper_worker.py",
+    "tools/eval_rsunivlm_paper_queue.py",
+    "tests/test_rsunivlm_native_semantic.py",
+    "tests/test_rsunivlm_paper_queue.py",
+    "tests/test_rsunivlm_levircd_forward.py",
+    "tests/test_rsunivlm_second_undirected.py"
+  ],
+  "protected_files_identical_to_previous_commit": [
+    "tools/rsunivlm_paper_protocol.py",
+    "baselines/rsunivlm/model.py",
+    "baselines/rsunivlm/protocols.py",
+    "tools/rsunivlm_batch_runtime.py",
+    "baselines/segearth_ov/protocols.py",
+    "baselines/flair_protocol.py",
+    "baselines/binary_boundary_wfm.py",
+    "assets/splits/second_bisrnet_dynamic_earth_val.txt",
+    "configs/rsunivlm/paper_data_roots.json",
+    "run_bash/rsunivlm_paper_queue.bash"
+  ],
+  "unchanged_ast_regions": {
+    "tools/rsunivlm_native_semantic.py:enabled": "bfc9543a9306eca7ef655c795e2cb611574c339ed274822c78c3d1db9324dcef",
+    "tools/rsunivlm_native_semantic.py:queries": "7539e124cf60ca6cd4ecff51ebb72d377468e24a8999578fddc539c294c22c54",
+    "tools/rsunivlm_native_semantic.py:query": "18e56de0a7ffea42cad1942655a2b464b7ba60239bebf439c00428253c45c774",
+    "tools/rsunivlm_native_semantic.py:prompt": "4ec70be2e96d8ed93e6ab9dfabe28b35ed5504c300fdec15cb979a16c3a769c3",
+    "tools/rsunivlm_native_semantic.py:contract": "574c2e465ec920fbcef90ccca231c3c8e0a3256ae55cf1f2eafe00bbd00ad770",
+    "tools/rsunivlm_native_semantic.py:settings": "12423196e517df792695345256d9c18cb6d1bcb5f1ab64f9cdcb92def048a7f6",
+    "tools/rsunivlm_native_semantic.py:decode_binary": "94c8e93d82bc2dc75d8adf5215590a7138d6ec3ce1f13d1a98748f3e6b3f4db5",
+    "tools/rsunivlm_native_semantic.py:restore": "76a28ef9da2b08092ced4dd1cfb987458a8a10dbd5e07b335e8e59019d5da35a",
+    "tools/rsunivlm_native_semantic.py:aggregate": "cc8723c5082c5493d2e1e812ac0ff32e6224085c54b69909a91426ec93636296",
+    "tools/rsunivlm_native_semantic.py:evaluate.finish:numerical_prefix": "04b21a037607b30d643926f02b53e6025efaecbc8fddd03a673bc9a42149fa3d",
+    "tools/rsunivlm_paper_worker.py:outputs": "369e114cfe2505fb8aa4ee17aed5761a54d3e7d0cdca5dd38d343ff1139ee355",
+    "tools/rsunivlm_paper_worker.py:query_directions": "e174e1620b80f3352b41beba45eac9476e3efb6c23e23ff648dc53fa8bb20c0c",
+    "tools/rsunivlm_paper_worker.py:aggregate": "e6e45fc352a21975600d4fbe0c66d724f222a882ef3a5f609682809adc947bae",
+    "tools/rsunivlm_paper_worker.py:Engine.core": "8ce06e5249ffaa9e782c2cdb5c1b61c3fbd9dd3393a23e351a106ce1671eae40",
+    "tools/rsunivlm_paper_worker.py:Engine.forward": "f28edb501dc29165ff3132855eeea2fa0ea0de9ec6b0f3a60e52a235827f8e0a",
+    "tools/rsunivlm_paper_worker.py:Engine.apply": "7645686b74ac360411d48bb787947aa4a0885a3afddaf6b5076c3618d3685e48",
+    "tools/rsunivlm_paper_worker.py:Engine.evaluate.finish:numerical_prefix": "c7834f816c07fc8b0eaf799730ca33c4e1a94dd5a872a0edfccdbd3bb5ae76e9"
+  },
+  "prior_commit": "d05c980c88498e320721c40306088324d303799c",
+  "modified_source_sha256": {
+    "tools/rsunivlm_native_semantic.py": "e4a2b77c4400913c77e37f46e16b857fb58cdb78f2278c58b352fb7541bf3b36",
+    "tools/rsunivlm_paper_worker.py": "86befcad4eb9a88454bb3b9865e8334d0facbcc12c2a4a9426580e7127b78e65",
+    "tools/eval_rsunivlm_paper_queue.py": "52e37877049d94d2a8af33d08996ae28816e4a372fcb7d7a9165ed86b0e32bfc"
+  },
+  "bash_syntax": [
+    "run_bash/rsunivlm_paper_queue.bash"
+  ],
+  "numerical_tests_run": false,
+  "model_forward_run": false,
+  "wsl_validation": "pending",
+  "user_runtime_receipt": "baselines/rsunivlm/receipts/wsl_native_flair_smoke32_format_failure_20261103.json"
+}

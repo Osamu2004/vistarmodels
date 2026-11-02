@@ -150,13 +150,13 @@ def evaluate(engine, entry, output):
     assigned = selected[engine.rank::engine.world_size]
     expected_meta = {row["sample"]["name"]:row["files"] for row in entry["samples"]}
     root = Path(output)/dataset/"shards"/f"rank{engine.rank:03d}"
-    for folder in ("pred_mask","raw_text","receipts"): (root/folder).mkdir(parents=True,exist_ok=True)
+    for folder in ("pred_mask","raw_text","receipts","errors"): (root/folder).mkdir(parents=True,exist_ok=True)
     dataset_id = fingerprint([engine.plan["identity"],dataset])
     previous = io.read_json(root/"run_config.json")
     if previous and previous.get("identity") != dataset_id: raise ValueError("Shard has another protocol")
     io.write_json(root/"run_config.json",dict(identity=dataset_id,rank=engine.rank,world_size=engine.world_size,
         assigned_samples=[sample.name for sample in assigned],contract=contract(dataset),native_semantic=settings(dataset,budget)))
-    states, pending, rows = deque(), {key:[] for key,_,_ in query_list}, []
+    states, pending, rows, failed = deque(), {key:[] for key,_,_ in query_list}, [], []
     progress = tqdm(total=len(assigned),desc=f"GPU{engine.rank} {dataset} native queries",unit="image")
 
     def apply(job, grid):
@@ -191,7 +191,9 @@ def evaluate(engine, entry, output):
                                 io.write_json(job["path"],dict(record,grid_shape=list(grid.shape),decoded_label_counts=labels))
                                 apply(job,grid)
                 for job in jobs:
-                    if not job.get("done"): job["case"]["error"] = f"Native format budget exhausted: {job['path']}"
+                    if not job.get("done"):
+                        job["case"]["error"] = f"Native format budget exhausted: {job['path']}"
+                        job["case"].setdefault("format_failures",[]).append(str(job["path"]))
             finally:
                 for job in jobs:
                     for image in job["images"]: image.close()
@@ -223,13 +225,23 @@ def evaluate(engine, entry, output):
             import json
             stream.write(json.dumps(row,allow_nan=False)+"\n")
         progress.update(1)
-        progress.set_postfix(batch=engine.effective_batch,query_miou=f"{aggregate(dataset,[row])['query_miou']:.4f}",cached=int(case["cached"]))
-        io.write_json(root/"status.json",dict(processed=len(rows),assigned=len(assigned),last_sample=sample.name,complete=False))
+        progress.set_postfix(batch=engine.effective_batch,query_miou=f"{aggregate(dataset,[row])['query_miou']:.4f}",cached=int(case["cached"]),failed=len(failed))
+        io.write_json(root/"status.json",dict(processed=len(rows),attempted=len(rows)+len(failed),failed=len(failed),
+            assigned=len(assigned),last_sample=sample.name,complete=False))
 
     def drain():
         while states and (states[0].get("error") or states[0]["remaining"]==0):
             case = states.popleft()
-            if case.get("error"): raise ValueError(case["error"])
+            if case.get("error"):
+                failure=dict(sample=case["sample"].name,identity=case["identity"],error=case["error"],
+                    raw_paths=case.get("format_failures",[]),reason="format_budget_exhausted",scored=False)
+                failed.append(failure)
+                io.write_json(root/"errors"/f"{case['sample'].name}.json",failure)
+                progress.update(1); progress.set_postfix(batch=engine.effective_batch,scored=len(rows),failed=len(failed))
+                io.write_json(root/"status.json",dict(processed=len(rows),attempted=len(rows)+len(failed),failed=len(failed),
+                    assigned=len(assigned),last_sample=case["sample"].name,complete=False))
+                print(f"[native skip] {case['sample'].name}: format failed; continuing with remaining samples (failed={len(failed)})",flush=True)
+                continue
             finish(case)
 
     try:
@@ -271,7 +283,8 @@ def evaluate(engine, entry, output):
                                         apply(job,grid); break
                                     if job.get("done"): continue
                                     if len(job["attempts"])>=budget+1:
-                                        case["error"]=f"Stored native format budget exhausted: {job['path']}"; continue
+                                        case["error"]=f"Stored native format budget exhausted: {job['path']}"
+                                        case.setdefault("format_failures",[]).append(str(job["path"])); continue
                                 tile = Image.new("RGB",(size,size),(0,0,0)); tile.paste(images[0].crop((x,y,x+w,y+h)),(0,0))
                                 job["images"]=[tile]; pending[key].append(job)
                                 if len(pending[key])>=engine.effective_batch: flush(key); drain()
@@ -280,15 +293,24 @@ def evaluate(engine, entry, output):
             finally:
                 for image in images: image.close()
         flush(); drain()
-        if states or len(rows)!=len(assigned): raise ValueError("Incomplete assigned native query population")
-        result = dict(identity=dataset_id,dataset=dataset,rank=engine.rank,world_size=engine.world_size,complete=True,
+        if states or len(rows)+len(failed)!=len(assigned): raise ValueError("Unaccounted native query population")
+        for failure in failed: io.write_json(root/"errors"/f"{failure['sample']}.json",failure)
+        io.write_json(root/"failed_samples.json",dict(failed_samples=failed,num_failed=len(failed)))
+        result = dict(identity=dataset_id,dataset=dataset,rank=engine.rank,world_size=engine.world_size,complete=not failed,
             is_full_benchmark=False,scope="native query rank shard",processed=len(rows),assigned_samples=[sample.name for sample in assigned],
+            attempted=len(rows)+len(failed),exhausted_population=True,num_failed=len(failed),failed_samples=failed,
+            error=f"{len(failed)} samples failed format validation; remaining samples were processed" if failed else None,
+            scores_scope="successfully decoded complete samples only" if failed else "all assigned samples",
             scores=aggregate(dataset,rows),prediction_keys=[key for key,_,_ in query_list],effective_batch=engine.effective_batch,
             actual_batch_sizes_this_process=sorted(engine.actual_batches),oom_splits=engine.oom_splits,rows=rows)
-        io.write_json(root/"metrics.json",result); return result
+        io.write_json(root/"metrics.json",result)
+        io.write_json(root/"status.json",dict(processed=len(rows),attempted=len(rows)+len(failed),failed=len(failed),
+            assigned=len(assigned),complete=not failed,exhausted_population=True))
+        return result
     except Exception as error:
         io.write_json(root/"metrics.json",dict(identity=dataset_id,dataset=dataset,rank=engine.rank,complete=False,
-            is_full_benchmark=False,processed=len(rows),rows=rows,error=str(error),traceback=traceback.format_exc()))
+            is_full_benchmark=False,processed=len(rows),attempted=len(rows)+len(failed),num_failed=len(failed),
+            failed_samples=failed,exhausted_population=False,rows=rows,error=str(error),traceback=traceback.format_exc()))
         raise
     finally:
         progress.close()

@@ -129,6 +129,7 @@ class Engine:
             for job in jobs:
                 if not job.get("done"):
                     job["case"]["error"]=f"Format budget exhausted: {job['path']}"
+                    job["case"].setdefault("format_failures",[]).append(str(job["path"]))
         finally:
             for job in jobs:
                 for image in job["images"]: image.close()
@@ -162,7 +163,7 @@ class Engine:
         if previous and previous.get("identity")!=dataset_id: raise ValueError("Shard has another protocol")
         io.write_json(root/"run_config.json",dict(identity=dataset_id,rank=self.rank,world_size=self.world_size,
             assigned_samples=[sample.name for sample in assigned],contract=contract))
-        states,pending,rows=deque(),{key:[] for key in outputs(dataset)},[]
+        states,pending,rows,failed=deque(),{key:[] for key in outputs(dataset)},[],[]
         progress=tqdm(total=len(assigned),desc=f"GPU{self.rank} {dataset}",unit="image")
 
         def flush(key=None):
@@ -206,14 +207,23 @@ class Engine:
                 stream.write(json.dumps(row,allow_nan=False)+"\n")
             progress.update(1)
             primary=view.get(contract["primary"])
-            progress.set_postfix(batch=self.effective_batch,score="n/a" if primary is None else f"{primary:.4f}",cached=int(case["cached"]))
+            progress.set_postfix(batch=self.effective_batch,score="n/a" if primary is None else f"{primary:.4f}",cached=int(case["cached"]),failed=len(failed))
             io.write_json(root/"status.json",dict(processed=len(rows),assigned=len(assigned),last_sample=sample.name,
-                                               effective_batch=self.effective_batch,complete=False))
+                attempted=len(rows)+len(failed),failed=len(failed),effective_batch=self.effective_batch,complete=False))
 
         def drain():
             while states and (states[0].get("error") or states[0]["remaining"]==0):
                 case=states.popleft()
-                if case.get("error"): raise ValueError(case["error"])
+                if case.get("error"):
+                    failure=dict(sample=case["sample"].name,identity=case["identity"],error=case["error"],
+                        raw_paths=case.get("format_failures",[]),reason="format_budget_exhausted",scored=False)
+                    failed.append(failure)
+                    io.write_json(root/"errors"/f"{case['sample'].name}.json",failure)
+                    progress.update(1); progress.set_postfix(batch=self.effective_batch,scored=len(rows),failed=len(failed))
+                    io.write_json(root/"status.json",dict(processed=len(rows),attempted=len(rows)+len(failed),failed=len(failed),
+                        assigned=len(assigned),last_sample=case["sample"].name,complete=False))
+                    print(f"[paper skip] {case['sample'].name}: format failed; continuing with remaining samples (failed={len(failed)})",flush=True)
+                    continue
                 finish(case)
 
         try:
@@ -263,7 +273,8 @@ class Engine:
                                             self.apply(job,grid); break
                                         if job.get("done"): continue
                                         if len(job["attempts"])>=budget+1:
-                                            case["error"]=f"Stored format budget exhausted: {job['path']}"; continue
+                                            case["error"]=f"Stored format budget exhausted: {job['path']}"
+                                            case.setdefault("format_failures",[]).append(str(job["path"])); continue
                                     job["images"]=[]
                                     for image in source:
                                         tile=Image.new("RGB",(size,size),(0,0,0))
@@ -279,19 +290,27 @@ class Engine:
                     for image in images: image.close()
             flush()
             drain()
-            if states or len(rows)!=len(assigned): raise ValueError("Incomplete assigned population")
+            if states or len(rows)+len(failed)!=len(assigned): raise ValueError("Unaccounted assigned population")
+            for failure in failed: io.write_json(root/"errors"/f"{failure['sample']}.json",failure)
+            io.write_json(root/"failed_samples.json",dict(failed_samples=failed,num_failed=len(failed)))
             result=dict(identity=dataset_id,dataset=dataset,rank=self.rank,world_size=self.world_size,
-                complete=True,is_full_benchmark=False,scope="rank shard",processed=len(rows),
+                complete=not failed,is_full_benchmark=False,scope="rank shard",processed=len(rows),
+                attempted=len(rows)+len(failed),exhausted_population=True,num_failed=len(failed),failed_samples=failed,
+                error=f"{len(failed)} samples failed format validation; remaining samples were processed" if failed else None,
+                scores_scope="successfully decoded complete samples only" if failed else "all assigned samples",
                 assigned_samples=[sample.name for sample in assigned],scores=aggregate(dataset,rows),
                 query_directions=list(query_directions(dataset)),
                 prediction_keys=list(outputs(dataset)),
                 effective_batch=self.effective_batch,actual_batch_sizes_this_process=sorted(self.actual_batches),
                 oom_splits=self.oom_splits,rows=rows)
             io.write_json(root/"metrics.json",result)
+            io.write_json(root/"status.json",dict(processed=len(rows),attempted=len(rows)+len(failed),failed=len(failed),
+                assigned=len(assigned),complete=not failed,exhausted_population=True))
             return result
         except Exception as error:
             io.write_json(root/"metrics.json",dict(identity=dataset_id,dataset=dataset,rank=self.rank,
-                complete=False,is_full_benchmark=False,processed=len(rows),rows=rows,error=str(error),traceback=traceback.format_exc()))
+                complete=False,is_full_benchmark=False,processed=len(rows),attempted=len(rows)+len(failed),num_failed=len(failed),
+                failed_samples=failed,exhausted_population=False,rows=rows,error=str(error),traceback=traceback.format_exc()))
             raise
         finally:
             progress.close()

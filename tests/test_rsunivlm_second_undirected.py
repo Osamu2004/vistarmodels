@@ -120,3 +120,30 @@ def test_two_shards_merge_class_counts_not_binary_or_average_scores(tmp_path, mo
     result = merged["results"]["second"]
     assert result["processed_samples"] == 4 and result["scores"]["miou_c"] == pytest.approx(2/6, abs=1e-6)
     assert sum(size for _, size, _ in calls) == 4*6
+
+
+def test_failed_category_keeps_other_samples_running_without_scoring_partial_masks(tmp_path,monkeypatch):
+    plan,entry,_=fixture(tmp_path,count=4)
+    calls=[]; fake_model(monkeypatch,calls)
+    original=worker.generate_requests
+    def generate(core,requests,prompt):
+        answers=original(core,requests,prompt)
+        if prompt==protocol.prompt("second",query_key="water"):
+            for request,answer in zip(requests,answers):
+                if request[0].getpixel((0,0))[0]==17: answer["response"]="conj"
+        return answers
+    monkeypatch.setattr(worker,"generate_requests",generate)
+    targets=protocol.load_targets
+    def score_only_complete(sample,*args):
+        assert sample.name!="case_0"
+        return targets(sample,*args)
+    monkeypatch.setattr(protocol,"load_targets",score_only_complete)
+    result=worker.Engine(plan,0,1).evaluate(entry,plan["output_dir"])
+    assert result["attempted"]==4 and result["processed"]==3 and result["num_failed"]==1
+    assert result["exhausted_population"] and not result["complete"]
+    assert sum(size for _,size,_ in calls)==4*6
+    root=Path(plan["output_dir"])/"second/shards/rank000"
+    assert not list((root/"pred_mask").glob("case_0_*.png"))
+    merged=queue.merge(plan)["results"]["second"]
+    assert not merged["complete"] and merged["num_failed"]==1 and merged["exhausted_population"]
+    assert merged["scores"]["per_class"]["water"]["tp"]==3*512*512

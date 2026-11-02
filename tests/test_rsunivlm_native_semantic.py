@@ -165,3 +165,56 @@ def test_cli_defaults_select_paper_queries_and_zero_format_retries(monkeypatch):
     args=queue.parse_args()
     assert args.semantic_mode==native.MODE and args.format_retries==0 and args.max_new_tokens==32000
     assert "tools/rsunivlm_native_semantic.py" in queue.source_identity()
+
+
+@pytest.mark.parametrize("budget",[0,2])
+@pytest.mark.parametrize("bad_index",[0,3])
+def test_format_failure_does_not_stop_remaining_samples_and_is_not_scored(tmp_path,monkeypatch,budget,bad_index):
+    plan,entry,samples=fixture(tmp_path,count=4,world=1,batch=3)
+    plan["protocol"]["format_retries"]=budget
+    calls=[]; fake_runtime(monkeypatch,calls)
+    original=worker.generate_requests
+    def generate(core,requests,prompt):
+        answers=original(core,requests,prompt)
+        if "building" in prompt:
+            for request,answer in zip(requests,answers):
+                if request[0].getpixel((0,0))[0]==bad_index: answer["response"]="building:1"
+        return answers
+    monkeypatch.setattr(worker,"generate_requests",generate)
+    scored=[]
+    def targets(sample,*args):
+        assert sample.name!=f"s{bad_index}"
+        scored.append(sample.name)
+        return [np.zeros((40,32),np.uint8)]
+    monkeypatch.setattr(protocol,"load_targets",targets)
+    result=worker.Engine(plan,0,1).evaluate(entry,plan["output_dir"])
+    assert not result["complete"] and result["exhausted_population"]
+    assert result["attempted"]==4 and result["processed"]==3 and result["num_failed"]==1
+    assert len(scored)==3 and result["failed_samples"][0]["sample"]==f"s{bad_index}"
+    folder=Path(plan["output_dir"])/"flair/shards/rank000"
+    assert not list((folder/"pred_mask").glob(f"s{bad_index}_*.png"))
+    assert not (folder/"receipts"/f"s{bad_index}.json").exists()
+    raw=json.loads((folder/"raw_text"/f"s{bad_index}_class_00_building_y0_x0.json").read_text())
+    assert len(raw["attempts"])==budget+1
+    merged=queue.merge(plan)["results"]["flair"]
+    assert not merged["complete"] and not merged["is_full_benchmark"]
+    assert merged["attempted_samples"]==4 and merged["processed_samples"]==3 and merged["num_failed"]==1
+    assert merged["exhausted_population"] and merged["scores"]["query_valid_pixels"]==3*1280
+    calls.clear(); scored.clear()
+    resumed=worker.Engine(plan,0,1).evaluate(entry,plan["output_dir"])
+    assert not calls and resumed["processed"]==3 and resumed["num_failed"]==1
+    assert all(row["reused_prediction"] for row in resumed["rows"])
+
+
+def test_all_format_failures_exhaust_population_without_fabricated_masks(tmp_path,monkeypatch):
+    plan,entry,_=fixture(tmp_path,count=4,world=1,batch=3)
+    monkeypatch.setattr(worker.Engine,"core",lambda self:None)
+    monkeypatch.setattr(protocol,"load_images",lambda *args:[Image.new("RGB",(32,40))])
+    monkeypatch.setattr(worker,"generate_requests",lambda core,requests,prompt:[dict(response="conj",generation={}) for _ in requests])
+    def unexpected_gt(*args): raise AssertionError("Failed samples must not be scored")
+    monkeypatch.setattr(protocol,"load_targets",unexpected_gt)
+    result=worker.Engine(plan,0,1).evaluate(entry,plan["output_dir"])
+    assert result["attempted"]==result["num_failed"]==4 and result["processed"]==0
+    assert result["exhausted_population"] and not result["complete"]
+    assert all(len(row["raw_paths"])==12 for row in result["failed_samples"])
+    assert not list((Path(plan["output_dir"])/"flair/shards/rank000/pred_mask").glob("*.png"))

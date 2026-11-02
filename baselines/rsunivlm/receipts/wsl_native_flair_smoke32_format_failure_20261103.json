@@ -1,0 +1,20 @@
+{
+  "source": "user-pasted WSL log",
+  "attachment": "/Users/zhouziyu/.codex/attachments/cc0616ed-a016-4e3b-bd23-eae4c29dd82b/已粘贴的文本.txt",
+  "date_recorded": "2026-11-03",
+  "output_dir": "/root/data/experiment/rsunivlm_native_flair_tile512_bs16_smoke32_v1",
+  "dataset": "flair",
+  "selected_samples": 32,
+  "ranks": [0, 1],
+  "model_loaded_no_remaining_meta_parameters": true,
+  "observed_actual_batch": 16,
+  "observed_images_per_sequence": 1,
+  "format_retries": 0,
+  "format_examples": ["building:1", "building \"1", "conj", "conj.0", "conjuncot"],
+  "rank0_processed": 0,
+  "rank1_processed": 0,
+  "rank_assigned": 16,
+  "complete": false,
+  "unit_test_receipt_provided": false,
+  "new_continue_policy_wsl_validation": "pending"
+}

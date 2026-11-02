@@ -117,3 +117,20 @@ def test_binary_decoder_refuses_unknown_class_and_truncated_descriptor():
         protocol.decode(dict(response="road*24"), "levircd")
     with pytest.raises(ValueError, match="truncated"):
         protocol.decode(dict(response="building*24", generation=dict(hit_token_limit=True, ended_with_eos=False)), "levircd")
+
+
+def test_bad_response_does_not_terminate_levir_population(tmp_path,monkeypatch):
+    plan,entry,_=fixture(tmp_path)
+    calls=[]; fake_model(monkeypatch,calls)
+    original=worker.generate_requests
+    def generate(core,requests,prompt):
+        answers=original(core,requests,prompt)
+        for request,answer in zip(requests,answers):
+            if request[0].getpixel((0,0))[0]==17: answer["response"]="building:1"
+        return answers
+    monkeypatch.setattr(worker,"generate_requests",generate)
+    result=worker.Engine(plan,0,1).evaluate(entry,plan["output_dir"])
+    assert len(calls)==4 and result["attempted"]==4 and result["processed"]==3
+    assert result["num_failed"]==1 and result["exhausted_population"] and not result["complete"]
+    assert not (Path(plan["output_dir"])/"levircd/shards/rank000/pred_mask/test_000_forward.png").exists()
+    assert result["scores"]["building_iou"]==pytest.approx(1.)

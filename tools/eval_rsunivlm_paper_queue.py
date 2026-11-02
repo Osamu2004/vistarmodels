@@ -107,6 +107,7 @@ def build_plan(args):
     settings=dict(source_root=str(Path(args.source_root).resolve()),model_path=str(Path(args.model_path).resolve()),
         vision_tower=str(Path(args.vision_tower).resolve()),dtype=args.dtype,attention=args.attention,max_new_tokens=args.max_new_tokens)
     value=dict(schema="rsunivlm_paper_queue_v2",datasets=datasets,world_size=len(gpus),batch_size=args.batch_size,semantic_mode=semantic_mode,
+        format_failure_policy="record_failed_sample_and_continue_v1",
         tile_size=args.tile_size,format_retries=args.format_retries,strict_population=not args.allow_nonstandard_population,
         source_revision=source_revision(Path(args.source_root)),upstream_code_sha256=upstream_files(args.source_root),
         checkpoint=checkpoint_identity(Path(args.model_path).resolve()),
@@ -163,7 +164,10 @@ def worker(plan_path,rank):
         dataset=entry["dataset"]
         try:
             print(f"[worker {rank}] start {dataset}",flush=True)
-            engine.evaluate(entry,plan["output_dir"])
+            result=engine.evaluate(entry,plan["output_dir"])
+            if not result.get("complete",False):
+                failures[dataset]=result.get("error") or f"{result.get('num_failed',0)} failed samples; dataset remains incomplete"
+                print(f"[worker {rank}] {dataset}: remaining population processed; {failures[dataset]}; continuing queue",flush=True)
         except Exception as error:
             failures[dataset]=str(error)
             storage.write_json(Path(plan["output_dir"])/"errors"/f"rank{rank}_{dataset}.json",
@@ -183,18 +187,27 @@ def merge(plan):
         dataset=entry["dataset"]
         all_names=[row["sample"]["name"] for row in entry["samples"]]
         selected=all_names[:plan["max_samples"]] if plan["max_samples"] else all_names
-        rows=[]; failures=[]
+        rows=[]; failures=[]; failed_samples=[]; attempted=0; exhausted=True
         for rank in range(world):
             result=storage.read_json(root/dataset/"shards"/f"rank{rank:03d}"/"metrics.json")
             expected=selected[rank::world]
             if not result or result.get("identity")!=fingerprint([plan["identity"],dataset]):
-                failures.append(f"Missing/incompatible shard {rank}"); continue
+                failures.append(f"Missing/incompatible shard {rank}"); exhausted=False; continue
             actual=[row["sample"] for row in result.get("rows",[])]
+            shard_failed=result.get("failed_samples",[])
+            if any(item.get("sample") not in expected for item in shard_failed):
+                raise ValueError(f"Foreign failed samples in {dataset} shard {rank}")
+            failed_samples.extend(dict(item,rank=rank) for item in shard_failed)
+            attempted+=result.get("attempted",len(actual)+len(shard_failed))
+            exhausted=exhausted and result.get("exhausted_population",result.get("complete",False))
             if not result.get("complete") or actual!=expected:
                 failures.append(f"Shard {rank} incomplete: {result.get('error',actual)}")
             rows.extend(result.get("rows",[]))
         names=[row["sample"] for row in rows]
         if len(set(names))!=len(names) or set(names)-set(selected): raise ValueError(f"Duplicate/foreign samples in {dataset}")
+        failed_names=[item["sample"] for item in failed_samples]
+        if len(set(failed_names))!=len(failed_names) or set(failed_names)&set(names):
+            raise ValueError(f"Duplicated or also-scored failed samples in {dataset}")
         complete=not failures and set(names)==set(selected)
         full_population=complete and len(selected)==len(all_names)==entry["contract"]["expected"] and plan["protocol"]["strict_population"]
         is_native=native.enabled(plan["protocol"].get("semantic_mode"),dataset)
@@ -205,6 +218,8 @@ def merge(plan):
             is_full_query_population=full_population if is_native else None,standard_metrics_available=standard_available,
             expected_samples=entry["contract"]["expected"],discovered_samples=len(all_names),selected_samples=len(selected),
             processed_samples=len(rows),errors=failures,scores=scores,metric_scale="0..1",contract=entry["contract"],
+            attempted_samples=attempted,num_failed=len(failed_samples),failed_samples=failed_samples,
+            exhausted_population=exhausted,scores_scope="all selected samples" if complete else "successfully decoded complete samples only; partial results",
             note="VISTAR RSUniVLM adapter; includes trained-on LoveDA/UAVid; LEVIR overlap unverified; not an official zero-shot result")
         if dataset!="second" and standard_available:
             import numpy as np
@@ -213,8 +228,9 @@ def merge(plan):
             if dataset=="flair" and not is_native:
                 result["confusion_matrix_columns"]=entry["contract"]["classes"]+["background"]
         storage.write_json(root/dataset/"metrics.json",result)
+        storage.write_json(root/dataset/"failed_samples.json",dict(num_failed=len(failed_samples),failed_samples=failed_samples))
         results[dataset]=result
-        table.append(dict(dataset=dataset,processed=len(rows),complete=complete,is_full_benchmark=full,
+        table.append(dict(dataset=dataset,processed=len(rows),attempted=attempted,failed=len(failed_samples),complete=complete,is_full_benchmark=full,
                           primary_metric=entry["contract"]["primary"],value=scores.get(entry["contract"]["primary"]),
                           wfm_3px=scores.get("wfm_3px")))
     summary=dict(complete=all(value["complete"] for value in results.values()),requested_datasets=list(results),

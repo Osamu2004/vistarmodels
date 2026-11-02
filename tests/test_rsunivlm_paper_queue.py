@@ -161,7 +161,8 @@ def test_model_is_loaded_once_and_reused(tmp_path,monkeypatch):
     assert engine.core() is sentinel and engine.core() is sentinel and len(calls)==1
 
 
-def test_dataset_failure_is_recorded_and_the_worker_continues_queue(tmp_path,monkeypatch):
+@pytest.mark.parametrize("failure_kind",["exception","incomplete_result"])
+def test_dataset_failure_is_recorded_and_the_worker_continues_queue(tmp_path,monkeypatch,failure_kind):
     entries=[dict(dataset=name,samples=[]) for name in ("loveda","levircd")]
     value=dict(batch_size=16,code_sha256={},upstream_code_sha256={},checkpoint={"fixture":True},
         populations={entry["dataset"]:fingerprint([]) for entry in entries},
@@ -176,7 +177,9 @@ def test_dataset_failure_is_recorded_and_the_worker_continues_queue(tmp_path,mon
     calls=[]
     def evaluate(self,entry,output):
         calls.append(entry["dataset"])
-        if entry["dataset"]=="loveda": raise ValueError("synthetic bad format")
+        if entry["dataset"]=="loveda":
+            if failure_kind=="exception": raise ValueError("synthetic bad format")
+            return dict(complete=False,num_failed=2,error="synthetic bad format",exhausted_population=True)
         return dict(complete=True)
     monkeypatch.setattr(worker.Engine,"evaluate",evaluate)
     assert queue.worker(str(path),0)==1

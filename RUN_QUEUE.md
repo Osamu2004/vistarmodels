@@ -4,6 +4,38 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-03 当前：格式失败后继续，不中止数据集
+
+用户32张FLAIR回执确认两卡已加载模型、实际batch16，分别因`building:1`等损坏RLE而在0/16停止。新代码将格式预算耗尽改成记录失败整图并继续剩余样本/数据集。`FORMAT_RETRIES=0`仍是仅一次原始模板；不是无限重试或放宽解码，不用背景补齐。最终成功子集分数注明partial，失败未补齐时complete=false；全队列处理完才返回非零状态。详情见`baselines/rsunivlm/CONTINUE_FORMAT_FAILURES.md`。
+
+将新包`rsunivlm_continue_format_errors_20261103.zip`放到WSL项目目录；待旧队列退出后更新。安装器保留用户手改路径JSON。以下测试/模型命令只在WSL运行，本机没有执行：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m zipfile -e ./rsunivlm_continue_format_errors_20261103.zip ./rsunivlm_continue_format_update
+python ./rsunivlm_continue_format_update/install_offline.py --repo . \
+  --bundle ./rsunivlm_continue_format_update/rsunivlm_continue_format_errors_20261103.bundle
+
+python -m pytest tests/test_rsunivlm_native_semantic.py \
+  tests/test_rsunivlm_paper_queue.py tests/test_rsunivlm_second_undirected.py \
+  tests/test_rsunivlm_levircd_forward.py -q
+~~~
+
+沿用用户全量命令，无需新增开关：
+
+~~~bash
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 PLAN_ONLY=0 \
+SEMANTIC_MODE=native_classwise FORMAT_RETRIES=0 MAX_NEW_TOKENS=32000 \
+DATASETS=loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second \
+DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1 \
+bash run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+已有旧协议目录时会打印新的哈希目录，旧预测和原文保留，不自动跨版本导入；新版相同身份可续跑。每集根目录`failed_samples.json`和`metrics.json.num_failed`列出缺失，`attempted_samples`包含成功与失败，`processed_samples`只含完整预测已评分样本。`exhausted_population=true`表示已处理名单末尾，有失败时仍complete=false、分数仅为成功子集。仅格式错误不再截断其余图；真实数据错误/模型异常仍报错。当前仅静态验证，真实继续执行和吞吐待用户WSL回执。
+
 ### 2026-11-03 当前：按原论文逐类别查询
 
 用户要求对齐表7（Vaihingen54.46、UDD5 65.41、VDD49.60）的类别处理。当前默认已从一次枚举全部类别改为论文附录逐类提示，官方演示二值还原，others为查询背景；先按固定类别累计全数据TP/FP/FN，再求类别mIoU。表7具体多类合并/评分脚本未公开，结果明确`metric_scope=independent_class_queries`、`table7_protocol_verified=false`，不据三个汇报值猜测作者隐藏规则。详见`baselines/rsunivlm/NATIVE_SEMANTIC.md`。本次不改变评测集为那三个集合，仍处理我们的五个分割集及两类变化任务。
