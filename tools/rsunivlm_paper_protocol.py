@@ -18,6 +18,11 @@ DEFAULT_ROOTS = dict(loveda="/root/data/LoveDA",flair="/root/data/FLAIR-1-2/data
     uavid="/root/data/OVSISBenchDataset/uavid",xbd_pre="/root/data/xview2/test",
     chn6_cug="/root/data/CHN6-CUG/val",levircd="/root/data/LEVIR-CD",second="/root/data/second_dataset")
 SECOND_CLASSES = ("unchanged","water","bare land","low vegetation","tree","building","playground")
+# The zero class belongs to the source annotations. Model queries retain six
+# independent change categories, each with its own binary foreground mask.
+SECOND_QUERIES = (("water",1,"water"),("bare_land",2,"bare land"),
+    ("low_vegetation",3,"low vegetation"),("tree",4,"tree"),
+    ("building",5,"building"),("playground",6,"playground"))
 SECOND_RGB = {(255,255,255):0,(0,0,0):0,(0,0,255):1,(128,128,128):2,(159,129,183):2,
               (192,192,192):2,(0,128,0):3,(0,255,0):4,(128,0,0):5,(255,0,0):6,(165,0,165):6}
 SPLIT_FILE = ROOT / "assets/splits/second_bisrnet_dynamic_earth_val.txt"
@@ -47,8 +52,9 @@ def spec(dataset):
         return dict(classes=["unchanged","building"],expected=128,split="test",primary="building_iou",
                     kind="binary_change",label_protocol="0 unchanged; raw1/255 building change; ordered A/B forward query only")
     if dataset=="second":
-        return dict(classes=list(SECOND_CLASSES),expected=593,split="DynamicEarth/Bi-SRNet val593",
-            primary="miou_c",kind="semantic_change",label_protocol="six independent class unions across both temporal directions")
+        return dict(classes=list(SECOND_CLASSES[1:]),expected=593,split="DynamicEarth/Bi-SRNet val593",
+            primary="miou_c",kind="classwise_undirected_semantic_change",
+            label_protocol="six independent change classes; GT class membership in either annotation; one input order, no reverse prediction")
     raise ValueError(dataset)
 
 
@@ -157,15 +163,30 @@ def load_targets(sample,dataset,shape):
     return targets
 
 
-def prompt(dataset,attempt=0):
+def second_query(query_key):
+    for key,index,name in SECOND_QUERIES:
+        if key==query_key: return index,name
+    raise ValueError("SECOND requires an explicit category query key")
+
+
+def prompt(dataset,attempt=0,query_key=None):
+    if dataset=="second":
+        _,name=second_query(query_key)
+        if attempt not in (0,1,2): raise ValueError("Expected at most two fixed format retries")
+        # Adapt the native per-category binary interface to an undirected
+        # semantic change query; never enumerate seven categorical outputs.
+        task=f"[SEG] Please segment the {name} areas that changed between these two images."
+        if attempt==1:
+            task+=f" Return only a rectangular mask using others and {name}, as category*count runs, one row per line."
+        elif attempt==2:
+            task+=f" Use others for background and {name} for the requested changed areas. Return only the complete category*count mask."
+        return task
     if dataset=="levircd":
         # The official demo asks for one building-change foreground. It does
         # not request a categorical map or a reverse temporal prediction.
         return original.CD_PROMPT if attempt==0 else original.format_retry_prompt(dataset,attempt)
     names=", ".join(spec(dataset)["classes"])
-    task=("Segment this remote-sensing image." if dataset in seg.DATASET_SPECS else
-          "Segment the building area that has changed in the second image relative to the first." if dataset=="levircd" else
-          "Segment land-cover changes in the second image relative to the first. Use unchanged for no change; otherwise use the class in the second image.")
+    task="Segment this remote-sensing image."
     suffix=("" if attempt==0 else " Return only the complete mask, no explanation." if attempt==1 else
             " Check that every encoded row has exactly 24 positions and every category is in the list.")
     return (f"[SEG] {task} Use only these categories: {names}. Return a 24 by 24 semantic mask, one encoded row per line. "
@@ -173,16 +194,16 @@ def prompt(dataset,attempt=0):
             +suffix)
 
 
-def decode(record,dataset):
+def decode(record,dataset,query_key=None):
     generation=record.get("generation",{})
     if generation.get("hit_token_limit") and not generation.get("ended_with_eos"):
         raise ValueError("Refusing a truncated descriptor without EOS")
-    names=spec(dataset)["classes"]
+    names=["unchanged",second_query(query_key)[1]] if dataset=="second" else spec(dataset)["classes"]
     mapping={original.normalize_label(name):index for index,name in enumerate(names)}
     aliases={"buildings":"building","roads":"road","trees":"tree","playgrounds":"playground",
              "bareland":"bare land","barren land":"barren","people":"human","person":"human"}
     if dataset=="loveda": aliases.update({"bareland":"barren","bare land":"barren","agricultural":"agriculture"})
-    if dataset=="second": aliases.update({"ground":"bare land","barren":"bare land"})
+    if dataset=="second": aliases.update({"ground":"bare land","barren":"bare land","barren land":"bare land"})
     background="background" if "background" in names else "unchanged" if "unchanged" in names else "background clutter" if "background clutter" in names else None
     if background: aliases.update({"others":background,"other":background})
     for alias,target in aliases.items():
@@ -232,4 +253,4 @@ def second_metrics(class_counts):
             f1_change=2*precision*recall/(precision+recall+1e-7),precision=precision,recall=recall)
     return dict(miou_c=float(np.mean([value["iou_change"] for value in values.values()])),
                 mf1_c=float(np.mean([value["f1_change"] for value in values.values()])),per_class=values,
-                epsilon=1e-7,protocol="DynamicEarth six class-wise binary unions over both temporal directions")
+                epsilon=1e-7,protocol="DynamicEarth six class-wise undirected semantic change masks; macro over six changed classes")

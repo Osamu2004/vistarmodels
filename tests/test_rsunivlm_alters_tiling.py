@@ -80,7 +80,7 @@ def test_alters_geometry_functions_are_identical(engine):
 ])
 def test_queue_pixels_and_stitch_match_alters_source(tmp_path, monkeypatch, dataset, width, height):
     reference = reference_functions("second" if dataset == "second" else "loveda")
-    classes = protocol.spec(dataset)["classes"]
+    classes = ["others", "water"] if dataset == "second" else protocol.spec(dataset)["classes"]
     arrays = [image_pattern(width, height, seed) for seed in range(2 if dataset == "second" else 1)]
     image_paths, label_paths = [], []
     for index, array in enumerate(arrays):
@@ -97,10 +97,10 @@ def test_queue_pixels_and_stitch_match_alters_source(tmp_path, monkeypatch, data
     padded = [reference["_pad_image_to_tile"](torch.from_numpy(array.copy()).permute(2, 0, 1).float()/255., 512)
               for array in arrays]
     coords = reference["_tile_coords"](*padded[0].shape[-2:], 512)
-    directions = ("forward", "reverse") if dataset == "second" else ("mask",)
+    directions = tuple(key for key, _, _ in protocol.SECOND_QUERIES) if dataset == "second" else ("mask",)
     expected_requests, expected_masks = [], {}
     for direction in directions:
-        sources = padded[::-1] if direction == "reverse" else padded
+        sources = padded
         canvas = torch.empty(padded[0].shape[-2:], dtype=torch.uint8)
         for y, x in coords:
             tiles = [torch.round(source[:, y:y+512, x:x+512]*255).byte().permute(1, 2, 0).numpy() for source in sources]
@@ -113,10 +113,14 @@ def test_queue_pixels_and_stitch_match_alters_source(tmp_path, monkeypatch, data
     seen = []
     def fake_generate(core, requests, prompt):
         answers = []
+        query_classes = classes
+        if dataset == "second":
+            key = next(key for key, _, _ in protocol.SECOND_QUERIES if prompt == protocol.prompt("second", query_key=key))
+            query_classes = ["others", protocol.second_query(key)[1]]
         for request in requests:
             tiles = [np.asarray(image).copy() for image in request]
             seen.append(tiles)
-            answers.append(dict(response=rle(descriptor(tiles[0], classes), classes),
+            answers.append(dict(response=rle(descriptor(tiles[0], query_classes), query_classes),
                 generation=dict(inference_batch_size=len(requests), ended_with_eos=True, hit_token_limit=False)))
         return answers
     monkeypatch.setattr(worker, "generate_requests", fake_generate)

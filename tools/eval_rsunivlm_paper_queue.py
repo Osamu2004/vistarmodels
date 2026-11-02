@@ -108,7 +108,13 @@ def build_plan(args):
         checkpoint=checkpoint_identity(Path(args.model_path).resolve()),
         vision_files=vision,model_settings=settings,code_sha256=source_identity(),
         populations={entry["dataset"]:fingerprint(entry["samples"]) for entry in entries},
-        prompts={name:[protocol.prompt(name,index) for index in range(args.format_retries+1)] for name in datasets},
+        prompts={name:({key:[protocol.prompt(name,index,query_key=key) for index in range(args.format_retries+1)]
+                for key,_,_ in protocol.SECOND_QUERIES} if name=="second" else
+                [protocol.prompt(name,index) for index in range(args.format_retries+1)]) for name in datasets},
+        second_query=(dict(policy="six_class_undirected_queries_v1",classes=[dict(key=key,id=index,name=name)
+            for key,index,name in protocol.SECOND_QUERIES],input_order=["T1","T2"],reverse_query=False,
+            prediction_union=False,queries_per_class_per_tile=1,overlap_between_classes=True,
+            gt="class present in either change annotation",primary_metric="six-class miou_c") if "second" in datasets else None),
         levircd_query=(dict(policy="official_prompt_forward_binary_v1",image_order=["A","B"],
             temporal_directions=["forward"],prediction_kind="binary building change",reverse_query=False,
             direction_union=False,source_tiles="VISTAR adapter: native512 nonoverlap") if "levircd" in datasets else None),

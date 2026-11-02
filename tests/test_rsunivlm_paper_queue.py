@@ -94,7 +94,7 @@ def test_second_six_class_union_keeps_both_changed_landcover_categories():
     assert scores["per_class"]["water"]["tp"]==1
     assert scores["per_class"]["building"]["tp"]==1
     assert scores["miou_c"]==pytest.approx(2/6,abs=1e-6)
-    with pytest.raises(ValueError): protocol.decode(dict(response=rle("invented class")),"second")
+    with pytest.raises(ValueError): protocol.decode(dict(response=rle("invented class")),"second",query_key="water")
 
 
 def test_second_split_is_593_unique_and_unknown_gt_colors_are_rejected(tmp_path):
@@ -127,7 +127,7 @@ def test_any_positive_batch_keeps_one_or_two_images_per_sequence(batch,n_images)
         process_images=lambda images,*args:torch.stack([torch.full((3,4,4),image.getpixel((0,0))[0]) for image in images]),
         model=SimpleNamespace(config=SimpleNamespace(image_aspect_ratio="square"),generation_config=SimpleNamespace(eos_token_id=99),generate=forward))
     requests=[[Image.new("RGB",(512,512),(index*n_images+image,0,0)) for image in range(n_images)] for index in range(batch)]
-    answers=generate_requests(core,requests,protocol.prompt("second" if n_images==2 else "loveda"))
+    answers=generate_requests(core,requests,protocol.prompt("second",query_key="water") if n_images==2 else protocol.prompt("loveda"))
     assert len(answers)==batch and all(row["generation"]["inference_batch_size"]==batch for row in answers)
     assert all(row["generation"]["images_per_sequence"]==n_images for row in answers)
 

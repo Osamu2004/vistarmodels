@@ -22,11 +22,11 @@ from tools.rsunivlm_batch_runtime import generate_requests
 
 
 def outputs(dataset):
-    return query_directions(dataset)
+    return tuple(key for key,_,_ in protocol.SECOND_QUERIES) if dataset=="second" else query_directions(dataset)
 
 
 def query_directions(dataset):
-    return ("forward","reverse") if dataset=="second" else ("forward",) if dataset=="levircd" else ("mask",)
+    return ("single_pair",) if dataset=="second" else ("forward",) if dataset=="levircd" else ("mask",)
 
 
 def aggregate(dataset,rows):
@@ -89,21 +89,28 @@ class Engine:
             yield group,answers
             offset+=count
 
-    def dispatch(self,jobs,dataset):
+    def dispatch(self,jobs,dataset,query_key=None):
         budget=self.plan["protocol"]["format_retries"]
         try:
+            if dataset=="second" and any(job["direction"]!=query_key for job in jobs):
+                raise ValueError("A SECOND batch must contain a single category query")
             for variant in range(budget+1):
                 pending=[job for job in jobs if not job.get("done") and len(job["attempts"])==variant]
-                prompt=protocol.prompt(dataset,variant)
+                prompt=protocol.prompt(dataset,variant,query_key=query_key)
                 for group,answers in self.forward(pending,prompt):
                     for job,answer in zip(group,answers):
                         attempt=dict(prompt=prompt,prompt_variant=variant,**answer)
                         job["attempts"].append(attempt)
-                        record=dict(identity=job["identity"],spatial=job["spatial"],direction=job["direction"],
+                        record=dict(identity=job["identity"],spatial=job["spatial"],
                             dataset=dataset,attempts=job["attempts"],**attempt)
+                        if dataset=="second":
+                            index,name=protocol.second_query(query_key)
+                            record.update(query_key=query_key,query_class_id=index,query_class=name,
+                                temporal_mode="undirected",input_order=["T1","T2"])
+                        else: record["direction"]=job["direction"]
                         io.write_json(job["path"],record)
                         try:
-                            grid=protocol.decode(record,dataset)
+                            grid=protocol.decode(record,dataset,query_key=query_key)
                         except (ValueError,KeyError) as error:
                             attempt["decode_error"]=str(error)
                             io.write_json(job["path"],dict(record,decode_error=str(error)))
@@ -144,8 +151,15 @@ class Engine:
         if previous and previous.get("identity")!=dataset_id: raise ValueError("Shard has another protocol")
         io.write_json(root/"run_config.json",dict(identity=dataset_id,rank=self.rank,world_size=self.world_size,
             assigned_samples=[sample.name for sample in assigned],contract=contract))
-        states,pending,rows=deque(),[],[]
+        states,pending,rows=deque(),{key:[] for key in outputs(dataset)},[]
         progress=tqdm(total=len(assigned),desc=f"GPU{self.rank} {dataset}",unit="image")
+
+        def flush(key=None):
+            for name in ((key,) if key is not None else tuple(pending)):
+                jobs=pending[name]
+                if jobs:
+                    pending[name]=[]
+                    self.dispatch(jobs,dataset,query_key=name if dataset=="second" else None)
 
         def finish(case):
             sample=case["sample"]
@@ -162,8 +176,8 @@ class Engine:
             row=dict(sample=sample.name,reused_prediction=case["cached"],descriptor_shapes=case["shapes"])
             if dataset=="second":
                 row["class_counts"]={str(index):protocol.counts(
-                    (predictions["forward"]==index)|(predictions["reverse"]==index),
-                    (targets[0]==index)|(targets[1]==index)) for index in range(1,7)}
+                    predictions[key].astype(bool),
+                    (targets[0]==index)|(targets[1]==index)) for key,index,_ in protocol.SECOND_QUERIES}
                 view=protocol.second_metrics(row["class_counts"])
             else:
                 prediction=predictions["forward" if dataset=="levircd" else "mask"]
@@ -203,13 +217,14 @@ class Engine:
                             try:
                                 with Image.open(root/"pred_mask"/f"{sample.name}_{key}.png") as opened:
                                     value=np.asarray(opened).copy()
-                                if value.shape!=(height,width) or not np.all(value<len(contract["classes"])) or value.dtype!=np.uint8:
+                                num_values=2 if dataset=="second" else len(contract["classes"])
+                                if value.shape!=(height,width) or not np.all(value<num_values) or value.dtype!=np.uint8:
                                     raise ValueError("Invalid cached class mask")
                                 if hashlib.sha256(value.tobytes()).hexdigest()!=receipt["sha256"][key]: raise ValueError("Mask hash changed")
                                 cached[key]=value
                             except (OSError,KeyError,ValueError):
                                 cached={}; break
-                    directions=query_directions(dataset)
+                    directions=outputs(dataset)
                     tiles=((height+size-1)//size)*((width+size-1)//size)
                     case=dict(sample=sample,identity=identity,shape=(height,width),cached=bool(cached),
                         remaining=0 if cached else tiles*len(directions),
@@ -218,7 +233,7 @@ class Engine:
                     states.append(case)
                     if not cached:
                         for direction in directions:
-                            source=images if direction!="reverse" else images[::-1]
+                            source=images
                             for y in range(0,height,size):
                                 for x in range(0,width,size):
                                     w,h=min(size,width-x),min(size,height-y)
@@ -230,7 +245,7 @@ class Engine:
                                     if record and record.get("identity")==job["identity"]:
                                         job["attempts"]=record.get("attempts",[])
                                         for attempt in job["attempts"]:
-                                            try: grid=protocol.decode(attempt,dataset)
+                                            try: grid=protocol.decode(attempt,dataset,query_key=direction if dataset=="second" else None)
                                             except (ValueError,KeyError): continue
                                             self.apply(job,grid); break
                                         if job.get("done"): continue
@@ -241,21 +256,22 @@ class Engine:
                                         tile=Image.new("RGB",(size,size),(0,0,0))
                                         tile.paste(image.crop((x,y,x+w,y+h)),(0,0))
                                         job["images"].append(tile)
-                                    pending.append(job)
-                                    if len(pending)>=self.effective_batch:
-                                        self.dispatch(pending,dataset); pending=[]; drain()
-                    if (cached or case["remaining"]==0 or case.get("error")) and pending:
-                        self.dispatch(pending,dataset); pending=[]
+                                    pending[direction].append(job)
+                                    if len(pending[direction])>=self.effective_batch:
+                                        flush(direction); drain()
+                    if cached or case["remaining"]==0 or case.get("error"):
+                        flush()
                     drain()
                 finally:
                     for image in images: image.close()
-            if pending: self.dispatch(pending,dataset); pending=[]
+            flush()
             drain()
             if states or len(rows)!=len(assigned): raise ValueError("Incomplete assigned population")
             result=dict(identity=dataset_id,dataset=dataset,rank=self.rank,world_size=self.world_size,
                 complete=True,is_full_benchmark=False,scope="rank shard",processed=len(rows),
                 assigned_samples=[sample.name for sample in assigned],scores=aggregate(dataset,rows),
                 query_directions=list(query_directions(dataset)),
+                prediction_keys=list(outputs(dataset)),
                 effective_batch=self.effective_batch,actual_batch_sizes_this_process=sorted(self.actual_batches),
                 oom_splits=self.oom_splits,rows=rows)
             io.write_json(root/"metrics.json",result)
@@ -266,5 +282,6 @@ class Engine:
             raise
         finally:
             progress.close()
-            for job in pending:
-                for image in job.get("images",[]): image.close()
+            for jobs in pending.values():
+                for job in jobs:
+                    for image in job.get("images",[]): image.close()

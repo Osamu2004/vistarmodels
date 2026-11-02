@@ -1,0 +1,97 @@
+{
+  "schema": "rsunivlm_second_undirected6_static_v1",
+  "date": "2026-11-02",
+  "base_commit": "28d196e0a566dc6e057e35bd5b6bf9a58444aaac",
+  "ast_parsed": [
+    "tools/rsunivlm_paper_protocol.py",
+    "tools/rsunivlm_paper_worker.py",
+    "tools/eval_rsunivlm_paper_queue.py",
+    "tests/test_rsunivlm_second_undirected.py",
+    "tests/test_rsunivlm_levircd_forward.py",
+    "tests/test_rsunivlm_paper_queue.py",
+    "tests/test_rsunivlm_alters_tiling.py"
+  ],
+  "shell_syntax_checked": [
+    "run_bash/rsunivlm_second_undirected_queue.bash",
+    "run_bash/rsunivlm_levircd_forward_queue.bash",
+    "run_bash/rsunivlm_paper_queue.bash"
+  ],
+  "queries": [
+    {
+      "key": "water",
+      "id": 1,
+      "name": "water"
+    },
+    {
+      "key": "bare_land",
+      "id": 2,
+      "name": "bare land"
+    },
+    {
+      "key": "low_vegetation",
+      "id": 3,
+      "name": "low vegetation"
+    },
+    {
+      "key": "tree",
+      "id": 4,
+      "name": "tree"
+    },
+    {
+      "key": "building",
+      "id": 5,
+      "name": "building"
+    },
+    {
+      "key": "playground",
+      "id": 6,
+      "name": "playground"
+    }
+  ],
+  "policy": {
+    "semantic_classes": 6,
+    "overall_binary_collapse": false,
+    "input_order": [
+      "T1",
+      "T2"
+    ],
+    "reverse_prediction": false,
+    "prediction_direction_union": false,
+    "queries_per_class_per_tile": 1,
+    "overlap_between_class_masks": true,
+    "source_tile": 512,
+    "primary_metric": "miou_c",
+    "secondary_metric": "mf1_c",
+    "new_entry_format_retries": 0
+  },
+  "gt_discovery_and_decode_unchanged": true,
+  "six_class_score_math_unchanged": true,
+  "model_batch_forward_and_tile_restoration_unchanged": true,
+  "protected_sha256": {
+    "baselines/rsunivlm/model.py": "2fa3383d73aff44e839d33c14773c146969b862083ea0a0fdc0743950825b449",
+    "baselines/rsunivlm/protocols.py": "0254d577295afb0205642d6aa1188e32accda52092d4b02aa9dba81b84cc8c4a",
+    "baselines/rsunivlm/evaluate.py": "43c854987b554966fc3fb7cc66525e3cae456ed1955700fb26592996130e58e2",
+    "tools/rsunivlm_batch_runtime.py": "0aa32aca38917116d25730689833cce85a412dd5e6555dad6331522e9d0d3f22",
+    "baselines/segearth_ov/protocols.py": "2082658e51f96bf361cada2c5c4c258f535b7c2cf29b0e3fb0ea1215a675e94c",
+    "baselines/binary_boundary_wfm.py": "838044f7b0b5f5446e343cef55f31a1f8c11391a7212afd455b6d999b33edd5b",
+    "configs/rsunivlm/paper_data_roots.json": "fb9c41c71101fa0a517c45cf91cd0a54bc2ccb5e302a0d6be960b59ad973b40b",
+    "assets/splits/second_bisrnet_dynamic_earth_val.txt": "eed4dc3956022e18f426ba9efd30fd0927cd4fa0c065b7058e86e439624ed346"
+  },
+  "changed_sources_sha256": {
+    "tools/rsunivlm_paper_protocol.py": "984f001780a32dc80d325c5c6fb57b9001e40116336e339b0ef6266140fc254f",
+    "tools/rsunivlm_paper_worker.py": "6169e9a7278dd8acdc4ccf2ec957dcf5019b59ea767cd1c814dd0906149ff9b3",
+    "tools/eval_rsunivlm_paper_queue.py": "fae76d5e695b723795e3ff8b1bd255df4e78c0ab4d6dca0f754eba230d303cc0",
+    "tests/test_rsunivlm_second_undirected.py": "53b18780c7836c9f7f76a8eaccbad299ffa38cd4f89a2bfc7b8340e24798d693",
+    "tests/test_rsunivlm_levircd_forward.py": "968e3cff678e174f753d86503a1528750a3c8c97507f3bbca5fa3a3c9f057e9d",
+    "tests/test_rsunivlm_paper_queue.py": "2a33632423707c88e19f19b408ea290d5b14a5ef1985ac963c5a8b1a67eeeae2",
+    "tests/test_rsunivlm_alters_tiling.py": "c6c1d1d0ab48eb78884af2f480da5d31ac5530d8e8dc62f0b90110d136793533"
+  },
+  "tests_executed": false,
+  "model_loaded": false,
+  "remote_executed": false,
+  "pending": [
+    "WSL synthetic regressions",
+    "four-pair real category queries",
+    "full593 evaluation"
+  ]
+}

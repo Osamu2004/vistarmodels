@@ -1,5 +1,7 @@
 # RSUniVLM七数据集队列
 
+**当前SECOND实现更新：按用户要求保留六类、改为无方向类别查询，每类输入一对图像一次，不预测反向、不OR预测；仍报告六类mIoU_c/mF1_c。详见[SECOND_UNDIRECTED.md](SECOND_UNDIRECTED.md)。新入口只跑SECOND，先4对核对；WSL回归/真实模型尚待执行。下方旧七类/双向错误记录继续保留，不能与新方案混用。**
+
 **当前修改范围：LEVIR已改为官方建筑变化提示词、仅A/B单向、二值输出；核对用专用入口与独立目录，见[LEVIR_FORWARD.md](LEVIR_FORWARD.md)及RUN_QUEUE。WSL合成测试和真实前向尚待执行；SECOND仍未验证，不在此入口中。**
 
 **2026-11-02运行后纠正：旧SECOND七类一次输出/双向OR为本仓库适配，不能当作官方原生流程；用户试跑已因格式错误结束且complete=False。下文保留其历史实现说明，不代表当前可用于正式论文评分。原生接口与有效性边界见[NATIVE_CHANGE_AUDIT.md](NATIVE_CHANGE_AUDIT.md)。** 暂不重跑旧SECOND适配；不猜测其余集合完成状态，不将二值结果填入六类mIoU_c。
@@ -18,7 +20,7 @@
 | xBD-pre | test/pre 933 | 建筑IoU/F1，3px WFm | `/root/data/xview2` |
 | CHN6-CUG | Val 903 | 道路IoU/F1，3px WFm | `/root/data/CHN6-CUG/val` |
 | LEVIR-CD | 官方test 128对 | 无方向二值建筑变化IoU/F1，每对查询一次 | `/root/data/LEVIR-CD` |
-| SECOND | DynamicEarth/Bi-SRNet Val 593对 | 六类变化并集mIoU_c/mF1_c | `/root/data/second_dataset` |
+| SECOND | DynamicEarth/Bi-SRNet Val 593对 | 六类无方向语义变化mIoU_c/mF1_c | `/root/data/second_dataset` |
 
 VDD不在当前这份稿件的上述评测集里。本队列只做分割与变化检测，不做生图或FDr⁶；SECOND的1,694对生图test不能代替593对检测集合。
 
@@ -42,7 +44,7 @@ VDD不在当前这份稿件的上述评测集里。本队列只做分割与变�
 
 五个分割集使用现有`segearth_ov.protocols`的发现/标签解码/评分数学：LoveDA排除raw0/255，FLAIR仅评价raw1..12，UAVid保留moving/static car，xBD使用既有WKT rasterizer，CHN6是二类道路。WFm复用既有3px实现与合并规则。不同数据集统一类别清单RLE提示属于VISTAR适配，不能称作RSUniVLM官方已报告协议；未知标签、无计数、行宽错误或无EOS截断都进入至多两次固定格式重试。只选首个合法输出，不填背景或跳过失败样本。
 
-LEVIR当前评测无方向二值建筑变化，新增和拆除均为前景；只用A/B顺序查询一次，保存一张forward二值预测，不交换时相、不做OR。forward是输入调用标识，不代表新增/消失两个方向目标；原始GT与评分直接按无方向0/1处理。下面SECOND内容仅描述未通过有效性验证的历史适配：保留forward/reverse两张0..6预测，对每个变化类c分别计算`pred_c=(forward==c)|(reverse==c)`和`gt_c=(label1==c)|(label2==c)`，累计TP/TN/FP/FN后算六类均值。该扩展不能当作官方原生SECOND流程，当前专用LEVIR入口不会运行它。SECOND GT严格0..6 ID/已知RGB颜色规则未改。
+LEVIR当前评测无方向二值建筑变化，新增和拆除均为前景；只用A/B顺序查询一次，保存一张forward二值预测，不交换时相、不做OR。forward是输入调用标识，不代表新增/消失两个方向目标。SECOND则保留六个语义变化类别，分别输出六张可重叠的类别掩码，每类只查询(T1,T2)一次；预测不分forward/reverse。每类GT仍为`(label1==c)|(label2==c)`，由两份既有标注确定无方向类别集合；全样本逐类累计TP/TN/FP/FN，再按原epsilon求六类mIoU_c/mF1_c。此GT构造不意味着模型反向推理，原始0..6 ID/严格RGB解码规则保持。两种专用入口均保留旧其他集合输出。
 
 SECOND固定名单已从当前Vistar代码复制到`assets/splits/second_bisrnet_dynamic_earth_val.txt`，593个唯一条目，SHA256为`eed4dc3956022e18f426ba9efd30fd0927cd4fa0c065b7058e86e439624ed346`。根目录依次检查Val/Train/Test等物理位置，只接受能完整覆盖名单的配对语义标签目录；不能用其他593个样本凑数。
 

@@ -4,6 +4,41 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 当前优先：SECOND保留六类的无方向语义变化
+
+用户明确“不是二值变化，类别也要，只是无方向”。当前SECOND已改为water/bare land/low vegetation/tree/building/playground六类分别查询，每类每块只输入一次(T1,T2)，不交换时相、不对预测做OR；保留六类mIoU_c/mF1_c。类别可以重叠，例如树木变建筑，两类变化都计入。GT仍是两份原始0..6语义标注，不做整体二值化。详见`baselines/rsunivlm/SECOND_UNDIRECTED.md`。状态：本机静态核对，WSL测试/真实前向尚待执行。
+
+新完整离线包`output/offline/rsunivlm_second_undirected6_20261102.bundle`，不含权重/数据；先导入，再在WSL回归和检查4对：
+
+~~~bash
+cd /root/code/vistarmodels
+git bundle verify ./rsunivlm_second_undirected6_20261102.bundle
+git pull --ff-only ./rsunivlm_second_undirected6_20261102.bundle main
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+python -m pytest tests/test_rsunivlm_second_undirected.py \
+  tests/test_rsunivlm_levircd_forward.py tests/test_rsunivlm_paper_queue.py -q
+
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=4 PLAN_ONLY=0 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_second_undirected6_tile512_bs16_smoke4_v1 \
+bash run_bash/rsunivlm_second_undirected_queue.bash --tile_size 512
+~~~
+
+核对入口默认FORMAT_RETRIES=0，只检查类别原始提示；所有类别固定查询，不用GT判断哪些类需要跑。每类独立跨图填批，请求16而实际尾批可较小；OOM自动折半。通过条件：所选4对complete=true，每对六张类别掩码、raw_text有query_class与temporal_mode=undirected、无反向预测，逐类指标仍存在。测试与模型前向本机均未执行。
+
+4对真实核对通过后再用新正式目录跑593对，避免混入开发尾批预测：
+
+~~~bash
+cd /root/code/vistarmodels
+conda activate vistar_rsunivlm
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 PLAN_ONLY=0 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_second_undirected6_tile512_bs16_full_v1 \
+bash run_bash/rsunivlm_second_undirected_queue.bash --tile_size 512
+~~~
+
+正式单集完成看second/metrics.json：processed_samples=593、complete=true、is_full_benchmark=true，scores保留六类miou_c/mf1_c。根汇总只请求SECOND，其“完整七集”字段为false属预期。此次不自动导入旧七类/双向预测，也不重跑已存其他集合；新方案需独立模型有效性回执后才能入论文。
+
 ### 当前优先：LEVIR无方向二值建筑变化，每对查询一次
 
 用户要求先只修改LEVIR。新入口保留512源图裁块、双GPU和每卡batch16；只查询(A,B)，不做reverse/OR，首轮使用官方CD_PROMPT。核对入口默认FORMAT_RETRIES=0，仅使用原始提示词，不把格式重试当作官方流程。SECOND不在本次入口中。详见`baselines/rsunivlm/LEVIR_FORWARD.md`。本机只静态检查，不跑模型/测试；WSL实际核对尚待执行。
