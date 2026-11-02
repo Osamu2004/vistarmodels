@@ -14,7 +14,7 @@ from baselines.rsunivlm import evaluate as legacy
 from baselines.rsunivlm import protocols as protocol
 from baselines.rsunivlm.model import RSUniVLM
 from tools.eval_rsunivlm_batched import alias_decoder, BatchBackend
-from tools.rsunivlm_batch_import import build_protocol, import_raw_answers
+from tools.rsunivlm_batch_import import build_protocol, import_raw_answers, resolve_output_root, changed_fields
 from tools import rsunivlm_batch_runtime as batch
 from test_rsunivlm_protocols import FakeModel, args, make_loveda, rle
 
@@ -172,3 +172,40 @@ def test_v4_import_validates_provenance_redecodes_bareland_and_preserves_origina
     changed=dict(old_base,checkpoint="another-checkpoint")
     with pytest.raises(ValueError,match="differs"):
         import_raw_answers(source,tmp_path/"bad",options,changed,new_base)
+
+
+def test_output_conflict_uses_stable_separate_directory_and_preserves_existing_files(tmp_path):
+    root=tmp_path/"v5_bs4"
+    stored=dict(protocol_version=4,tile_batch_size=4,extension_sources_sha256={"tools/entry.py":"old"})
+    requested=dict(stored,extension_sources_sha256={"tools/entry.py":"new"})
+    legacy.write_json(root/"run_config.json",dict(identity=protocol.fingerprint(stored),protocol=stored))
+    legacy.write_json(root/"raw_text"/"tile.json",dict(response="untouched old answer"))
+    before={str(path.relative_to(root)):path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    actual,receipt=resolve_output_root(root,requested)
+    assert actual==root.with_name(f"{root.name}_p{protocol.fingerprint(requested)[:12]}")
+    assert receipt["differing_fields"]==["identity","protocol.extension_sources_sha256.tools/entry.py"]
+    assert not receipt["copied_scores"] and not receipt["copied_prediction_masks"]
+    assert before=={str(path.relative_to(root)):path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    legacy.write_json(actual/"run_config.json",dict(identity=protocol.fingerprint(requested),protocol=requested))
+    assert resolve_output_root(root,requested)[0]==actual  # stable across restarts
+    assert resolve_output_root(actual,requested)==(actual,None)
+
+
+def test_pristine_output_is_reused_and_unidentified_artifacts_are_preserved(tmp_path):
+    requested=dict(protocol_version=4,tile_batch_size=4)
+    root=tmp_path/"output"
+    assert resolve_output_root(root,requested)==(root,None)
+    legacy.write_json(root/"raw_text"/"tile.json",dict(response="unknown protocol"))
+    actual,receipt=resolve_output_root(root,requested)
+    assert actual!=root and "missing" in receipt["differing_fields"][0]
+    assert (root/"raw_text"/"tile.json").is_file()
+    # Even a hash-named destination must match; never overwrite a collision.
+    legacy.write_json(actual/"run_config.json",dict(identity="wrong",protocol=requested))
+    with pytest.raises(ValueError,match="also conflicts"):
+        resolve_output_root(root,requested)
+
+
+def test_protocol_diff_reports_exact_fields_without_large_metadata_values():
+    assert changed_fields(dict(dtype="float16",checkpoint=dict(files=["old"])),
+                          dict(dtype="bfloat16",checkpoint=dict(files=["new"]))) == [
+                              "protocol.checkpoint.files","protocol.dtype"]

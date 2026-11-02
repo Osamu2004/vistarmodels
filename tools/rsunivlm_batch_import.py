@@ -14,6 +14,65 @@ import baselines.rsunivlm.evaluate as legacy
 from baselines.rsunivlm import protocols as protocol
 
 
+def changed_fields(stored, requested, prefix="protocol"):
+    """Name differing fields without dumping model metadata or large lists."""
+    if isinstance(stored, dict) and isinstance(requested, dict):
+        fields = []
+        for key in sorted(stored.keys() | requested.keys()):
+            name = f"{prefix}.{key}"
+            if key not in stored or key not in requested:
+                fields.append(name)
+            else:
+                fields.extend(changed_fields(stored[key], requested[key], name))
+        return fields
+    return [] if stored == requested else [prefix]
+
+
+def output_conflicts(root, requested):
+    """Return conflicts; never infer a protocol for unidentified artifacts."""
+    if not root.exists():
+        return []
+    if not root.is_dir():
+        raise ValueError(f"Output path is not a directory: {root}")
+    config_path = root / "run_config.json"
+    config = legacy.read_json(config_path)
+    if config is not None:
+        fields = changed_fields(config.get("protocol"), requested)
+        if config.get("identity") != protocol.fingerprint(requested):
+            fields.insert(0, "identity")
+        return fields
+    if config_path.exists():
+        return ["run_config.json unreadable"]
+    artifacts = ("raw_text/*.json", "pred_mask/*.png", "receipts/*.json",
+                 "metrics.json", "input_manifest.json", "cache_import.json")
+    if any(any(root.glob(pattern)) for pattern in artifacts):
+        return ["run_config.json missing for existing artifacts"]
+    return []
+
+
+def resolve_output_root(requested_root, requested_protocol):
+    """Keep incompatible results intact and choose a stable protocol sibling."""
+    requested_root = Path(requested_root).resolve()
+    conflicts = output_conflicts(requested_root, requested_protocol)
+    if not conflicts:
+        return requested_root, None
+    identity = protocol.fingerprint(requested_protocol)
+    sibling = requested_root.with_name(f"{requested_root.name}_p{identity[:12]}")
+    sibling_conflicts = output_conflicts(sibling, requested_protocol)
+    if sibling_conflicts:
+        raise ValueError(f"Protocol-specific output also conflicts: {sibling}: {sibling_conflicts}; "
+                         "choose another OUTPUT_DIR; all existing files preserved")
+    previous = legacy.read_json(requested_root / "run_config.json") or {}
+    receipt = dict(schema="rsunivlm_output_resolution_v1", requested_root=str(requested_root),
+        actual_root=str(sibling), previous_identity=previous.get("identity"),
+        requested_identity=identity, differing_fields=conflicts,
+        policy="preserve incompatible output; use independent protocol-specific directory",
+        copied_scores=False, copied_prediction_masks=False)
+    print(f"[RSUniVLM output] Preserving {requested_root}; differing fields: {', '.join(conflicts)}", flush=True)
+    print(f"[RSUniVLM output] Actual OUTPUT_DIR={sibling}", flush=True)
+    return sibling, receipt
+
+
 def build_protocol(args, base):
     root = args.data_root or args.loveda_root
     samples, audit = protocol.discover("loveda", legacy.normalize_path(root), "val")
@@ -51,7 +110,9 @@ def import_raw_answers(source_root, output_root, args, old_base, new_base):
     output_root.mkdir(parents=True, exist_ok=True)
     destination = legacy.read_json(output_root / "run_config.json")
     if destination and (destination.get("identity") != new_id or destination.get("protocol") != new_protocol):
-        raise ValueError("Batch output already belongs to a different protocol")
+        fields = changed_fields(destination.get("protocol"), new_protocol)
+        raise ValueError(f"Batch output already belongs to a different protocol: {output_root}; "
+                         f"differing fields: {fields or ['identity']}")
     raw_dir = output_root / "raw_text"
     raw_dir.mkdir(exist_ok=True)
     legacy.write_json(output_root / "run_config.json", dict(identity=new_id, protocol=new_protocol, audit=audit,

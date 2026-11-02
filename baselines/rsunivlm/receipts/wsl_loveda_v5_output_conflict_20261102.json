@@ -1,0 +1,17 @@
+{
+  "schema": "user_reported_wsl_rsunivlm_failure_v1",
+  "date": "2026-11-02",
+  "source": "user pasted WSL terminal output",
+  "requested_output_dir": "/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v5_bs4",
+  "import_v4_root": "/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v4",
+  "tile_batch_size": 4,
+  "stage": "destination protocol validation before model loading",
+  "error": "Batch output already belongs to a different protocol",
+  "source_v4_checks_passed": true,
+  "source_check_evidence": "Destination comparison is reached only after v4 protocol and input manifest validation in the displayed implementation",
+  "existing_destination_config_provided": false,
+  "exact_differing_fields_known": false,
+  "complete": false,
+  "gpu_inference_started_in_this_attempt": false,
+  "action": "print differing fields, preserve incompatible destination, select a deterministic protocol-specific sibling; keep strict source import checks"
+}

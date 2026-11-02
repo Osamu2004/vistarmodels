@@ -1,5 +1,13 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：v5目标协议冲突，保留已有目录并自动选协议路径
+
+用户WSL已更新并运行batch4命令，依赖/元数据通过，import_raw_answers在目标目录协议比较处停止，还未加载推理模型。源码次序表明旧v4 run_config和输入清单已验证，失败是当前期望与既有v5 run_config不同；用户未提供该文件，不能断定具体哪个字段不同。归档于receipts/wsl_loveda_v5_output_conflict_20261102.json。
+
+新增纯输出管理：递归报告差异字段，既有输出协议不符或缺身份时保留原目录，选同级带当前协议哈希的确定性路径；hash目录如再冲突则报错，绝不覆盖。主入口同步args.output_dir、后端、导入器和评分写入同一actual路径，记录output_resolution.json。旧v4严格核验、独立原文导入、别名、模型、裁块/推理/指标全部保持；不自动采用不明v5内容，也不让更换目录成为绕过v4源身份检查的手段。
+
+RUN_QUEUE仍使用原batch4命令，先拉取更新，actual路径在终端显示。补充WSL合成回归（匹配/不匹配、保留原文件、缺配置、确定性重启和hash目标冲突）。遵循用户要求，本机只做AST/bash/旧源码哈希保护检查，不运行测试或模型；修正后实际WSL运行待回执。
+
 ## 2026-11-02：v4在bareland中断，准备v5裁块batch4与原文恢复
 
 用户全量回执停在163/1669，失败原图Val_Rural_2685、裁块y0_x0，最后错误是第22行`bareland`；三次既有格式预算耗尽。新增回执`receipts/wsl_loveda_v4_bareland_failure_20261102.json`只记录已提供的错误和进度，不捏造原文或完整指标。`bareland`明确对应LoveDA barren，新增两种显式别名，其余未知词及无计数`water`仍严格拒绝。

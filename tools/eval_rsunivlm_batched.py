@@ -19,7 +19,7 @@ import numpy as np
 import baselines.rsunivlm.evaluate as legacy
 from baselines.rsunivlm import protocols as protocol
 from tools import rsunivlm_batch_runtime as runtime
-from tools.rsunivlm_batch_import import build_protocol, import_raw_answers
+from tools.rsunivlm_batch_import import build_protocol, import_raw_answers, resolve_output_root
 
 
 @contextmanager
@@ -121,7 +121,6 @@ def main():
     if args.overwrite:
         raise ValueError("Use a separate output directory instead of overwriting the v4 experiment")
     root = legacy.normalize_path(args.output_dir)
-    root.mkdir(parents=True, exist_ok=True)
     adapter_sources = sorted((ROOT / "baselines/rsunivlm").glob("*.py"))
     old_base = dict(protocol_version=3, source_revision=protocol.source_revision(legacy.normalize_path(args.source_root)),
         checkpoint=protocol.checkpoint_identity(legacy.normalize_path(args.model_path)),
@@ -137,8 +136,13 @@ def main():
     if args.preflight:
         print(json.dumps(dict(preflight="passed; no model loaded", samples=len(samples), protocol=expected), indent=2))
         return
+    root, output_resolution = resolve_output_root(root, expected)
+    args.output_dir = str(root)
+    root.mkdir(parents=True, exist_ok=True)
     with (root / ".batch_eval.lock").open("a") as lock, alias_decoder():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if output_resolution is not None:
+            legacy.write_json(root / "output_resolution.json", output_resolution)
         if options.import_v4_root:
             import_raw_answers(options.import_v4_root, root, args, old_base, new_base)
         backend = BatchBackend(args, options.tile_batch_size, options.verify_batch, root,

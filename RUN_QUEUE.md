@@ -4,6 +4,14 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
+### 最新恢复：v5目标目录协议冲突，自动保留并选择独立目录
+
+用户WSL已更新批量入口，但在模型加载前停于`Batch output already belongs to a different protocol`。按调用次序，v4的源协议及输入清单检查已通过；失败在现有v5目标目录身份检查。未取得旧v5的run_config原文，因此具体差异字段尚不确定，不直接归因于模型/数据或某次代码更新。
+
+新入口会打印具体不同的字段（例如扩展源码哈希、batch、dtype等），保留原目录，改用`OUTPUT_DIR`同级的`<原名>_p<当前协议前12位哈希>`。相同协议重启仍选同一路径；若该哈希目录也有身份冲突则继续拒绝覆盖。actual目录记录在终端`Actual OUTPUT_DIR=`及`output_resolution.json`。旧v4导入的所有身份/提示/几何检查仍保留，不关闭检查、不删除文件、不复制旧v5分数。
+
+执行：WSL先`cd /root/code/vistarmodels`、`git pull --ff-only`，随后原样运行下方batch4命令即可；不要删除现有v5，也不用改`OVERWRITE`。依赖、GPU1单进程、512裁块、只保存掩码等约定不变。可选WSL回归仍是`python -m pytest tests/test_rsunivlm_batch_runtime.py -q`；新覆盖空目录、匹配身份、冲突目录保留、确定性路径、缺失配置、哈希目标再冲突及精确字段诊断。本机仅静态检查，未执行测试/模型，尚无修正后WSL回执。完成条件仍为全1669张完整评分。
+
 ### 当前：v4在163张后遇bareland中断，v5映射恢复＋512裁块batch4
 
 状态：用户已提供v4中断回执；v5代码只经本机静态检查，未运行本机测试或模型，尚无WSL执行回执。不要把旧九图或163张进度写成完整基准成绩。详见`baselines/rsunivlm/BATCHING.md`，错误归档于`receipts/wsl_loveda_v4_bareland_failure_20261102.json`。
