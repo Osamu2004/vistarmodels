@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-02",
+  "base_revision": "1330b4d916fb5421219759ced28f1f8f4e1dd1cf",
+  "status": "static_passed_wsl_runtime_pending",
+  "python_ast": [
+    "baselines/rsunivlm/evaluate.py",
+    "baselines/rsunivlm/protocols.py",
+    "tests/test_rsunivlm_format_retries.py"
+  ],
+  "bash_syntax": [
+    "run_bash/rsunivlm_eval.bash",
+    "run_bash/rsunivlm_loveda.bash",
+    "run_bash/rsunivlm_levircd.bash"
+  ],
+  "unchanged_function_ast": {
+    "baselines/rsunivlm/protocols.py": [
+      "discover",
+      "normalize_label",
+      "label_map",
+      "decode_rle",
+      "restore_grid",
+      "fuse_change",
+      "checkpoint_identity",
+      "input_identity"
+    ],
+    "baselines/rsunivlm/evaluate.py": [
+      "load_sample",
+      "score",
+      "save_prediction",
+      "cached_prediction",
+      "decode_saved_response"
+    ]
+  },
+  "unchanged_source_sha256": {
+    "baselines/rsunivlm/model.py": "2fa3383d73aff44e839d33c14773c146969b862083ea0a0fdc0743950825b449",
+    "baselines/segearth_ov/protocols.py": "2082658e51f96bf361cada2c5c4c258f535b7c2cf29b0e3fb0ea1215a675e94c",
+    "baselines/binary_boundary_wfm.py": "838044f7b0b5f5446e343cef55f31a1f8c11391a7212afd455b6d999b33edd5b",
+    "baselines/levircd_common.py": "f40e3ca5c7d33caab1ca63421b63c74484075dfe7fddc6937d0518ebafbbeb84"
+  },
+  "tests_executed": false,
+  "models_loaded": false,
+  "gpu_tasks_started": false,
+  "original_failure_fixture": "baselines/rsunivlm/receipts/wsl_invalid_class_20261102.json",
+  "protocol_version": 3,
+  "loveda_output_version": "v4",
+  "format_retries": 2,
+  "metrics_verified": false
+}

@@ -30,15 +30,37 @@ OFFICIAL_WEIGHT_URL = "https://drive.google.com/drive/folders/1TtaoOPmh167gpgHHW
 GRID_SIZE = 24
 MAX_DESCRIPTOR_SIDE = 64
 RLE_GRID_POLICY = "native_rectangular"
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
+FORMAT_RETRY_POLICY = "fixed_prompts_first_valid_no_gt_v1"
 CD_CLASSES = ("others", "building")
 LOVEDA_PROMPT = (
     "[SEG] Please segment this remote-sensing image into the following classes: "
     "background, building, road, water, barren, forest, agriculture. "
-    "Output only the 24-by-24 segmentation mask in row-wise run-length format: "
-    "class*count, class*count, with one row per line."
+    "Return only a 24-by-24 semantic mask, one encoded row per line. "
+    "Write each category name followed by an asterisk and a positive integer run length; "
+    "separate runs with commas. Run lengths in each row must sum to 24. "
+    "Use only the seven listed category names."
 )
 CD_PROMPT = "[SEG] Please segment the building area that have changed in the second image."
+
+
+def format_retry_prompt(dataset: str, attempt: int) -> str:
+    """Fixed format-only alternatives; no GT, inferred labels or metric choices."""
+    if dataset not in ("loveda", "levircd") or attempt not in (1, 2):
+        raise ValueError("Expected one of two fixed segmentation-format retries")
+    task = ("Segment this remote-sensing image into background, building, road, water, "
+            "barren, forest, agriculture.") if dataset == "loveda" else (
+            "Segment the building area that has changed in the second image.")
+    names = "background, building, road, water, barren, forest, agriculture" if dataset == "loveda" else "others, building"
+    if attempt == 1:
+        return (f"[SEG] {task} The previous response did not follow the required mask format. "
+                f"Before every asterisk use exactly one of these category names: {names}. "
+                "After the asterisk write a positive integer run length. Separate runs with commas. "
+                "Return 24 rows, each encoding 24 positions. Output only the complete mask, no explanation.")
+    return (f"[SEG] {task} Output a 24 by 24 semantic mask as one run-length encoded row per line. "
+            f"Use only these category names before asterisks: {names}. "
+            "After each asterisk output the positive integer number of consecutive positions. "
+            "Separate runs using commas; the numbers in every row must add to 24. Return only the mask.")
 
 
 @dataclass(frozen=True)

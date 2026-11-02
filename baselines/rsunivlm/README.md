@@ -1,8 +1,14 @@
 # RSUniVLM：LoveDA 分割与 LEVIR-CD 变化检测
 
 本目录在同一个官方 `llava-qwen-gmoe` checkpoint 上执行两项任务，不新增训练、LoRA 或任务头。
-当前状态：用户WSL已越过源码/权重加载阶段并返回模型文本，但首张影像内某个裁块被旧解析器以“24行要求、收到23行”拒绝，整图尚未完成，无正式分数。核对官方app.py后将解码改为其实际行列矩形网格方案，保留正计数/一致行宽/类别/截断检查，不补造缺失行。新增attention_mask、生成结束信息与加载后meta参数核对；新协议使用v3独立目录。本机仅静态核查，未运行模型或测试，WSL新回归与真实效果待回执。
+当前状态（2026-11-02）：v3两张冒烟已成功，但全量在8/1669后停止。失败原文证实第24行是`others *23, class *1`，生成124个token、正常EOS、没有触及8192预算；这是掩码内的未知类别，不能删除该行或映射成背景。最新协议版本3移除LoveDA提示中的格式占位符，格式无效时最多采用两条预定提示词重新生成同一RGB裁块；逐次原文保留，只取首个合法输出，不依赖GT或指标。新LoveDA默认v4目录，旧v3原文/8张结果保留，不混用。实际恢复效果及全量指标仍待WSL验证；本机仅静态检查，不运行模型或测试。
 用户执行入口统一记录在仓库 [RUN_QUEUE.md](../../RUN_QUEUE.md)。
+
+### v4格式恢复规则
+
+默认`FORMAT_RETRIES=2`：每个图像请求先按任务原提示生成，若出现未知标签、语法错误、行宽不一致或token预算截断，再按两条不同的固定格式提示词依次重新生成，最多共3次。没有示例掩码、未知标签替换、补行、GT输入或按得分挑选；首次合法即接受，三次均失败仍停止，不能以部分集合发布全量成绩。合法23×24等原生矩形继续按既有规则还原，不因非24行触发重试。算法、采样参数、视觉预处理、类别映射、恢复插值和评分数学保持。
+
+`raw_text/*.json`保留`initial_prompt`、全部`attempts`（各次prompt/response/generation/decode_error）、最终实际提示词及`format_retries_used`；成功查询和图片恢复会保留重试统计，`metrics.json.format_audit`报告总查询数、总尝试数、重试查询数与重试次数。中断后继续未完成的格式尝试；已用尽预算的非法回答不会在相同协议下无限重跑。改变prompt/重试预算会改变协议身份，应使用独立结果目录。
 
 ## 来源与适配边界
 
@@ -77,7 +83,7 @@ LEVIR-CD双方向各自先还原原图再取二值并集，允许两个方向实
 
 ```bash
 # 先按 RUN_QUEUE 准备独立环境与依赖；两个命令使用完全相同的权重路径。
-GPU_IDS=1 TILE_SIZE=512 MAX_SAMPLES=2 bash run_bash/rsunivlm_loveda.bash
+GPU_IDS=1 TILE_SIZE=512 FORMAT_RETRIES=2 MAX_SAMPLES=9 bash run_bash/rsunivlm_loveda.bash
 GPU_IDS=1 MAX_SAMPLES=2 bash run_bash/rsunivlm_levircd.bash
 # 冒烟运行通过后，省略 MAX_SAMPLES 继续全量，已完成样本会复用。
 GPU_IDS=1 TILE_SIZE=512 bash run_bash/rsunivlm_loveda.bash
@@ -118,8 +124,8 @@ GPU_IDS=1 bash run_bash/rsunivlm_levircd.bash
 
 运行脚本默认`SAVE_IMAGES=0`，图片只保留`pred_mask`中的单通道预测掩码；不再额外复制输入、GT、预测彩色图、叠加图或错误图。原始RLE文本、逐图回执与指标仍保存，支持复核和断点恢复。LoveDA掩码保存类别ID 0…6，LEVIR-CD保存0/255二值掩码。
 
-直接调用Python入口时加`--no-save_images`；如后续明确需要可视化，再显式设`SAVE_IMAGES=1`。本次只改运行脚本的默认存图开关，推理/解码/评分源码和缓存身份保持，已有v3预测可复用；不会自动删除已保存的旧可视化。
-实际矩形的行数、行宽、类别与生成结束状态须合法；失败立即停止且`complete=false`，不会用空背景补齐。
+直接调用Python入口时加`--no-save_images`；如后续明确需要可视化，再显式设`SAVE_IMAGES=1`。此前只改存图开关时v3身份保持；本轮prompt/格式恢复升级为新v4协议，不能复用旧v3预测。旧文件保留，不自动删除。
+实际矩形的行数、行宽、类别与生成结束状态须合法；有限格式重试仍失败则停止且`complete=false`，不会用空背景补齐。
 重启时检查模型/源码/提示词/完整输入清单以及逐图掩码摘要；损坏预测可从已存原始文本重新解析，
 中断的LoveDA只补缺失/无效裁块，四块均有效后才发布整图掩码；中断的双方向任务只补缺失方向。
 `MAX_SAMPLES`和进度条计数仍按原图，不按裁块。修改 checkpoint、输入或协议后要用新目录或显式 `OVERWRITE=1`。

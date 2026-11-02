@@ -4,6 +4,68 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
+### 当前入口：v4去除占位词，有限格式重试；先覆盖原失败的前9张
+
+用户原文已确认Val_Rural_2530_tile512_y512_x0_seg最后一行是others *23, class *1：前575个网格位置为others，最后1个为未知类别。124个token、EOS=true、hit_token_limit=false，不是截断或额外尾文。不能删除第24行、替换未知类或填背景。回执保存在baselines/rsunivlm/receipts/wsl_invalid_class_20261102.json。
+
+当前协议版本3：LoveDA提示不再包含class*count；每请求第一次输出无效时，以两条预定提示词依次重新生成同一RGB输入，最多共3次，首个合法即采用，不读取GT、不按分数挑选。全部原文和生成结束信息保留，metrics.format_audit报告查询/尝试/重试计数；全失败仍停止且不是全量成绩。原模型加载、视觉预处理、expert、greedy、类别映射、原生矩形恢复与指标数学不改。
+
+因为prompt与恢复策略改变，使用新v4输出目录；旧v3的8张/原文保留，不复制或改身份混入v4。继续只保存pred_mask与文本/评分回执，不保存输入/GT/彩色/叠加图。没有在本机或WSL代执行测试/推理，当前仅静态核验。
+
+~~~bash
+cd /root/code/vistarmodels
+git pull --ff-only
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+GPU_IDS=1 NPROC_PER_NODE=1 TILE_SIZE=512 \
+DATA_ROOT=/root/data/LoveDA SPLIT=val \
+RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
+RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
+RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
+BOOTSTRAP_RSUNIVLM=0 FORMAT_RETRIES=2 MAX_SAMPLES=9 SAVE_IMAGES=0 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v4 \
+bash run_bash/rsunivlm_loveda.bash
+~~~
+
+通过条件：9/9、metrics.complete=true、is_full_benchmark=false，确认原失败Val_Rural_2530的掩码与全部裁块合法；raw_text保留每次attempt，format_audit包含36个查询（标准1024原图，每图4块）及实际重试次数。通过后同命令MAX_SAMPLES改0，保留v4输出根复用9张，完成全部1669后才is_full_benchmark=true。再次失败则看v4对应raw_text的attempts，不修改未知标签或跳过样本。
+
+WSL回归（精简文件/假模型，无预训练权重；本机未执行）：
+
+~~~bash
+python -m pytest tests/test_rsunivlm_protocols.py tests/test_rsunivlm_format_retries.py -q
+~~~
+
+以下为v3失败的历史诊断记录；当前运行以本节v4命令为准。
+
+### 2026-11-02追加：第9张图输出未知class，先读取失败原文
+
+用户全量回执显示8/1669已完成，第9张某个512裁块的第24个RLE行出现Unknown loveda label 'class '，整轮停止。加载后无残留meta参数，不能归因为当前日志中的head warning。前8张预测/回执与已成功裁块保留；不删除输出目录，不将未知class映射背景、不补行，也不跳过样本后声称全量完成。
+
+源码中的提示词含class*count占位写法，可能诱发模仿，但还没有失败response原文，无法区分额外格式示例与真实掩码未知类别。下一步在WSL只读打印最新失败裁块的完整原文与结束信息；不加载权重、不占GPU，不重新推理。原模型/解析器/指标代码未修改，缓存身份保持。
+
+~~~bash
+python - <<'PY'
+import json
+from pathlib import Path
+root = Path('/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3')
+bad = []
+for path in (root/'raw_text').glob('*.json'):
+    data = json.loads(path.read_text())
+    if data.get('decode_error'):
+        bad.append((path.stat().st_mtime_ns, path, data))
+print('已保存预测掩码数：', sum(1 for _ in (root/'pred_mask').glob('*.png')))
+if not bad:
+    raise SystemExit('没有找到带decode_error的原文，请核对OUTPUT_DIR')
+_, path, data = max(bad, key=lambda item: item[0])
+print(json.dumps({'file': str(path), 'error': data.get('decode_error'),
+                 'generation': data.get('generation'), 'prompt': data.get('prompt'),
+                 'response': data.get('response')}, ensure_ascii=False, indent=2))
+PY
+~~~
+
+状态：待用户回传原文后确定处理方式；当前未宣称修复、未重跑GPU或得到全量分数。greedy原提示词不变时直接重跑可能再次输出同一非法标签，先不要反复启动全量。
+
 状态（2026-11-02用户WSL附件af748b60）：v3两张原图完整跑通，processed_samples=2、complete=true、is_full_benchmark=false；8个裁块中7个23×24、1个24×24；加载后没有残留meta参数。用户回执汇总mIoU=7.5737%、mF1=11.5266%、像素准确率41.6254%，有效像素预测背景占98.7080%。这只是两样本诊断，未完成全量，低分原因仍待原始输出/输入排查。进度条0.3073为最后一张图分数，不是合并分数。回执与统计见baselines/rsunivlm/receipts/wsl_loveda_smoke2_20261102.json。
 
 按用户最新节省空间要求：运行脚本默认SAVE_IMAGES=0，只保存pred_mask预测掩码；RLE文本、逐图回执、评分日志保留，不再保存输入/GT/彩色/叠加/错误图。旧v3预测身份保持，可复用；不主动删除已有图片。本次没有重新推理或启动全量，代码修改仅存图默认开关。下方已有命令均改为SAVE_IMAGES=0，现有WSL代码也支持此参数。
@@ -174,14 +236,14 @@ RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
 RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
 RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
 BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=2 SAVE_IMAGES=0 \
-OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v4 \
 bash run_bash/rsunivlm_loveda.bash --loveda_tile_size 512
 # LoveDA通过后，需要LEVIR-CD时再串行执行：
 GPU_IDS=1 BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=2 bash run_bash/rsunivlm_levircd.bash
 ```
 
-LoveDA 输出：`/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3`，与旧整图目录分开。
-LEVIR-CD 输出：`/root/data/experiment/rsunivlm_levircd_test_native_rle_symmetric_union_v2`。
+LoveDA 输出：`/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v4`，与旧整图目录分开。
+LEVIR-CD 输出：`/root/data/experiment/rsunivlm_levircd_test_native_rle_symmetric_union_v3`。
 通过条件：两份 `metrics.json` 均 `complete=true`、`processed_samples=2`、
 `is_full_benchmark=false`；检查 `pred_mask` 和 `raw_text` 是否符合预期。
 LoveDA两张1024原图应有8份裁块文本，逐图记录`source_tile_size=512,num_tiles=4`；完整预测与GT尺寸相同，metrics.json的descriptor_shape_counts总数应为8；具体形状不强制全部24×24。
@@ -199,7 +261,7 @@ RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
 RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
 RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
 BOOTSTRAP_RSUNIVLM=0 MAX_SAMPLES=0 SAVE_IMAGES=0 \
-OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v4 \
 bash run_bash/rsunivlm_loveda.bash --loveda_tile_size 512
 # 如需LEVIR-CD，复用步骤1导出的权重路径：
 GPU_IDS=1 BOOTSTRAP_RSUNIVLM=0 bash run_bash/rsunivlm_levircd.bash

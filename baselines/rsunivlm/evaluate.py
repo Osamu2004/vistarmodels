@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import copy
 import csv
 import hashlib
 import io
@@ -47,6 +48,7 @@ from baselines.rsunivlm.protocols import (
     CD_PROMPT, GRID_SIZE, LOVEDA_PROMPT, MAX_DESCRIPTOR_SIDE, PROTOCOL_VERSION, RLE_GRID_POLICY,
     Sample, checkpoint_identity, decode_rle, discover, expected_samples,
     fingerprint, fuse_change, input_identity, loveda_spatial_settings, palette, restore_grid, source_revision,
+    FORMAT_RETRY_POLICY, format_retry_prompt,
 )
 
 
@@ -111,28 +113,69 @@ def decode_saved_response(record: dict[str, Any], dataset: str) -> np.ndarray:
 def query_grid(backend: Any, images: list[Image.Image], prompt: str, dataset: str,
                raw_path: Path, identity: str, *, overwrite: bool,
                spatial_metadata: dict[str, Any] | None = None) -> tuple[np.ndarray, bool]:
-    cached = None if overwrite else read_json(raw_path)
+    retries = getattr(backend, "format_retries", 0)
+    if retries not in (0, 1, 2):
+        raise ValueError("format_retries must be 0, 1 or 2")
+    cached = read_json(raw_path)
+    attempts: list[dict[str, Any]] = []
+    previous_failed: list[dict[str, Any]] = []
     if cached and cached.get("identity") == identity:
         try:
-            return decode_saved_response(cached, dataset), True
+            grid = decode_saved_response(cached, dataset)
         except (ValueError, KeyError):
-            pass
-    response = backend.generate(images, prompt)
-    # Keep the unmodified text even if strict decoding subsequently fails.
-    record = {"identity": identity, "prompt": prompt, "response": response}
-    generation = getattr(backend, "last_generation", None)
-    if isinstance(generation, dict):
-        record["generation"] = generation
-    if spatial_metadata is not None:
-        record["spatial"] = spatial_metadata
-    write_json(raw_path, record)
-    try:
-        grid = decode_saved_response(record, dataset)
-    except (ValueError, KeyError) as exc:
-        write_json(raw_path, {**record, "decode_error": str(exc)})
-        raise
-    write_json(raw_path, {**record, "grid_shape": list(grid.shape), "grid_policy": RLE_GRID_POLICY})
-    return grid, False
+            old = cached.get("attempts") or [{key: cached[key] for key in
+                ("prompt", "response", "generation", "decode_error") if key in cached}]
+            if retries and not overwrite:
+                attempts = copy.deepcopy(old)
+            else:
+                previous_failed = copy.deepcopy(cached.get("previous_failed_attempts", []) + old)
+        else:
+            if not overwrite:
+                return grid, True
+    if len(attempts) >= 1 + retries:
+        raise ValueError(f"All {1+retries} format attempts already failed; inspect {raw_path}")
+    for variant in range(len(attempts), 1 + retries):
+        actual_prompt = prompt if variant == 0 else format_retry_prompt(dataset, variant)
+        response = backend.generate(images, actual_prompt)
+        attempt = {"prompt_variant": variant, "prompt": actual_prompt, "response": response}
+        generation = getattr(backend, "last_generation", None)
+        if isinstance(generation, dict):
+            attempt["generation"] = copy.deepcopy(generation)
+        attempts.append(attempt)
+        record = {"identity": identity, "initial_prompt": prompt, **attempt,
+                  "attempts": attempts, "format_retry_policy": FORMAT_RETRY_POLICY,
+                  "format_retries_used": variant}
+        if previous_failed:
+            record["previous_failed_attempts"] = previous_failed
+        if spatial_metadata is not None:
+            record["spatial"] = spatial_metadata
+        # Persist the untouched model answer before attempting any parsing.
+        write_json(raw_path, record)
+        try:
+            grid = decode_saved_response(record, dataset)
+        except (ValueError, KeyError) as exc:
+            attempt["decode_error"] = str(exc)
+            write_json(raw_path, {**record, "decode_error": str(exc)})
+            if variant == retries:
+                if retries:
+                    print(f"[RSUniVLM format] All {1+retries} attempts failed; raw answers: {raw_path}", flush=True)
+                raise
+            print(f"[RSUniVLM format] {raw_path.name}: {exc}; "
+                  f"regenerate from the same image ({variant+1}/{retries} retries)", flush=True)
+        else:
+            write_json(raw_path, {**record, "grid_shape": list(grid.shape), "grid_policy": RLE_GRID_POLICY})
+            return grid, False
+    raise RuntimeError("Unreachable format-retry state")
+
+
+FORMAT_AUDIT_FIELDS = ("format_queries", "format_attempts", "format_retry_queries", "format_retry_attempts")
+
+
+def query_format_audit(raw_path: Path) -> dict[str, int]:
+    record = read_json(raw_path) or {}
+    retry_count = int(record.get("format_retries_used", 0))
+    return dict(format_queries=1, format_attempts=1+retry_count,
+                format_retry_queries=int(retry_count > 0), format_retry_attempts=retry_count)
 
 
 def predict_loveda_tiled(backend: Any, image: Image.Image, sample: Sample,
@@ -148,6 +191,7 @@ def predict_loveda_tiled(backend: Any, image: Image.Image, sample: Sample,
     prediction = np.empty((height, width), dtype=np.uint8)
     queries, reused_queries = 0, 0
     descriptor_shapes: list[list[int]] = []
+    format_audit = {key: 0 for key in FORMAT_AUDIT_FIELDS}
     # Iterate row-major like Alters. Only one padded source tile is live at a
     # time; GT is not read or passed into this function.
     for y in range(0, height, tile_size):
@@ -162,6 +206,8 @@ def predict_loveda_tiled(backend: Any, image: Image.Image, sample: Sample,
             raw_path = raw_dir / f"{sample.name}_tile{tile_size}_y{y}_x{x}_seg.json"
             grid, reused = query_grid(backend, [tile], LOVEDA_PROMPT, "loveda",
                 raw_path, tile_id, overwrite=overwrite, spatial_metadata=tile_metadata)
+            for key, value in query_format_audit(raw_path).items():
+                format_audit[key] += value
             # Do not resize the descriptor directly to a partial border crop:
             # that would stretch the prediction for the padded region into GT.
             restored = restore_grid(grid, (tile_size, tile_size))
@@ -171,7 +217,7 @@ def predict_loveda_tiled(backend: Any, image: Image.Image, sample: Sample,
             reused_queries += int(reused)
     return prediction, dict(queries=queries, reused_queries=reused_queries,
                             num_tiles=queries, source_tile_size=tile_size,
-                            descriptor_shapes=descriptor_shapes)
+                            descriptor_shapes=descriptor_shapes, **format_audit)
 
 
 def predict_sample(backend: Any, images: list[Image.Image], sample: Sample, dataset: str,
@@ -184,26 +230,32 @@ def predict_sample(backend: Any, images: list[Image.Image], sample: Sample, data
         if loveda_tile_size:
             return predict_loveda_tiled(backend, images[0], sample, raw_dir, identity,
                                        tile_size=loveda_tile_size, overwrite=overwrite)
+        raw_path = raw_dir / f"{sample.name}_seg.json"
         grid, reused = query_grid(backend, images, LOVEDA_PROMPT, dataset,
-                                  raw_dir / f"{sample.name}_seg.json", identity, overwrite=overwrite)
+                                  raw_path, identity, overwrite=overwrite)
         return restore_grid(grid, (images[0].height, images[0].width)), {
             "queries": 1, "reused_queries": int(reused), "descriptor_shapes": [list(grid.shape)],
+            **query_format_audit(raw_path),
         }
     grids, reused_count = [], 0
+    format_audit = {key: 0 for key in FORMAT_AUDIT_FIELDS}
     directions = ("forward", "reverse") if cd_direction == "symmetric_union" else ("forward",)
     for direction in directions:
         temporal_images = images if direction == "forward" else list(reversed(images))
+        raw_path = raw_dir / f"{sample.name}_{direction}.json"
         grid, reused = query_grid(
             backend, temporal_images, CD_PROMPT, dataset,
-            raw_dir / f"{sample.name}_{direction}.json",
+            raw_path,
             fingerprint([identity, direction]), overwrite=overwrite,
         )
         grids.append(grid)
         reused_count += int(reused)
+        for key, value in query_format_audit(raw_path).items():
+            format_audit[key] += value
     restored = [restore_grid(grid, (images[0].height, images[0].width)) for grid in grids]
     return fuse_change(restored), {
         "queries": len(directions), "reused_queries": reused_count,
-        "descriptor_shapes": [list(grid.shape) for grid in grids],
+        "descriptor_shapes": [list(grid.shape) for grid in grids], **format_audit,
     }
 
 
@@ -275,6 +327,8 @@ def score(prediction: np.ndarray, target: np.ndarray, dataset: str,
 
 def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
                      base_identity: dict[str, Any]) -> dict[str, Any]:
+    if getattr(backend, "format_retries", 0) != getattr(args, "format_retries", 0):
+        raise ValueError("Backend format-retry budget differs from the recorded evaluation policy")
     tile_size = args.loveda_tile_size if dataset == "loveda" else 0
     spatial = loveda_spatial_settings(tile_size) if dataset == "loveda" else None
     root_value = args.data_root or (args.loveda_root if dataset == "loveda" else args.levircd_root)
@@ -292,6 +346,7 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
         **base_identity, "dataset": dataset, "split": split,
         "dataset_population": fingerprint(input_manifest), "discovered_samples": total,
         "prompt": LOVEDA_PROMPT if dataset == "loveda" else CD_PROMPT,
+        "format_retries": getattr(args, "format_retries", 0), "format_retry_policy": FORMAT_RETRY_POLICY,
         "cd_direction": args.cd_direction if dataset == "levircd" else None,
         "nominal_grid_size": GRID_SIZE, "rle_grid_policy": RLE_GRID_POLICY,
         "max_descriptor_side": MAX_DESCRIPTOR_SIDE, "restoration": "nearest_to_native_extent",
@@ -332,6 +387,7 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
             "model": "RSUniVLM", "dataset": audit["dataset"], "split": split,
             "protocol_version": PROTOCOL_VERSION, "rle_grid_policy": RLE_GRID_POLICY,
             "nominal_grid_size": GRID_SIZE,
+            "format_retries": getattr(args, "format_retries", 0), "format_retry_policy": FORMAT_RETRY_POLICY,
             "complete": False, "is_full_benchmark": False, "discovered_samples": total,
             "selected_samples": len(selected), "expected_samples": expected,
             "identity": config_id, "metric_scale": "0..1 (percent fields explicitly suffixed)",
@@ -355,7 +411,10 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
                     shape=target.shape, num_classes=len(classes),
                 )
                 reused = prediction is not None
-                query_info: dict[str, Any] = {"descriptor_shapes": saved_receipt.get("descriptor_shapes", [])} if reused else {}
+                query_info: dict[str, Any] = {
+                    "descriptor_shapes": saved_receipt.get("descriptor_shapes", []),
+                    **saved_receipt.get("format_audit", {}),
+                } if reused else {}
                 if prediction is None:
                     prediction, query_info = predict_sample(
                         backend, images, sample, dataset, dirs["raw_text"], item_id,
@@ -365,7 +424,8 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
                     save_prediction(pred_path, prediction if dataset == "loveda" else prediction * 255)
                     write_json(receipt_path, {"identity": item_id,
                                "prediction_sha256": hashlib.sha256(prediction.tobytes()).hexdigest(),
-                               "descriptor_shapes": query_info["descriptor_shapes"]})
+                               "descriptor_shapes": query_info["descriptor_shapes"],
+                               "format_audit": {key: query_info[key] for key in FORMAT_AUDIT_FIELDS}})
                 if args.save_images:
                     save_images(dirs, sample, images, prediction, target, dataset)
                 item_confusion, metrics = score(prediction, target, dataset, boundary_wfm=args.boundary_wfm)
@@ -400,7 +460,9 @@ def evaluate_dataset(args: argparse.Namespace, dataset: str, backend: Any,
         shape_counts = Counter(f"{shape[0]}x{shape[1]}" for row in rows for shape in row.get("descriptor_shapes", []))
         result.update({"complete": True, "is_full_benchmark": full,
                        "processed_samples": len(rows), "scores": scores,
-                       "confusion_matrix": confusion.tolist(), "descriptor_shape_counts": dict(shape_counts)})
+                       "confusion_matrix": confusion.tolist(), "descriptor_shape_counts": dict(shape_counts),
+                       "format_audit": {key: sum(int(row.get(key, 0)) for row in rows)
+                                        for key in FORMAT_AUDIT_FIELDS}})
         atomic_text(output / "predictions.jsonl", "".join(json.dumps(x, allow_nan=False) + "\n" for x in rows))
         csv_rows = []
         for class_id, name in enumerate(classes):
@@ -421,6 +483,7 @@ class LazyModel:
     """Read and rescore caches without loading CUDA weights unnecessarily."""
     def __init__(self, args: argparse.Namespace) -> None:
         self.args, self.model = args, None
+        self.format_retries = getattr(args, "format_retries", 0)
 
     @property
     def last_generation(self) -> dict[str, Any]:
@@ -452,6 +515,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dtype", choices=("float16", "bfloat16"), default="float16")
     parser.add_argument("--attention", choices=("eager", "sdpa", "flash_attention_2"), default="eager")
     parser.add_argument("--max_new_tokens", type=int, default=8192)
+    parser.add_argument("--format_retries", type=int, choices=(0, 1, 2), default=2,
+                        help="Fixed format-only retry prompts; first valid answer, no GT/metric selection")
     parser.add_argument("--cd_direction", choices=("symmetric_union", "forward"), default="symmetric_union")
     parser.add_argument("--max_samples", type=int, default=0)
     parser.add_argument("--loveda_tile_size", type=int, choices=(0, 512), default=512,

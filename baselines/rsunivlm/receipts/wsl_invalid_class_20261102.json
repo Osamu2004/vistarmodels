@@ -1,0 +1,19 @@
+{
+  "evidence_origin": "user_pasted_wsl_output",
+  "received_date": "2026-11-02",
+  "source_path": "/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v3/raw_text/Val_Rural_2530_tile512_y512_x0_seg.json",
+  "decode_error": "Unknown loveda label 'class ' at row 24",
+  "generation": {
+    "sequence_tokens": 124,
+    "max_new_tokens": 8192,
+    "ended_with_eos": true,
+    "hit_token_limit": false,
+    "attention_mask": "all_valid_single_prompt",
+    "decoding": "greedy"
+  },
+  "prompt": "[SEG] Please segment this remote-sensing image into the following classes: background, building, road, water, barren, forest, agriculture. Output only the 24-by-24 segmentation mask in row-wise run-length format: class*count, class*count, with one row per line.",
+  "response": "others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *24\n others *23, class *1",
+  "completed_native_images_before_failure": 8,
+  "full_benchmark": false,
+  "diagnosis": "unknown name inside final mask row; not a trailer and not token-budget truncation"
+}

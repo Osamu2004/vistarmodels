@@ -16,9 +16,9 @@ export PYTHONUNBUFFERED=1
 export RSUNIVLM_ROOT="${RSUNIVLM_ROOT:-${ROOT_DIR}/third_party/RSUniVLM}"
 export RSUNIVLM_MODEL_PATH="${RSUNIVLM_MODEL_PATH:-/root/data/weight/rsunivlm/llava-qwen-gmoe}"
 if [[ "${DATASET}" == "levircd" ]]; then
-  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_levircd_native_rle_v2}"
+  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_levircd_native_rle_v3}"
 else
-  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_${DATASET}_native_tile${TILE_SIZE}_rle_v3}"
+  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_${DATASET}_native_tile${TILE_SIZE}_rle_v4}"
 fi
 
 CMD=("${PYTHON_BIN}" "${ROOT_DIR}/baselines/rsunivlm/evaluate.py"
@@ -29,6 +29,7 @@ CMD=("${PYTHON_BIN}" "${ROOT_DIR}/baselines/rsunivlm/evaluate.py"
   --split "${SPLIT:-test}" --device cuda:0
   --dtype "${DTYPE:-float16}" --attention "${ATTENTION:-eager}"
   --max_new_tokens "${MAX_NEW_TOKENS:-8192}"
+  --format_retries "${FORMAT_RETRIES:-2}"
   --max_samples "${MAX_SAMPLES:-0}"
   --loveda_tile_size "${TILE_SIZE}"
   --cd_direction "${CD_DIRECTION:-symmetric_union}")
