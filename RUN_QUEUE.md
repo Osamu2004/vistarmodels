@@ -4,6 +4,27 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### v2总队列：七集依次推理，双GPU分片
+
+用户要求总队列运行命令。前提：已导入v2包，建议先完成下方四对SECOND类别查询与LEVIR核对；当前尚未收到新版真实前向完成回执。以下沿用总队列最多两次固定格式重试，SECOND保留六类无方向掩码及mIoU_c/mF1_c，LEVIR无方向二值建筑变化、每块查询一次。所有模型输入、裁块和评分以新协议记录，不导入旧七类/双向结果；新建输出目录，原结果保留。此次只补充命令，现有v2包无需重下。
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 PLAN_ONLY=0 \
+FORMAT_RETRIES=2 \
+DATASETS=loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second \
+DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_paper_undirected6_tile512_bs16_2gpu_v2 \
+bash run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+每个GPU工作进程按上述列表依次处理自己的互斥样本分片，首次前向加载模型后复用；两卡之间不要求逐集同步。请求每卡16，实际尾批/格式重试/显存不足时可更小。最终合并各集统计，输出paper_summary.json/csv；完整七集需complete=true、is_full_benchmark=true，任何失败仍保留incomplete，不能跳过后发布为完整结果。
+
+若只排队重跑本次改过的变化检测两集，使用相同入口，将DATASETS设为`levircd,second`，同时OUTPUT_DIR改为`/root/data/experiment/rsunivlm_cd_undirected6_tile512_bs16_2gpu_v2`。这是两集子队列，不称作完整七集；各单集仍分别核对128和593的完整群体。
+
 ### 当前优先：SECOND保留六类的无方向语义变化
 
 用户明确“不是二值变化，类别也要，只是无方向”。当前SECOND已改为water/bare land/low vegetation/tree/building/playground六类分别查询，每类每块只输入一次(T1,T2)，不交换时相、不对预测做OR；保留六类mIoU_c/mF1_c。类别可以重叠，例如树木变建筑，两类变化都计入。GT仍是两份原始0..6语义标注，不做整体二值化。详见`baselines/rsunivlm/SECOND_UNDIRECTED.md`。状态：本机静态核对，WSL测试/真实前向尚待执行。
