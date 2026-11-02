@@ -4,9 +4,11 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
-### 当前优先：LEVIR官方提示词、A/B单向、二值建筑变化
+### 当前优先：LEVIR无方向二值建筑变化，每对查询一次
 
 用户要求先只修改LEVIR。新入口保留512源图裁块、双GPU和每卡batch16；只查询(A,B)，不做reverse/OR，首轮使用官方CD_PROMPT。核对入口默认FORMAT_RETRIES=0，仅使用原始提示词，不把格式重试当作官方流程。SECOND不在本次入口中。详见`baselines/rsunivlm/LEVIR_FORWARD.md`。本机只静态检查，不跑模型/测试；WSL实际核对尚待执行。
+
+用户进一步明确任务不要方向性：LEVIR原生GT和现有评分已是无方向二值建筑变化，新增/拆除统一为前景，未按新增/消失分别预测或评分。代码和目录里的forward仅标识固定(A,B)输入一次，现统一称“每对查询一次”，不声称输入交换的模型输出必然一致。此次仅澄清术语，不改提示词/数值源码/缓存身份，无需重下fbe00fd离线包；下方命令保持可用。
 
 离线包`output/offline/rsunivlm_levircd_forward_20261102.bundle`包含完整main历史，不含权重/数据；复制到WSL项目目录后更新：
 

@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：澄清LEVIR任务无方向，forward仅是一次输入调用标识
+
+用户要求不要有方向的任务。重新读取LEVIR官方页面确认其building growth/decline统一标为change=1；只读核对当前load_targets直接将原始0/1/255标签转为(raw>0)，没有按某期建筑类别分割或筛选。现有输出/IoU/F1因此已经针对无方向二值建筑变化。
+
+将当前文档名称和说明改为“无方向二值建筑变化，每对查询一次”。保留(A,B)固定输入、官方原始提示词、无reverse/OR、512裁块和全部评分代码；未声称交换图像后模型输出必然相同。本次只有文档澄清，不改变数值源码/协议身份，不需重新下载fbe00fd离线包；未运行测试、模型或远程任务。
+
 ## 2026-11-02：按用户要求先修正LEVIR为单向二值查询
 
 队列LEVIR首轮prompt直接使用官方CD_PROMPT，方向固定forward，缓存/输出键改为forward，移除LEVIR reverse生成与OR合并；GT二值解码与IoU/F1、512源图几何、模型/权重、双卡调度、任意batch及OOM策略保持。协议新增levircd_query元数据，旧OR运行身份不兼容，新目录隔离且不导入旧掩码/原文。独立旧Python/启动器默认方向也改为forward，显式legacy symmetric_union仍可用于历史复现。
