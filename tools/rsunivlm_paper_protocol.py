@@ -191,6 +191,8 @@ def decode(record,dataset):
         if lines[-1].strip()!="```": raise ValueError("Unclosed code fence")
         text="\n".join(lines[1:-1])
     rows=[line.strip() for line in text.splitlines() if line.strip()]
+    if rows and rows[0].casefold() in ("mask:","segmentation mask:","[seg]"):
+        rows=rows[1:]
     if not 1<=len(rows)<=64: raise ValueError("Expected 1..64 descriptor rows")
     decoded=[]
     width=None

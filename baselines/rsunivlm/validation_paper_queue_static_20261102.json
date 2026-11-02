@@ -49,7 +49,7 @@
   ],
   "new_source_sha256": {
     "tools/eval_rsunivlm_paper_queue.py": "3822559c481ca586be4b9654a9e3edb3abc5d3fc7ef6daed13d600c224271218",
-    "tools/rsunivlm_paper_protocol.py": "180325ecc4ee96c318970cda68336ed4cef3a08302377cad5b921a78590396bf",
+    "tools/rsunivlm_paper_protocol.py": "11886ec48705cfb2cc86998e6ab52278a1f69da02adfb0d2bd6dbc4508677182",
     "tools/rsunivlm_paper_worker.py": "1e252b0c586fe52ccbcec48ba7863d2ce75b21db695634a44042bb0b005545cb",
     "tools/rsunivlm_batch_runtime.py": "0aa32aca38917116d25730689833cce85a412dd5e6555dad6331522e9d0d3f22",
     "tools/rsunivlm_batch_prefetch.py": "06a18646b2607d7940c259247c7f2a827a86047e3191909e25c794a751db7ec6",
