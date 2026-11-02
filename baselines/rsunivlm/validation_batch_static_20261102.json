@@ -1,0 +1,37 @@
+{
+  "schema": "rsunivlm_batch_static_validation_v1",
+  "date": "2026-11-02",
+  "base_commit": "856308fc9be4992fcbcac54f8dad01296993471d",
+  "ast_parsed": [
+    "tools/rsunivlm_batch_runtime.py",
+    "tools/rsunivlm_batch_import.py",
+    "tools/eval_rsunivlm_batched.py",
+    "tests/test_rsunivlm_batch_runtime.py"
+  ],
+  "bash_syntax_checked": [
+    "run_bash/rsunivlm_eval.bash",
+    "run_bash/rsunivlm_loveda.bash"
+  ],
+  "unchanged_sources_sha256": {
+    "baselines/rsunivlm/__init__.py": "8cf55428f9ab3228ef672f750104b33b6f81c78f4b1899e3a8621b337815073c",
+    "baselines/rsunivlm/evaluate.py": "fa49e52d9887c5b9cbd23abf802aa3d99d5aa4e2a8f979af0b73f65b95f42aa5",
+    "baselines/rsunivlm/model.py": "2fa3383d73aff44e839d33c14773c146969b862083ea0a0fdc0743950825b449",
+    "baselines/rsunivlm/protocols.py": "0254d577295afb0205642d6aa1188e32accda52092d4b02aa9dba81b84cc8c4a",
+    "baselines/binary_boundary_wfm.py": "838044f7b0b5f5446e343cef55f31a1f8c11391a7212afd455b6d999b33edd5b",
+    "baselines/segearth_ov/protocols.py": "2082658e51f96bf361cada2c5c4c258f535b7c2cf29b0e3fb0ea1215a675e94c",
+    "baselines/levircd_common.py": "f40e3ca5c7d33caab1ca63421b63c74484075dfe7fddc6937d0518ebafbbeb84"
+  },
+  "tests_executed": false,
+  "model_loaded": false,
+  "gpu_executed": false,
+  "remote_executed": false,
+  "authored_wsl_regressions": "tests/test_rsunivlm_batch_runtime.py",
+  "pending": [
+    "WSL regression execution",
+    "actual batch and single-image comparison",
+    "steady new-image throughput",
+    "peak GPU memory",
+    "full LoveDA metrics"
+  ],
+  "scope": "Static checks only; original RSUniVLM package and metric sources remain byte-identical"
+}

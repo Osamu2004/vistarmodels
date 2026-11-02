@@ -4,7 +4,40 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
-### 最新回执：v4九图通过，按固定协议续跑全量
+### 当前：v4在163张后遇bareland中断，v5映射恢复＋512裁块batch4
+
+状态：用户已提供v4中断回执；v5代码只经本机静态检查，未运行本机测试或模型，尚无WSL执行回执。不要把旧九图或163张进度写成完整基准成绩。详见`baselines/rsunivlm/BATCHING.md`，错误归档于`receipts/wsl_loveda_v4_bareland_failure_20261102.json`。
+
+依赖/环境：沿用已安装的`vistar_rsunivlm`，不重装torch。数据`/root/data/LoveDA`、主权重和本地SigLIP路径均沿用用户已有目录。终端为WSL，使用空闲物理GPU1、单进程；同一个输出根只开一个作业。先前v4需已停止，导入器会检查源运行锁；本机没有该WSL连接，不代为启动。
+
+~~~bash
+cd /root/code/vistarmodels
+git pull --ff-only
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+# 可选：仅在WSL运行合成回归；本机未执行这些测试
+python -m pytest tests/test_rsunivlm_batch_runtime.py -q
+
+GPU_IDS=1 NPROC_PER_NODE=1 TILE_SIZE=512 TILE_BATCH_SIZE=4 \
+DATA_ROOT=/root/data/LoveDA SPLIT=val \
+RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
+RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
+RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
+BOOTSTRAP_RSUNIVLM=0 FORMAT_RETRIES=2 MAX_SAMPLES=0 SAVE_IMAGES=0 \
+VERIFY_BATCH=1 \
+IMPORT_V4_ROOT=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v4 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v5_bs4 \
+bash run_bash/rsunivlm_loveda.bash
+~~~
+
+`bareland`/`bare land`明确映射到`barren`，未知词和缺计数的`water`仍重试，不猜类别。batch4是四个独立512裁块，不是四图拼成一个问题；OOM自动降2/1，batch1仍OOM则停。原模型/384视觉输入/greedy/8192 token/两次固定格式重试保持。首次实际batch大小>1会与单图输出检查，首批额外耗时；不匹配停止并查看`batch_verification.json`，不追加当前原图分数。
+
+先核验旧checkpoint/协议/输入元数据/裁块与提示身份，通过后只导入旧raw_text，按新增别名选择最早合法回答，重新构建掩码和评分，保留全部历史尝试。旧163张因此不需再次生成；重评分和读盘仍耗时。保留v4，不复制旧分数，不用OVERWRITE。源/目标身份不匹配、格式预算耗尽或batch不一致则停，不能跳图。GPU执行/全量成绩待用户回执。
+
+产物：v5的`pred_mask/`、`raw_text/`、`receipts/`、`metrics.json`、`per_class_metrics.csv`、`predictions.jsonl`、`cache_import.json`、`batch_verification.json`、`scoring_timing.jsonl`。SAVE_IMAGES=0不存其他图片。通过条件仍为processed_samples=1669、complete=true、is_full_benchmark=true，并保留协议与format_audit。真实新样本的速度看后续稳定图的generate/score耗时，不能用旧163张缓存重评分速度估算。
+
+### 历史回执：v4九图通过及随后全量命令
 
 用户WSL回执：9/9，complete=true、is_full_benchmark=false，36个512裁块全部为23×24合法原生矩形；5个查询各重试一次，共41次生成，均已恢复。合并mIoU=11.1732%、mF1=16.5885%、像素准确率52.9201%；仅9图，不能作为全量论文分数。进度条末尾0.0685是最后一张图，不能代替合并结果。格式链路通过，分割质量仍明显偏背景，原因尚未确定，不能将与旧两图不同的分数解释成精度提升。证据见baselines/rsunivlm/receipts/wsl_loveda_v4_smoke9_20261102.json。
 
@@ -25,7 +58,7 @@ OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v4 \
 bash run_bash/rsunivlm_loveda.bash
 ~~~
 
-完成条件：processed_samples=1669、complete=true、is_full_benchmark=true，并保留format_audit与源协议。仅保存预测掩码及必要RLE/评分回执。若某裁块三次仍非法则停止，回传该raw_text.attempts，不跳过样本、不填背景、不标记全量成功。当前全量未启动/未完成，本机没有WSL连接与GPU任务回执。
+完成条件：processed_samples=1669、complete=true、is_full_benchmark=true，并保留format_audit与源协议。仅保存预测掩码及必要RLE/评分回执。若某裁块三次仍非法则停止，回传该raw_text.attempts，不跳过样本、不填背景、不标记全量成功。后续全量已由用户启动并在163张后中断，当前处理见本节顶部；本机没有WSL连接。
 
 ### 当前入口：v4去除占位词，有限格式重试；先覆盖原失败的前9张
 

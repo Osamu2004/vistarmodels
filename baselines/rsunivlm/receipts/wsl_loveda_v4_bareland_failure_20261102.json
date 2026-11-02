@@ -1,0 +1,17 @@
+{
+  "schema": "user_reported_wsl_rsunivlm_failure_v1",
+  "date": "2026-11-02",
+  "source": "user pasted WSL terminal output",
+  "output_dir": "/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v4",
+  "reported_progress": {"processed": 163, "total": 1669},
+  "failed_sample": "Val_Rural_2685",
+  "failed_raw_filename": "Val_Rural_2685_tile512_y0_x0_seg.json",
+  "error": "Unknown loveda label 'bareland ' at row 22",
+  "reported_total_failed_attempts": 3,
+  "earlier_error_for_this_query": "Invalid RLE item at row 1: 'water'",
+  "complete": false,
+  "is_full_benchmark": false,
+  "raw_response_provided": false,
+  "full_scores_provided": false,
+  "action": "explicit bareland to barren alias in a new protocol; validate and import raw answers, reconstruct masks and rescore; batch independent 512 tiles"
+}

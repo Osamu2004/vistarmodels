@@ -1,5 +1,15 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：v4在bareland中断，准备v5裁块batch4与原文恢复
+
+用户全量回执停在163/1669，失败原图Val_Rural_2685、裁块y0_x0，最后错误是第22行`bareland`；三次既有格式预算耗尽。新增回执`receipts/wsl_loveda_v4_bareland_failure_20261102.json`只记录已提供的错误和进度，不捏造原文或完整指标。`bareland`明确对应LoveDA barren，新增两种显式别名，其余未知词及无计数`water`仍严格拒绝。
+
+新增tools下的独立v5入口，原RSUniVLM包Python字节不变。每序列一图、固定提示/expert2/greedy/384视觉输入，原512非重叠拼接和评分函数保留。请求batch4，CUDA OOM拆分2/1，首批各大小对照原单图并记录一致性（不读取GT）；格式失败子集按既有固定提示重试。不同协议使用独立v5目录，身份包含新增映射、batch和扩展源码哈希。
+
+通过旧协议/输入/裁块/提示核验后只导入v4原文，选择扩展别名下最早合法的存储回答，重建预测并重新评分，保留原始尝试和导入来源。能避免已完成163张再次生成，但仍需CPU评分；旧分数/PNG不复制，旧目录不覆盖。新增逐图生成与评分耗时，SAVE_IMAGES=0仍只保存预测掩码及必要文本/评分。操作命令见RUN_QUEUE，设计细节见BATCHING.md。
+
+遵照用户“这里不测试，先push、WSL测试”，只做AST、bash语法、旧数值源码保护检查；WSL合成测试仅编写未运行，无本机模型或GPU任务。实际吞吐/显存/数值一致性/全量精度均待WSL回执，不能写为已通过。meta警告也不能仅凭无残留meta就宣称所有视觉权重数值已核对。
+
 ## 2026-11-02：v4九图WSL成功回执，准备固定协议全量
 
 用户回传v4结果：9/9 complete=true但is_full_benchmark=false，identity=767f4ad67e7e48c50ec58f8797038238bef83bb13e6104b792557eaf47f88bc8。36个原图裁块均23×24，format_queries=36、format_attempts=41、format_retry_queries/attempts均5；出现water缺少计数及remote-sensing未知标签的查询经固定格式重试恢复，未用GT补造掩码。原第9张已包含在完成集合，证明本次有限恢复链路在该小集合可运行，不等于全量保证或CPU回归已执行。

@@ -6,6 +6,18 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 DATASET="${RSUNIVLM_DATASET:-both}"
 TILE_SIZE="${TILE_SIZE:-512}"
 GPU_IDS="${GPU_IDS:-0}"
+TILE_BATCH_SIZE="${TILE_BATCH_SIZE:-1}"
+ENTRY="${ROOT_DIR}/baselines/rsunivlm/evaluate.py"
+EXTRA=()
+if [[ "${TILE_BATCH_SIZE}" != "1" || -n "${IMPORT_V4_ROOT:-}" ]]; then
+  if [[ "${DATASET}" != "loveda" || "${TILE_SIZE}" != "512" ]]; then
+    echo "Batched inference is scoped to LoveDA with 512 source tiles." >&2
+    exit 1
+  fi
+  ENTRY="${ROOT_DIR}/tools/eval_rsunivlm_batched.py"
+  EXTRA=(--tile_batch_size "${TILE_BATCH_SIZE}" --verify_batch "${VERIFY_BATCH:-1}")
+  if [[ -n "${IMPORT_V4_ROOT:-}" ]]; then EXTRA+=(--import_v4_root "${IMPORT_V4_ROOT}"); fi
+fi
 if [[ "${NPROC_PER_NODE:-1}" != "1" || "${GPU_IDS}" == *,* ]]; then
   echo "RSUniVLM uses one process/one GPU per output; launch separate dataset jobs for two GPUs." >&2
   exit 1
@@ -15,13 +27,15 @@ export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 export RSUNIVLM_ROOT="${RSUNIVLM_ROOT:-${ROOT_DIR}/third_party/RSUniVLM}"
 export RSUNIVLM_MODEL_PATH="${RSUNIVLM_MODEL_PATH:-/root/data/weight/rsunivlm/llava-qwen-gmoe}"
-if [[ "${DATASET}" == "levircd" ]]; then
+if [[ "${ENTRY}" == "${ROOT_DIR}/tools/eval_rsunivlm_batched.py" ]]; then
+  OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_loveda_val_native_tile${TILE_SIZE}_rle_v5_bs${TILE_BATCH_SIZE}}"
+elif [[ "${DATASET}" == "levircd" ]]; then
   OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_levircd_native_rle_v3}"
 else
   OUTPUT_DIR="${OUTPUT_DIR:-/root/data/experiment/rsunivlm_${DATASET}_native_tile${TILE_SIZE}_rle_v4}"
 fi
 
-CMD=("${PYTHON_BIN}" "${ROOT_DIR}/baselines/rsunivlm/evaluate.py"
+CMD=("${PYTHON_BIN}" "${ENTRY}"
   --dataset "${DATASET}" --source_root "${RSUNIVLM_ROOT}"
   --model_path "${RSUNIVLM_MODEL_PATH}" --output_dir "${OUTPUT_DIR}"
   --loveda_root "${LOVEDA_ROOT:-/root/data/LoveDA}"
@@ -33,6 +47,7 @@ CMD=("${PYTHON_BIN}" "${ROOT_DIR}/baselines/rsunivlm/evaluate.py"
   --max_samples "${MAX_SAMPLES:-0}"
   --loveda_tile_size "${TILE_SIZE}"
   --cd_direction "${CD_DIRECTION:-symmetric_union}")
+CMD+=("${EXTRA[@]}")
 if [[ -n "${DATA_ROOT:-}" ]]; then CMD+=(--data_root "${DATA_ROOT}"); fi
 if [[ -n "${RSUNIVLM_VISION_TOWER:-}" ]]; then CMD+=(--vision_tower "${RSUNIVLM_VISION_TOWER}"); fi
 if [[ "${SAVE_IMAGES:-0}" == "0" ]]; then CMD+=(--no-save_images); fi
