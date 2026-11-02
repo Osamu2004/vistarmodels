@@ -1,0 +1,25 @@
+{
+  "schema": "rsunivlm_user_failure_receipt_v1",
+  "date": "2026-11-02",
+  "evidence": "User pasted terminal tail; raw JSON responses and full summary not yet provided",
+  "output_dir": "/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_p9c14c4b854db",
+  "queue_complete": false,
+  "observed_worker_rank": 0,
+  "dataset": "second",
+  "processed_in_observed_shard": 1,
+  "assigned_in_observed_shard": 297,
+  "observed_actual_retry_batches": [13, 12],
+  "images_per_sequence": 2,
+  "observed_errors": [
+    "Unknown second category land-cover / land Cover / land_cover",
+    "Refusing a truncated descriptor without EOS",
+    "Format budget exhausted"
+  ],
+  "terminal_failure_file": "second/shards/rank000/raw_text/00031_forward_y0_x0.json",
+  "other_datasets_completion": "unknown from pasted tail",
+  "other_worker_completion": "unknown from pasted tail",
+  "oom_observed": false,
+  "complete_benchmark_score": null,
+  "live_remote_reverification": false,
+  "protocol_status": "Seven-class categorical and bidirectional OR are adapter extensions, not the native official change demo"
+}

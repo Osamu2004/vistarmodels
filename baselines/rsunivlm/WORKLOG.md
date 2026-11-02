@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：SECOND旧适配失败；纠正原生变化检测接口
+
+用户完整队列尾部回执最终complete=False，GPU0 SECOND仅处理1/297便因00031_forward格式预算耗尽结束；重试子集实际batch13/12，出现land-cover等未知类别及一份未EOS截断。本轮尚未取得完整汇总、原始回答或GPU1结果，不猜测其他六集状态。
+
+用户连续纠正“未变化＋六类方向变化”、要求按LEVIR处理，并指出原本没有双向OR。重新读官方app.py/main与论文v2确认：公开例子为指定类别的单次有序双图二值变化查询；未实现反向OR，公开CD结果在WHU-CD，未提供SECOND六类适配的验证。此前把Alters/DynamicEarth外部协议说成RSUniVLM原生流程不准确；记录NATIVE_CHANGE_AUDIT并标记旧队列历史适配说明。临时逐类双向OR helper与测试未运行，按用户纠正撤回，未发布。旧数值源码、缓存、预测和论文保持；后续应先核对官方单向二值接口，不自动将SECOND改成二值后冒充六类指标。
+
 ## 2026-11-02：七集共同预检全部通过，准备正式双卡推理
 
 用户WSL回执在同一次计划中发现LoveDA1669、FLAIR15700、UAVid270、xBD-pre933（test/pre-disaster）、CHN6-CUG903、LEVIR-CD128、SECOND593，最终`Preflight passed; no model loaded and no GPU process started.`。七集计划与原UAVid单集配置不同，脚本保留旧目录并解析到`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_p9c14c4b854db`，属正常保护，不是失败。

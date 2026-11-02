@@ -6,6 +6,8 @@
 
 ### 当前交付：论文七集队列，任意正整数batch，双GPU分片
 
+**最新纠正：旧七集试跑最终complete=False，GPU0 SECOND因未知类别词和格式预算耗尽而未完成。用户已指出SECOND不应套“未变化＋六类”一次输出，也不应把双向OR当作模型原生流程。下面保留的旧七集正式命令是历史适配版本，当前不要照抄重跑；数据预检通过仍有效，但不能代替任务接口验证。** 先保留全部原文、预测和汇总；其他六集及GPU1完成状态尚待完整paper_summary.json。原生接口核对与下一步见`baselines/rsunivlm/NATIVE_CHANGE_AUDIT.md`，失败回执见`baselines/rsunivlm/receipts/wsl_paper_second_format_failure_20261102.json`。本轮未发布替代数值实现、未改旧代码/缓存身份、未启动新推理。
+
 2026-11-02最新状态：用户WSL七集共同预检已通过，顺序/数量为LoveDA1669、FLAIR15700、UAVid270、xBD-pre933、CHN6-CUG903、LEVIR-CD128、SECOND593。有效新路径为`/root/data/flair#1-test`、`/root/data/uavid`、`/root/data/xview2`；其余根目录保持配置JSON记录。脚本保留旧单集预检目录，七集完整计划正常写到`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_p9c14c4b854db`。最终明确未加载模型、未启动GPU进程；本回执不是推理/吞吐/显存或成绩验证。见`baselines/rsunivlm/receipts/wsl_paper_all7_preflight_20261102.json`。
 
 正式启动命令（已预检；仍需用户在WSL执行，本机不代启动）。不必为本轮文档回执更新再次下载代码包；保持输入、源码及设置不变时，原请求输出根会解析到上面的p9c14c4b854db目录：
