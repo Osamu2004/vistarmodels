@@ -1,5 +1,13 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：v4九图WSL成功回执，准备固定协议全量
+
+用户回传v4结果：9/9 complete=true但is_full_benchmark=false，identity=767f4ad67e7e48c50ec58f8797038238bef83bb13e6104b792557eaf47f88bc8。36个原图裁块均23×24，format_queries=36、format_attempts=41、format_retry_queries/attempts均5；出现water缺少计数及remote-sensing未知标签的查询经固定格式重试恢复，未用GT补造掩码。原第9张已包含在完成集合，证明本次有限恢复链路在该小集合可运行，不等于全量保证或CPU回归已执行。
+
+合并mIoU=11.1732%、mF1=16.5885%、像素准确率52.9201%；混淆矩阵显示有效像素的背景预测占97.9723%，不把旧单裁块统计套用到本集合。本次完整混淆矩阵与指标归档于receipts/wsl_loveda_v4_smoke9_20261102.json。进度条0.0685是最后单图指标。预测偏背景，尚无充分依据认定模型能力或修复精度改善；不同prompt/样本数不直接比较旧两图分数。
+
+按既定任务继续提供MAX_SAMPLES=0、相同v4输出根、512源图裁块、FORMAT_RETRIES=2、SAVE_IMAGES=0的全量命令，原9张匹配回执可复用。只增加运行记录/JSON证据，不改变科学源码或代启动WSL。完整1669结果、格式重试比例和质量验证仍待用户回执，不写正式论文成绩。
+
 ## 2026-11-02：原文确认掩码内未知词，新增v4提示与有限格式恢复
 
 用户回传Val_Rural_2530_tile512_y512_x0_seg原文：23行others *24，最后一行others *23, class *1；共575个已知背景格和1个未知格。sequence_tokens=124、ended_with_eos=true、hit_token_limit=false，排除了token预算截断和“多余格式示例尾行”的解释。未知词与提示词class*count占位写法一致，模仿占位符是待新运行验证的解释；不将该未知格解释成真实背景或按GT补类。

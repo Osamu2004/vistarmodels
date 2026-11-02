@@ -4,6 +4,29 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
+### 最新回执：v4九图通过，按固定协议续跑全量
+
+用户WSL回执：9/9，complete=true、is_full_benchmark=false，36个512裁块全部为23×24合法原生矩形；5个查询各重试一次，共41次生成，均已恢复。合并mIoU=11.1732%、mF1=16.5885%、像素准确率52.9201%；仅9图，不能作为全量论文分数。进度条末尾0.0685是最后一张图，不能代替合并结果。格式链路通过，分割质量仍明显偏背景，原因尚未确定，不能将与旧两图不同的分数解释成精度提升。证据见baselines/rsunivlm/receipts/wsl_loveda_v4_smoke9_20261102.json。
+
+保持原v4路径、相同prompt/FORMAT_RETRIES与代码，MAX_SAMPLES改0继续1669张。已完成9张在身份/掩码哈希通过后复用并重新计入汇总；没有删除缓存或强制覆盖。本轮只记回执与命令，不改推理源码/配置/权重、不启动GPU；无需为本次记录更新而改动WSL科学源码。
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+GPU_IDS=1 NPROC_PER_NODE=1 TILE_SIZE=512 \
+DATA_ROOT=/root/data/LoveDA SPLIT=val \
+RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
+RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
+RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
+BOOTSTRAP_RSUNIVLM=0 FORMAT_RETRIES=2 MAX_SAMPLES=0 SAVE_IMAGES=0 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v4 \
+bash run_bash/rsunivlm_loveda.bash
+~~~
+
+完成条件：processed_samples=1669、complete=true、is_full_benchmark=true，并保留format_audit与源协议。仅保存预测掩码及必要RLE/评分回执。若某裁块三次仍非法则停止，回传该raw_text.attempts，不跳过样本、不填背景、不标记全量成功。当前全量未启动/未完成，本机没有WSL连接与GPU任务回执。
+
 ### 当前入口：v4去除占位词，有限格式重试；先覆盖原失败的前9张
 
 用户原文已确认Val_Rural_2530_tile512_y512_x0_seg最后一行是others *23, class *1：前575个网格位置为others，最后1个为未知类别。124个token、EOS=true、hit_token_limit=false，不是截断或额外尾文。不能删除第24行、替换未知类或填背景。回执保存在baselines/rsunivlm/receipts/wsl_invalid_class_20261102.json。

@@ -1,0 +1,132 @@
+{
+  "evidence_origin": "user_pasted_wsl_output",
+  "received_date": "2026-11-02",
+  "output_dir": "/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v4",
+  "model": "RSUniVLM",
+  "dataset": "LoveDA",
+  "split": "val",
+  "protocol_version": 3,
+  "format_retries": 2,
+  "format_retry_policy": "fixed_prompts_first_valid_no_gt_v1",
+  "identity": "767f4ad67e7e48c50ec58f8797038238bef83bb13e6104b792557eaf47f88bc8",
+  "complete": true,
+  "is_full_benchmark": false,
+  "discovered_samples": 1669,
+  "selected_samples": 9,
+  "processed_samples": 9,
+  "expected_samples": 1669,
+  "source_tile_size": 512,
+  "vision_input_size": [
+    384,
+    384
+  ],
+  "rle_grid_policy": "native_rectangular",
+  "nominal_grid_size": 24,
+  "descriptor_shape_counts": {
+    "23x24": 36
+  },
+  "format_audit": {
+    "format_queries": 36,
+    "format_attempts": 41,
+    "format_retry_queries": 5,
+    "format_retry_attempts": 5
+  },
+  "scores": {
+    "miou": 0.11173166474113519,
+    "mf1": 0.16588513616347325,
+    "macc": 0.18048020917147153,
+    "pixel_accuracy": 0.5292009777492948,
+    "valid_pixels": 9437184,
+    "rejected_pixels": 0,
+    "iou_background": 0.5254789741325703,
+    "iou_building": 0.08387924535369948,
+    "iou_road": 0.09988969740871226,
+    "iou_water": 0.0728737362929643,
+    "iou_barren": 0.0,
+    "iou_forest": 0.0,
+    "iou_agriculture": 0.0,
+    "wfm_3px": 0.02389541171130017
+  },
+  "confusion_matrix": [
+    [
+      4880005,
+      11803,
+      3886,
+      25259,
+      0,
+      0,
+      0
+    ],
+    [
+      179945,
+      17913,
+      471,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      103516,
+      0,
+      12135,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      1016347,
+      0,
+      0,
+      84114,
+      0,
+      0,
+      0
+    ],
+    [
+      40337,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      445728,
+      186,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      2579949,
+      3239,
+      1476,
+      28523,
+      2352,
+      0,
+      0
+    ]
+  ],
+  "observed_timing": {
+    "progress_seconds": 152,
+    "reported_seconds_per_image": 16.99
+  },
+  "runtime_executed_by_this_turn": false,
+  "validation_scope": "nine-image smoke, including the previous failing image; no full-benchmark result",
+  "derived_prediction_counts_over_valid_pixels": [
+    9245827,
+    33141,
+    17968,
+    137896,
+    2352,
+    0,
+    0
+  ],
+  "derived_background_prediction_percent": 97.97230826483832,
+  "official_upstream_benchmark_result": false
+}
