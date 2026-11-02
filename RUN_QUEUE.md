@@ -4,6 +4,21 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
+### 离线更新：包含343db0f目录冲突修复的完整main包
+
+用户要求提供离线包，产物为本机`/Users/zhouziyu/code/vistar/output/offline/rsunivlm_batch4_resume_20261102.bundle`。包含当前已提交main的完整历史及本段交接，不依赖GitHub或增量包前置提交；不包含未提交改动、预训练权重、Qwen缓存或数据集。实际包tip、字节数、SHA256及Git导入校验结果记录于旁边的`rsunivlm_batch4_resume_20261102.receipt.json`；这些只验证代码传输，不等于WSL模型或指标已通过。
+
+将bundle复制至WSL的`/root/code/vistarmodels`，在WSL终端执行：
+
+~~~bash
+cd /root/code/vistarmodels
+git bundle verify ./rsunivlm_batch4_resume_20261102.bundle
+git pull --ff-only ./rsunivlm_batch4_resume_20261102.bundle main
+git log -1 --oneline
+~~~
+
+通过条件：bundle校验与快进导入成功；实际HEAD与交付回执tip一致。若非快进或本地文件冲突，保留报错，不reset/clean/覆盖。随后继续下方batch4推理命令，无需在线git pull；旧v5冲突时会选独立协议目录，v4原文身份验证保持。状态：仅打包和Git对象完整性核验；无本机测试/模型、无远端作业回执。
+
 ### 最新恢复：v5目标目录协议冲突，自动保留并选择独立目录
 
 用户WSL已更新批量入口，但在模型加载前停于`Batch output already belongs to a different protocol`。按调用次序，v4的源协议及输入清单检查已通过；失败在现有v5目标目录身份检查。未取得旧v5的run_config原文，因此具体差异字段尚不确定，不直接归因于模型/数据或某次代码更新。

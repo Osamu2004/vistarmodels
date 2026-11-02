@@ -1,5 +1,9 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：按用户要求生成完整main离线包
+
+交付`output/offline/rsunivlm_batch4_resume_20261102.bundle`（相对外层Vistar工作区），覆盖343db0f的目录冲突修复、7b3d54e的batch4/别名/原文导入及交接记录。采用完整main历史，避免增量包依赖某个WSL前置提交；不收录任何未提交工作区内容，不包含预训练权重或缓存/数据。包旁回执记录tip、SHA256和Git对象验证，WSL导入步骤在唯一RUN_QUEUE。本轮不运行模型或实验测试，打包不能当作推理成功。
+
 ## 2026-11-02：v5目标协议冲突，保留已有目录并自动选协议路径
 
 用户WSL已更新并运行batch4命令，依赖/元数据通过，import_raw_answers在目标目录协议比较处停止，还未加载推理模型。源码次序表明旧v4 run_config和输入清单已验证，失败是当前期望与既有v5 run_config不同；用户未提供该文件，不能断定具体哪个字段不同。归档于receipts/wsl_loveda_v5_output_conflict_20261102.json。
