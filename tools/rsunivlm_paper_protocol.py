@@ -26,6 +26,24 @@ SECOND_QUERIES = (("water",1,"water"),("bare_land",2,"bare land"),
 SECOND_RGB = {(255,255,255):0,(0,0,0):0,(0,0,255):1,(128,128,128):2,(159,129,183):2,
               (192,192,192):2,(0,128,0):3,(0,255,0):4,(128,0,0):5,(255,0,0):6,(165,0,165):6}
 SPLIT_FILE = ROOT / "assets/splits/second_bisrnet_dynamic_earth_val.txt"
+FLAIR_BACKGROUND_ID = 12  # Prediction-only class; GT remains the same twelve classes.
+
+
+def background_policy(dataset):
+    if dataset != "flair": return None
+    return dict(policy="others_as_prediction_background_v1",id=FLAIR_BACKGROUND_ID,name="background",
+        aliases=["others","other","background"],include_in_class_mean=False,
+        scoring="background predictions on valid GT remain false negatives; only original GT ignore is excluded")
+
+
+def prediction_class_count(dataset):
+    if dataset == "second": return 2
+    return len(spec(dataset)["classes"]) + int(dataset == "flair")
+
+
+def empty_confusion(dataset):
+    n=len(spec(dataset)["classes"])
+    return np.zeros((n,n+int(dataset=="flair")),np.int64)
 
 
 @dataclass(frozen=True)
@@ -46,8 +64,10 @@ class Sample:
 def spec(dataset):
     if dataset in seg.DATASET_SPECS:
         value=seg.DATASET_SPECS[dataset]
-        return dict(classes=list(value["classes"]),expected=value["expected_samples"],
+        result=dict(classes=list(value["classes"]),expected=value["expected_samples"],
             split=value["split"],primary=value["primary_metric"],kind="semantic",label_protocol=value["label_protocol"])
+        if dataset=="flair": result["prediction_background"]=background_policy(dataset)
+        return result
     if dataset=="levircd":
         return dict(classes=["unchanged","building"],expected=128,split="test",primary="building_iou",
                     kind="binary_change",label_protocol="0 unchanged; raw1/255 building change; ordered A/B forward query only")
@@ -208,6 +228,9 @@ def decode(record,dataset,query_key=None):
     if background: aliases.update({"others":background,"other":background})
     for alias,target in aliases.items():
         if target in names: mapping[alias]=names.index(target)
+    policy=background_policy(dataset)
+    if policy:
+        mapping.update({alias:policy["id"] for alias in policy["aliases"]})
     text=record["response"]
     if not isinstance(text,str) or len(text)>1_000_000: raise ValueError("Expected bounded descriptor text")
     text=text.strip()

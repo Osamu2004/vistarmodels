@@ -108,6 +108,7 @@ def build_plan(args):
         checkpoint=checkpoint_identity(Path(args.model_path).resolve()),
         vision_files=vision,model_settings=settings,code_sha256=source_identity(),
         populations={entry["dataset"]:fingerprint(entry["samples"]) for entry in entries},
+        prediction_background={name:protocol.background_policy(name) for name in datasets if protocol.background_policy(name)},
         prompts={name:({key:[protocol.prompt(name,index,query_key=key) for index in range(args.format_retries+1)]
                 for key,_,_ in protocol.SECOND_QUERIES} if name=="second" else
                 [protocol.prompt(name,index) for index in range(args.format_retries+1)]) for name in datasets},
@@ -195,9 +196,10 @@ def merge(plan):
             note="VISTAR RSUniVLM adapter; includes trained-on LoveDA/UAVid; LEVIR overlap unverified; not an official zero-shot result")
         if dataset!="second":
             import numpy as np
-            n=len(entry["contract"]["classes"])
             result["confusion_matrix"]=sum((np.asarray(row["confusion_matrix"],np.int64) for row in rows),
-                                          np.zeros((n,n),np.int64)).tolist()
+                                          protocol.empty_confusion(dataset)).tolist()
+            if dataset=="flair":
+                result["confusion_matrix_columns"]=entry["contract"]["classes"]+["background"]
         storage.write_json(root/dataset/"metrics.json",result)
         results[dataset]=result
         table.append(dict(dataset=dataset,processed=len(rows),complete=complete,is_full_benchmark=full,

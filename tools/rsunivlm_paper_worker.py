@@ -36,11 +36,16 @@ def aggregate(dataset,rows):
                 for key in ("tp","tn","fp","fn")} for index in range(1,7)}
         return protocol.second_metrics(counts)
     confusion=sum((np.asarray(row["confusion_matrix"],np.int64) for row in rows),
-                  np.zeros((len(contract["classes"]),len(contract["classes"])),np.int64))
+                  protocol.empty_confusion(dataset))
     scores=(seg.metrics_for_dataset(confusion,dataset) if dataset in seg.DATASET_SPECS else
             seg.metrics_from_confusion(confusion,contract["classes"]))
     if dataset=="levircd":
         scores.update(building_iou=scores["iou_building"],building_f1=scores["f1_building"])
+    if dataset=="flair":
+        # Reuse the extra-column metric math without calling background an
+        # ignored/rejected prediction. Every valid target remains counted.
+        scores["background_pixels_on_valid_gt"]=scores.pop("rejected_pixels")
+        scores["background_rate_on_valid_gt"]=scores.pop("rejection_rate")
     boundary=[row for row in rows if "wfm_3px_mean_present" in row]
     if boundary: scores.update(aggregate_binary_boundary_wfm(boundary))
     return scores
@@ -181,10 +186,12 @@ class Engine:
                 view=protocol.second_metrics(row["class_counts"])
             else:
                 prediction=predictions["forward" if dataset=="levircd" else "mask"]
-                confusion=seg.confusion_matrix(prediction,targets[0],num_classes=len(contract["classes"]),ignore_index=255)
+                background=protocol.background_policy(dataset)
+                confusion=seg.confusion_matrix(prediction,targets[0],num_classes=len(contract["classes"]),ignore_index=255,
+                    prediction_ignore_index=background["id"] if background else None)
                 row["confusion_matrix"]=confusion.tolist()
                 if dataset in seg.DATASET_SPECS and np.any(targets[0]!=255):
-                    row.update(score_semantic_boundary_wfm(prediction,targets[0],num_classes=len(contract["classes"])))
+                    row.update(score_semantic_boundary_wfm(prediction,targets[0],num_classes=protocol.prediction_class_count(dataset)))
                 view=aggregate(dataset,[row])
             row["scoring_seconds"]=time.monotonic()-score_start
             rows.append(row)
@@ -217,7 +224,7 @@ class Engine:
                             try:
                                 with Image.open(root/"pred_mask"/f"{sample.name}_{key}.png") as opened:
                                     value=np.asarray(opened).copy()
-                                num_values=2 if dataset=="second" else len(contract["classes"])
+                                num_values=protocol.prediction_class_count(dataset)
                                 if value.shape!=(height,width) or not np.all(value<num_values) or value.dtype!=np.uint8:
                                     raise ValueError("Invalid cached class mask")
                                 if hashlib.sha256(value.tobytes()).hexdigest()!=receipt["sha256"][key]: raise ValueError("Mask hash changed")

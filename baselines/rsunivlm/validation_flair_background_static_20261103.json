@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-03",
+  "scope": "FLAIR others as prediction-only background",
+  "static_python_ast": [
+    "tools/rsunivlm_paper_protocol.py",
+    "tools/rsunivlm_paper_worker.py",
+    "tools/eval_rsunivlm_paper_queue.py",
+    "tests/test_rsunivlm_flair_background.py"
+  ],
+  "bash_syntax": [
+    "run_bash/rsunivlm_paper_queue.bash"
+  ],
+  "protected_identical_to_head": [
+    "baselines/flair_protocol.py",
+    "baselines/segearth_ov/protocols.py",
+    "baselines/binary_boundary_wfm.py",
+    "baselines/rsunivlm/model.py",
+    "baselines/rsunivlm/protocols.py",
+    "tools/rsunivlm_batch_runtime.py",
+    "assets/splits/second_bisrnet_dynamic_earth_val.txt",
+    "configs/rsunivlm/paper_data_roots.json"
+  ],
+  "source_sha256": {
+    "tools/rsunivlm_paper_protocol.py": "16c8b5b2ce75ff6ac8f192ba870a39ac9681a70b9e5a849310af7c877c20ef9e",
+    "tools/rsunivlm_paper_worker.py": "087255d8df0f632fb241e012b66e652789c915f9143837fd52e304a9bb5b2f8c",
+    "tools/eval_rsunivlm_paper_queue.py": "f664f598c6f729133ede31bc03f133218ed882c535405ea275299eb4e1e603c7",
+    "tests/test_rsunivlm_flair_background.py": "c24fcddce28805d80d1c4140af8247393e6f8261ca274fc5e3c14aa1e085c442"
+  },
+  "numerical_tests_run": false,
+  "model_forward_run": false,
+  "wsl_validation": "pending",
+  "note": "Only AST, shell syntax, whitespace, and protected-source comparisons performed locally."
+}

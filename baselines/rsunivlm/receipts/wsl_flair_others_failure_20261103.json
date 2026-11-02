@@ -1,0 +1,14 @@
+{
+  "source": "user-pasted WSL log",
+  "date_recorded": "2026-11-03",
+  "dataset": "flair",
+  "output_dir": "/root/data/experiment/rsunivlm_paper_undirected6_tile512_bs16_2gpu_v2",
+  "error": "Unknown flair category 'others '",
+  "format_attempts_observed": [2, 3],
+  "rank1_processed_observed": 0,
+  "rank1_assigned": 7850,
+  "rank1_next_dataset": "uavid",
+  "other_datasets_complete": null,
+  "resolution_requested": "Interpret others as background",
+  "new_protocol_wsl_validation": "pending"
+}

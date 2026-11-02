@@ -4,6 +4,36 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-03：FLAIR 的 others 按背景处理
+
+用户明确要求将 `others` 视为背景。FLAIR 新增预测背景 ID12，原十二类 0..11 和 GT 映射保持；有效 GT 上预测背景计入该类漏分，不当 ignore 丢弃。混淆矩阵 12×13，十二类均值不增加背景；边界评分保留背景/前景交界。文档：`baselines/rsunivlm/FLAIR_BACKGROUND.md`。当前只完成本机静态核查，WSL 测试和真实模型效果待回执。
+
+离线包 `rsunivlm_flair_background_20261103.zip` 含完整 main 历史和路径保护导入器，不含模型/数据。先把 ZIP 放到 WSL 项目目录，再执行；不修改正在运行的队列源码，待当前进程退出后导入。其他六集已有输出保留，此命令只运行 FLAIR：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m zipfile -e ./rsunivlm_flair_background_20261103.zip ./rsunivlm_flair_background_update
+python ./rsunivlm_flair_background_update/install_offline.py --repo . \
+  --bundle ./rsunivlm_flair_background_update/rsunivlm_flair_background_20261103.bundle
+
+python -m pytest tests/test_rsunivlm_flair_background.py \
+  tests/test_rsunivlm_paper_queue.py tests/test_rsunivlm_second_undirected.py \
+  tests/test_rsunivlm_levircd_forward.py -q
+~~~
+
+回归通过后运行 FLAIR 全量，沿用已预检的路径和固定权重；每卡请求16，实际尾批/OOM折半可较小：
+
+~~~bash
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 PLAN_ONLY=0 FORMAT_RETRIES=2 \
+DATASETS=flair DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_flair_background_tile512_bs16_2gpu_v1 \
+bash run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+输出为预测 ID 掩码、原始回答、逐图记录及汇总，不保存 RGB/GT/叠加图。旧七集失败目录不覆盖，也不自动跨协议导入原文；新版同目录可续跑。通过条件：`flair/metrics.json` 的 processed_samples=15700、complete=true、is_full_benchmark=true，confusion_matrix 为12×13，末列标为 background；valid_pixels 包括预测背景落在有效 GT 上的像素，并报告 background_pixels_on_valid_gt。只请求一集时根汇总“七集全量”字段为 false 属预期。无效 RLE/其他未知词仍失败，不能把 incomplete 结果写入论文。
+
 ### v2总队列：七集依次推理，双GPU分片
 
 用户要求总队列运行命令。前提：已导入v2包，建议先完成下方四对SECOND类别查询与LEVIR核对；当前尚未收到新版真实前向完成回执。以下沿用总队列最多两次固定格式重试，SECOND保留六类无方向掩码及mIoU_c/mF1_c，LEVIR无方向二值建筑变化、每块查询一次。所有模型输入、裁块和评分以新协议记录，不导入旧七类/双向结果；新建输出目录，原结果保留。此次只补充命令，现有v2包无需重下。
