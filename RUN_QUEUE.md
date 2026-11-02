@@ -2,13 +2,29 @@
 
 2026-11-01用户规则：以后新训练实验统一20,000个optimizer updates，默认保存10k/20k，具体规则见AGENTS.md。旧训练入口用于新实验前先适配20k并核对实际预算；下方RSUniVLM是公开权重推理，不新增训练。
 
-## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
+## RSUniVLM：论文七数据集分割与变化检测
 
 ### 当前交付：论文七集队列，任意正整数batch，双GPU分片
 
-2026-11-02最新状态：用户WSL已预检通过UAVid新路径`/root/data/uavid`的270对，以及FLAIR新路径`/root/data/flair#1-test`的15,700对，均未加载模型或启动GPU作业。结合之前回执，六集各自已预检通过（LoveDA1669、FLAIR15700、UAVid270、CHN6-CUG903、LEVIR-CD128、SECOND593）。用户现提供xBD根目录`/root/data/xview2`，已更新本地配置；xBD的933张pre-disaster配对及七集整套预检尚待WSL验证。FLAIR单集预检因与先前UAVid配置不同，正常另存到`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_pfa2f270f4177`，保留原目录，无需删除或覆盖。回执见`baselines/rsunivlm/receipts/wsl_flair_preflight_20261102.json`。正式推理尚未启动。
+2026-11-02最新状态：用户WSL七集共同预检已通过，顺序/数量为LoveDA1669、FLAIR15700、UAVid270、xBD-pre933、CHN6-CUG903、LEVIR-CD128、SECOND593。有效新路径为`/root/data/flair#1-test`、`/root/data/uavid`、`/root/data/xview2`；其余根目录保持配置JSON记录。脚本保留旧单集预检目录，七集完整计划正常写到`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_p9c14c4b854db`。最终明确未加载模型、未启动GPU进程；本回执不是推理/吞吐/显存或成绩验证。见`baselines/rsunivlm/receipts/wsl_paper_all7_preflight_20261102.json`。
 
-现在同步xBD根目录并重新检查七集；无需重新下载代码包，不修改已通过的FLAIR/UAVid配置：
+正式启动命令（已预检；仍需用户在WSL执行，本机不代启动）。不必为本轮文档回执更新再次下载代码包；保持输入、源码及设置不变时，原请求输出根会解析到上面的p9c14c4b854db目录：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 PLAN_ONLY=0 \
+DATASETS=loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second \
+DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1 \
+bash run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+实际每卡batch以日志actual_batch为准，尾批/重试可能小于16，CUDA OOM按既有策略折半。每卡加载一次模型并复用七集；只保存预测掩码及必要原文/评分回执。各集评分后总览paper_summary.json/csv；七集全量且complete=true、is_full_benchmark=true及无错误方为正式完成。没有上述回执时不写作运行中/已完成。
+
+以下保留已通过的xBD根目录同步及七集预检命令供重查；无需重新下载代码包，不修改已通过的FLAIR/UAVid配置：
 
 ~~~bash
 cd /root/code/vistarmodels

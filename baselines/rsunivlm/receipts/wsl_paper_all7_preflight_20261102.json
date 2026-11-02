@@ -1,0 +1,27 @@
+{
+  "schema": "rsunivlm_paper_queue_user_preflight_receipt_v1",
+  "date": "2026-11-02",
+  "evidence": "User pasted one complete seven-dataset WSL preflight output in this conversation",
+  "host": "PC-20250412AZHP",
+  "preflight_passed": true,
+  "datasets": {
+    "loveda": {"discovered_samples": 1669, "split": "Val"},
+    "flair": {"discovered_samples": 15700, "split": "flair#1-test"},
+    "uavid": {"discovered_samples": 270, "split": "OVSISBench/all 270 paired assets"},
+    "xbd_pre": {"discovered_samples": 933, "split": "test/pre-disaster"},
+    "chn6_cug": {"discovered_samples": 903, "split": "val"},
+    "levircd": {"discovered_samples": 128, "split": "test"},
+    "second": {"discovered_samples": 593, "split": "DynamicEarth/Bi-SRNet val593"}
+  },
+  "requested_output_dir": "/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1",
+  "actual_output_dir": "/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_p9c14c4b854db",
+  "existing_directory_preserved": true,
+  "requested_gpu_ids": ["0", "1"],
+  "requested_batch_per_gpu": 16,
+  "source_tile_size": 512,
+  "model_loaded": false,
+  "gpu_process_started": false,
+  "inference_completed": false,
+  "scores": null,
+  "live_remote_reverification": false
+}

@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：七集共同预检全部通过，准备正式双卡推理
+
+用户WSL回执在同一次计划中发现LoveDA1669、FLAIR15700、UAVid270、xBD-pre933（test/pre-disaster）、CHN6-CUG903、LEVIR-CD128、SECOND593，最终`Preflight passed; no model loaded and no GPU process started.`。七集计划与原UAVid单集配置不同，脚本保留旧目录并解析到`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_p9c14c4b854db`，属正常保护，不是失败。
+
+归档用户回执，RUN_QUEUE置顶明确PLAN_ONLY=0的双GPU/每卡16完整七集启动命令；原源图512、完整群体、只存预测掩码及必要记录、同协议恢复和OOM折半策略保持。用户尚未提供真实模型启动/前向/显存/吞吐或全量评分回执；本机没有WSL会话，本轮未修改数值源码、配置或论文，也未运行测试/模型。文档更新不需要用户重下离线包或改变已通过的运行设置。
+
 ## 2026-11-02：用户提供xBD根目录，准备七集共同预检
 
 用户回复xBD数据路径为`\\wsl.localhost\Ubuntu-22.04\root\data\xview2`，对应`/root/data/xview2`。配置JSON仅修改xbd_pre键，保留已通过的FLAIR/UAVid新路径。只读核对`baselines/segearth_ov/protocols.py:_resolve_xbd_dirs`：支持根目录直接图像/标签布局，或继续尝试test子目录；严格数量仍为933张pre-disaster配对，不因根路径不同改变数据群体或指标。

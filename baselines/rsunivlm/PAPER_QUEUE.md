@@ -1,6 +1,6 @@
 # RSUniVLM七数据集队列
 
-状态：2026-11-02已实现，只有本机静态检查；WSL合成回归、真实CUDA前向、吞吐、显存和完整精度尚待用户回执。命令统一在仓库`RUN_QUEUE.md`。不修改当前论文数值，不新增训练。
+状态：2026-11-02已实现，本机只做静态检查；用户WSL七集完整数据/模型元数据预检已通过，未加载模型或启动GPU进程。WSL合成回归、真实CUDA前向、吞吐、显存和完整精度尚待用户回执。命令统一在仓库`RUN_QUEUE.md`。不修改当前论文数值，不新增训练。
 
 ## 当前稿件对应的范围
 
@@ -20,7 +20,7 @@ VDD不在当前这份稿件的上述评测集里。本队列只做分割与变�
 
 路径可通过`DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json`覆盖。任一集合缺失或群体不合规时，预检会一次列出错误并在加载模型前停止，不悄悄跳过数据集。`--allow_nonstandard_population`只供开发，使用后不能发布为完整基准。MAX_SAMPLES是每数据集全局前N个，再分配到各卡；0为完整集合。
 
-2026-11-02路径进展：UAVid新路径`/root/data/uavid`的270对，以及FLAIR新路径`/root/data/flair#1-test`的15,700对，均已取得用户WSL预检通过回执；见`receipts/wsl_uavid_preflight_20261102.json`和`receipts/wsl_flair_preflight_20261102.json`。两次均未加载模型或启动GPU进程。FLAIR单集配置不同于先前UAVid配置，自动使用独立哈希输出目录是正常保护行为。当前六集各自已有预检通过证据，用户另提供xBD根路径`/root/data/xview2`，其933张pre-disaster配对及七集共同预检尚待执行，不能据此称推理完成。评估器先查xBD根目录的images/labels等既有布局，再查其test子目录；不因提供根目录而取消严格933群体校验，也不改为训练集。只更新配置JSON，不改变Python旧默认值或数值源码；运行时显式传上述DATA_ROOTS_JSON。
+2026-11-02用户WSL七集共同预检已通过，包含上述所有严格数量，xBD解析为test/pre-disaster。回执为`receipts/wsl_paper_all7_preflight_20261102.json`；此前UAVid/FLAIR单集回执仍保留。由于此前原请求目录属于UAVid单集配置，七集计划正常另存到`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_p9c14c4b854db`，不覆盖旧目录。保持原请求根及相同输入/源码/参数启动正式推理时会解析到匹配目录；预检成功本身不表示模型已运行。配置JSON不改变Python旧默认值或数值源码；运行时显式传上述DATA_ROOTS_JSON。
 
 ## 两张卡和任意batch
 
