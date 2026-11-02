@@ -1,5 +1,13 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：首个新合批与单图不一致，改为复用参考并持久回退batch1
+
+用户从离线包更新后回传：模型加载完成且无残留meta，v5处理163/1669后在BatchBackend.generate_batch的核验分支报Batched/single predictions differ。此处不是meta warning或CUDA OOM导致中断。没有取得batch_verification.json两份原文，不能确定具体差异或实际子集batch大小，更不能直接归为FP16误差。回执归档receipts/wsl_loveda_v5_batch_mismatch_20261102.json。
+
+原先“检查不一致就终止”的恢复方式改为：当前整组全部采用已计算出的原单图参考，后续固定effective batch1，不重复计算当前参考，不按GT、分数或合法性择优。单图无效仍走原有限格式重试。batch_verification保留两路原文、case对应raw路径/identity和serial_fallback，重启同协议恢复回退；匹配时保留原合批路径。最终metrics显式标记requested/effective batch与回退原因。新增策略和源码哈希进入协议身份，旧v5保持，v4严格核验及原文导入不变。
+
+补充WSL合成回归：不一致整组采用serial、各裁块不串位、无重复参考调用、原文记录、重启不再探测、不同协议不继承回退、匹配时继续batch。遵照用户要求，本机只做AST/bash/旧数值源码保护检查，不执行测试或模型。生成完整main离线包rsunivlm_serial_fallback_20261102.bundle并做Git导入校验；WSL实际恢复、速度与全1669成绩仍待回执，不能承诺此回退能加速。
+
 ## 2026-11-02：按用户要求生成完整main离线包
 
 交付`output/offline/rsunivlm_batch4_resume_20261102.bundle`（相对外层Vistar工作区），覆盖343db0f的目录冲突修复、7b3d54e的batch4/别名/原文导入及交接记录。采用完整main历史，避免增量包依赖某个WSL前置提交；不收录任何未提交工作区内容，不包含预训练权重或缓存/数据。包旁回执记录tip、SHA256和Git对象验证，WSL导入步骤在唯一RUN_QUEUE。本轮不运行模型或实验测试，打包不能当作推理成功。

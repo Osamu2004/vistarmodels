@@ -99,6 +99,8 @@ def generated_chunks(backend, jobs, prompt):
     while offset < len(jobs):
         count = min(backend.effective_batch_size, len(jobs)-offset)
         group = jobs[offset:offset+count]
+        backend.verification_context = [dict(raw_path=str(job["path"]), identity=job["identity"])
+                                        for job in group]
         failed = False
         try:
             answers = backend.generate_batch([job["image"] for job in group], prompt)

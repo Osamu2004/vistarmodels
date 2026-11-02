@@ -1,0 +1,36 @@
+{
+  "schema": "rsunivlm_serial_fallback_static_validation_v1",
+  "date": "2026-11-02",
+  "base_commit": "bbe9dd6a967317f6b927a429f0096f6ad00b8ce2",
+  "ast_parsed": [
+    "tools/eval_rsunivlm_batched.py",
+    "tools/rsunivlm_batch_runtime.py",
+    "tools/rsunivlm_batch_import.py",
+    "tests/test_rsunivlm_batch_runtime.py"
+  ],
+  "bash_syntax_checked": [
+    "run_bash/rsunivlm_eval.bash",
+    "run_bash/rsunivlm_loveda.bash"
+  ],
+  "unchanged_sources_sha256": {
+    "baselines/rsunivlm/__init__.py": "8cf55428f9ab3228ef672f750104b33b6f81c78f4b1899e3a8621b337815073c",
+    "baselines/rsunivlm/evaluate.py": "fa49e52d9887c5b9cbd23abf802aa3d99d5aa4e2a8f979af0b73f65b95f42aa5",
+    "baselines/rsunivlm/model.py": "2fa3383d73aff44e839d33c14773c146969b862083ea0a0fdc0743950825b449",
+    "baselines/rsunivlm/protocols.py": "0254d577295afb0205642d6aa1188e32accda52092d4b02aa9dba81b84cc8c4a",
+    "baselines/binary_boundary_wfm.py": "838044f7b0b5f5446e343cef55f31a1f8c11391a7212afd455b6d999b33edd5b",
+    "baselines/segearth_ov/protocols.py": "2082658e51f96bf361cada2c5c4c258f535b7c2cf29b0e3fb0ea1215a675e94c",
+    "baselines/levircd_common.py": "f40e3ca5c7d33caab1ca63421b63c74484075dfe7fddc6937d0518ebafbbeb84"
+  },
+  "tests_executed": false,
+  "model_loaded": false,
+  "gpu_executed": false,
+  "remote_executed": false,
+  "authored_wsl_regressions": "tests/test_rsunivlm_batch_runtime.py",
+  "behavior": "On output mismatch use all existing serial references, retain both outputs, force and persist batch1; never choose by GT or score",
+  "pending": [
+    "WSL regressions",
+    "actual failed batched and serial outputs",
+    "WSL resume",
+    "full LoveDA metrics"
+  ]
+}

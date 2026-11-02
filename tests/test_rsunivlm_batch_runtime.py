@@ -209,3 +209,58 @@ def test_protocol_diff_reports_exact_fields_without_large_metadata_values():
     assert changed_fields(dict(dtype="float16",checkpoint=dict(files=["old"])),
                           dict(dtype="bfloat16",checkpoint=dict(files=["new"]))) == [
                               "protocol.checkpoint.files","protocol.dtype"]
+
+
+def test_batch_mismatch_uses_serial_references_for_all_tiles_and_persists_fallback(tmp_path,monkeypatch):
+    calls=[]
+    labels={0:"building",30:"road",60:"water",90:"forest"}
+    def fake_generation(core,images,prompt,**kwargs):
+        calls.append(len(images))
+        return [dict(response=rle(f"{labels[image.getpixel((0,0))[0]] if len(images)==1 else 'barren'}*24"),
+                     generation=dict(ended_with_eos=True,hit_token_limit=False,inference_batch_size=len(images)))
+                for image in images]
+    monkeypatch.setattr(batch,"generate_batch",fake_generation)
+    output=tmp_path/"run"
+    backend=BatchBackend(SimpleNamespace(format_retries=2),4,True,output,"same-protocol")
+    backend.model=object()  # no real loader or model
+    pending=jobs(tmp_path/"raw")
+    grids,_=batch.query_tiles(backend,pending)
+    assert calls==[4,1,1,1,1]
+    assert [int(grids[job["path"]][0,0]) for job in pending]==[1,2,3,5]
+    assert backend.effective_batch_size==1 and backend.serial_fallback["reason"]=="batch_single_mismatch"
+    for job in pending:
+        record=legacy.read_json(job["path"])
+        assert record["generation"]["inference_batch_size"]==1
+        assert record["generation"]["batch_fallback"]=="verification_mismatch"
+        assert len(record["attempts"])==1  # the probe is audited separately, not a format retry
+    audit=legacy.read_json(output/"batch_verification.json")
+    assert audit["serial_fallback"] and len(audit["records"][0]["cases"])==4
+    assert audit["records"][0]["cases"][0]["query"]["raw_path"]==str(pending[0]["path"])
+    assert audit["records"][0]["cases"][0]["batched"]["response"]==rle("barren*24")
+    assert audit["records"][0]["cases"][0]["serial"]["response"]==rle("building*24")
+    # Restart under the same protocol must not repeat the failing batch probe.
+    resumed=BatchBackend(SimpleNamespace(format_retries=2),4,True,output,"same-protocol")
+    resumed.model=object()
+    assert resumed.effective_batch_size==1 and resumed.serial_fallback
+    resumed.generate_batch([job["image"] for job in pending],protocol.LOVEDA_PROMPT)
+    assert calls[5:]==[1,1,1,1]
+    # A different protocol cannot inherit this decision.
+    independent=BatchBackend(SimpleNamespace(format_retries=2),4,True,output,"different-protocol")
+    assert independent.effective_batch_size==4 and independent.serial_fallback is None
+
+
+def test_matching_probe_keeps_batched_execution(tmp_path,monkeypatch):
+    calls=[]
+    def fake_generation(core,images,prompt,**kwargs):
+        calls.append(len(images))
+        return [dict(response=rle("building*24"),generation=dict(ended_with_eos=True,
+                     hit_token_limit=False,inference_batch_size=len(images))) for _ in images]
+    monkeypatch.setattr(batch,"generate_batch",fake_generation)
+    backend=BatchBackend(SimpleNamespace(format_retries=2),4,True,tmp_path,"matching-protocol")
+    backend.model=object()
+    images=[job["image"] for job in jobs(tmp_path)]
+    answers=backend.generate_batch(images,protocol.LOVEDA_PROMPT)
+    assert calls==[4,1,1,1,1] and all(answer["generation"]["inference_batch_size"]==4 for answer in answers)
+    assert backend.serial_fallback is None and backend.verified_sizes=={4}
+    backend.generate_batch(images,protocol.LOVEDA_PROMPT)
+    assert calls[-1]==4 and len(calls)==6  # verified size skips further serial probes

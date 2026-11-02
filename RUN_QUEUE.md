@@ -4,7 +4,26 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
-### 离线更新：包含343db0f目录冲突修复的完整main包
+### 最新恢复：合批与单图不一致时，使用单图答案继续
+
+用户WSL回执：v5完成163/1669后，在首次新合批的单图核验处停止，`Batched/single predictions differ`。已加载模型且无残留meta；本次触发终止的是核验分支。没有取得`batch_verification.json`原文，不能认定是浮点差异还是合批实现问题，也不知道当时实际batch是否为4（未完成子集可能更小）。失败回执在`baselines/rsunivlm/receipts/wsl_loveda_v5_batch_mismatch_20261102.json`。
+
+当前修复：核验不一致时，这一组全部使用已经计算出的原单图答案，丢弃其合批候选用于正式评分的资格，后续effective batch固定1；不按GT、合法性或分数在两者中择优。核验原文/单图原文/裁块身份和回退原因保留于`batch_verification.json`，同协议重启恢复batch1，不重复失败的合批探测。原单图答案非法时仍走既有两次格式重试，预算耗尽仍停止，不能伪造掩码。最终metrics明确记录请求batch、effective batch、serial_fallback；回退后的结果不能称为成功batch4加速。
+
+本机只静态检查，新增WSL合成回归尚未运行。旧科学包/评分源码未改；新增回退策略与代码哈希改变协议，沿用下方OUTPUT_DIR时会自动选择独立哈希目录，再导入已核验v4原文。前163张避免重复模型生成，但仍会重建掩码和评分。旧v5的核验文件保留供差异调查，不直接移植未知协议分数。
+
+新离线包：`/Users/zhouziyu/code/vistar/output/offline/rsunivlm_serial_fallback_20261102.bundle`，含完整main历史，不含权重和缓存。在WSL复制到`/root/code/vistarmodels`后：
+
+~~~bash
+cd /root/code/vistarmodels
+git bundle verify ./rsunivlm_serial_fallback_20261102.bundle
+git pull --ff-only ./rsunivlm_serial_fallback_20261102.bundle main
+git log -1 --oneline
+~~~
+
+然后运行下方完整batch4命令（保持VERIFY_BATCH=1，不关闭核验）。如果希望从头采用原单图路径，可将TILE_BATCH_SIZE改1并用独立`..._v5_bs1`输出，仍保留别名及v4导入。依赖/环境/GPU1单进程/只保存掩码与全1669完成条件不变。实际修正后运行、吞吐、全量指标待WSL回执；Git离线导入校验不代替模型验证。
+
+### 历史离线更新：包含343db0f目录冲突修复的完整main包
 
 用户要求提供离线包，产物为本机`/Users/zhouziyu/code/vistar/output/offline/rsunivlm_batch4_resume_20261102.bundle`。包含当前已提交main的完整历史及本段交接，不依赖GitHub或增量包前置提交；不包含未提交改动、预训练权重、Qwen缓存或数据集。实际包tip、字节数、SHA256及Git导入校验结果记录于旁边的`rsunivlm_batch4_resume_20261102.receipt.json`；这些只验证代码传输，不等于WSL模型或指标已通过。
 
@@ -19,7 +38,7 @@ git log -1 --oneline
 
 通过条件：bundle校验与快进导入成功；实际HEAD与交付回执tip一致。若非快进或本地文件冲突，保留报错，不reset/clean/覆盖。随后继续下方batch4推理命令，无需在线git pull；旧v5冲突时会选独立协议目录，v4原文身份验证保持。状态：仅打包和Git对象完整性核验；无本机测试/模型、无远端作业回执。
 
-### 最新恢复：v5目标目录协议冲突，自动保留并选择独立目录
+### 已有恢复：v5目标目录协议冲突，自动保留并选择独立目录
 
 用户WSL已更新批量入口，但在模型加载前停于`Batch output already belongs to a different protocol`。按调用次序，v4的源协议及输入清单检查已通过；失败在现有v5目标目录身份检查。未取得旧v5的run_config原文，因此具体差异字段尚不确定，不直接归因于模型/数据或某次代码更新。
 
@@ -29,7 +48,7 @@ git log -1 --oneline
 
 ### 当前：v4在163张后遇bareland中断，v5映射恢复＋512裁块batch4
 
-状态：用户已提供v4中断回执；v5代码只经本机静态检查，未运行本机测试或模型，尚无WSL执行回执。不要把旧九图或163张进度写成完整基准成绩。详见`baselines/rsunivlm/BATCHING.md`，错误归档于`receipts/wsl_loveda_v4_bareland_failure_20261102.json`。
+状态：用户已提供v4与v5的163张中断回执；当前新回退代码只经本机静态检查，未运行本机测试或模型，修正后WSL执行待回执。不要把旧九图或163张进度写成完整基准成绩。详见`baselines/rsunivlm/BATCHING.md`和本节顶部。
 
 依赖/环境：沿用已安装的`vistar_rsunivlm`，不重装torch。数据`/root/data/LoveDA`、主权重和本地SigLIP路径均沿用用户已有目录。终端为WSL，使用空闲物理GPU1、单进程；同一个输出根只开一个作业。先前v4需已停止，导入器会检查源运行锁；本机没有该WSL连接，不代为启动。
 
@@ -54,9 +73,9 @@ OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v5_bs4 \
 bash run_bash/rsunivlm_loveda.bash
 ~~~
 
-`bareland`/`bare land`明确映射到`barren`，未知词和缺计数的`water`仍重试，不猜类别。batch4是四个独立512裁块，不是四图拼成一个问题；OOM自动降2/1，batch1仍OOM则停。原模型/384视觉输入/greedy/8192 token/两次固定格式重试保持。首次实际batch大小>1会与单图输出检查，首批额外耗时；不匹配停止并查看`batch_verification.json`，不追加当前原图分数。
+`bareland`/`bare land`明确映射到`barren`，未知词和缺计数的`water`仍重试，不猜类别。batch4是四个独立512裁块，不是四图拼成一个问题；OOM自动降2/1，batch1仍OOM则停。原模型/384视觉输入/greedy/8192 token/两次固定格式重试保持。首次实际batch大小>1会与单图输出检查，首批额外耗时；不匹配时使用该组全部单图参考并固定batch1，核验仍保留在`batch_verification.json`。
 
-先核验旧checkpoint/协议/输入元数据/裁块与提示身份，通过后只导入旧raw_text，按新增别名选择最早合法回答，重新构建掩码和评分，保留全部历史尝试。旧163张因此不需再次生成；重评分和读盘仍耗时。保留v4，不复制旧分数，不用OVERWRITE。源/目标身份不匹配、格式预算耗尽或batch不一致则停，不能跳图。GPU执行/全量成绩待用户回执。
+先核验旧checkpoint/协议/输入元数据/裁块与提示身份，通过后只导入旧raw_text，按新增别名选择最早合法回答，重新构建掩码和评分，保留全部历史尝试。旧163张因此不需再次生成；重评分和读盘仍耗时。保留v4，不复制旧分数，不用OVERWRITE。源身份不匹配、无法选择安全目标目录、格式预算耗尽或batch1仍OOM则停，不能跳图。batch输出不一致按本节顶部回退单图。全量成绩待用户回执。
 
 产物：v5的`pred_mask/`、`raw_text/`、`receipts/`、`metrics.json`、`per_class_metrics.csv`、`predictions.jsonl`、`cache_import.json`、`batch_verification.json`、`scoring_timing.jsonl`。SAVE_IMAGES=0不存其他图片。通过条件仍为processed_samples=1669、complete=true、is_full_benchmark=true，并保留协议与format_audit。真实新样本的速度看后续稳定图的generate/score耗时，不能用旧163张缓存重评分速度估算。
 

@@ -21,6 +21,8 @@ from baselines.rsunivlm import protocols as protocol
 from tools import rsunivlm_batch_runtime as runtime
 from tools.rsunivlm_batch_import import build_protocol, import_raw_answers, resolve_output_root
 
+BATCH_MISMATCH_POLICY = "use_serial_references_and_force_batch1"
+
 
 @contextmanager
 def alias_decoder():
@@ -48,12 +50,18 @@ class BatchBackend(legacy.LazyModel):
         self.verification_seconds = 0.
         self.oom_splits = 0
         self.verification_records = []
+        self.serial_fallback = None
+        self.verification_context = []
         previous = legacy.read_json(self.root / "batch_verification.json")
         self.protocol_identity = protocol_identity
         if previous and previous.get("protocol_identity") == self.protocol_identity:
             self.verification_records = previous.get("records", [])
             self.verified_sizes = {row["batch_size"] for row in self.verification_records
                                    if row.get("cases") and all(case["match"] for case in row["cases"])}
+            self.serial_fallback = previous.get("serial_fallback")
+            if self.serial_fallback:
+                self.effective_batch_size = 1
+                print("[RSUniVLM batch] Restored serial fallback; continuing with batch1", flush=True)
 
     def ensure_model(self):
         if self.model is None:
@@ -85,24 +93,39 @@ class BatchBackend(legacy.LazyModel):
     def generate_batch(self, images, prompt):
         self.ensure_model()
         size = len(images)
+        if self.serial_fallback:
+            return [runtime.generate_batch(self.model, [image], prompt)[0] for image in images]
         answers = runtime.generate_batch(self.model, images, prompt,
             verify_processor=self.verify and size > 1 and size not in self.verified_sizes)
         if self.verify and size > 1 and size not in self.verified_sizes:
             start = time.monotonic()
             checks = []
-            for image, answer in zip(images, answers):
-                serial = self.model.generate([image], prompt)
-                reference = dict(response=serial, generation=copy.deepcopy(self.model.last_generation))
+            for index, (image, answer) in enumerate(zip(images, answers)):
+                reference = runtime.generate_batch(self.model, [image], prompt)[0]
                 checks.append(dict(match=self.matching(answer, reference, image.size[::-1]),
-                                   batched=answer, serial=reference))
+                    batched=answer, serial=reference, case_index=index,
+                    query=self.verification_context[index] if index < len(self.verification_context) else None))
             self.verification_seconds += time.monotonic()-start
             self.verification_records.append(dict(batch_size=size, cases=checks))
+            mismatches = [index for index, row in enumerate(checks) if not row["match"]]
+            if mismatches:
+                self.effective_batch_size = 1
+                self.serial_fallback = dict(reason="batch_single_mismatch", batch_size=size,
+                                            mismatched_cases=mismatches, policy=BATCH_MISMATCH_POLICY)
+                # All references have already been generated with the original
+                # single-image path. Reuse them for this entire group; never
+                # choose batched/serial answers by validity or GT score.
+                for row in checks:
+                    row["serial"]["generation"]["batch_fallback"] = "verification_mismatch"
             legacy.write_json(self.root / "batch_verification.json", dict(
                 protocol_identity=self.protocol_identity,
                 policy="exact restored class-mask equality; exact text when both invalid; no GT",
+                mismatch_policy=BATCH_MISMATCH_POLICY, serial_fallback=self.serial_fallback,
                 records=self.verification_records))
-            if not all(row["match"] for row in checks):
-                raise RuntimeError("Batched/single predictions differ; inspect batch_verification.json; no new image score appended")
+            if mismatches:
+                print(f"[RSUniVLM batch] batch{size}/single mismatch in {len(mismatches)}/{size} cases; "
+                      "using all serial references for this group and batch1 thereafter; audit preserved", flush=True)
+                return [copy.deepcopy(row["serial"]) for row in checks]
             self.verified_sizes.add(size)
             print(f"[RSUniVLM batch] Verified batch{size} against single-image execution", flush=True)
         return answers
@@ -130,6 +153,7 @@ def main():
     extension_sources = [Path(__file__), ROOT/"tools/rsunivlm_batch_runtime.py", ROOT/"tools/rsunivlm_batch_import.py"]
     new_base = dict(old_base, protocol_version=4, tile_batch_size=options.tile_batch_size,
         alias_extension=runtime.ALIAS_EXTENSION, batch_policy="one image per sequence; adaptive OOM splitting; same greedy prompts",
+        batch_mismatch_policy=BATCH_MISMATCH_POLICY,
         batch_verify=bool(options.verify_batch), extension_sources_sha256={str(path.relative_to(ROOT)):
             hashlib.sha256(path.read_bytes()).hexdigest() for path in extension_sources})
     expected, _, samples, _ = build_protocol(args, new_base)
@@ -171,11 +195,12 @@ def main():
             result = legacy.evaluate_dataset(args, "loveda", backend, new_base)
             result.update(tile_batch_size=options.tile_batch_size, effective_tile_batch_size=backend.effective_batch_size,
                           alias_extension=runtime.ALIAS_EXTENSION, verified_batch_sizes=sorted(backend.verified_sizes),
-                          oom_splits=backend.oom_splits)
+                          oom_splits=backend.oom_splits, serial_fallback=backend.serial_fallback,
+                          batch_mismatch_policy=BATCH_MISMATCH_POLICY)
             legacy.write_json(root / "metrics.json", result)
             print(json.dumps(dict(batch_output=str(root), requested_batch_size=options.tile_batch_size,
                 effective_batch_size=backend.effective_batch_size, verified_batch_sizes=sorted(backend.verified_sizes),
-                oom_splits=backend.oom_splits), indent=2), flush=True)
+                oom_splits=backend.oom_splits, serial_fallback=backend.serial_fallback), indent=2), flush=True)
         finally:
             legacy.predict_loveda_tiled, legacy.score = original_predict, original_score
 

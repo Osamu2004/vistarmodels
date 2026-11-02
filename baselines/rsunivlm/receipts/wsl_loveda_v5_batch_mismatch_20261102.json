@@ -1,0 +1,15 @@
+{
+  "schema": "user_reported_wsl_rsunivlm_failure_v1",
+  "date": "2026-11-02",
+  "source": "user pasted WSL terminal output",
+  "reported_progress": {"processed": 163, "total": 1669},
+  "stage": "batched versus single-image output verification",
+  "error": "Batched/single predictions differ; inspect batch_verification.json; no new image score appended",
+  "model_class": "LlavaQwenGMoeForCausalLM",
+  "loaded_model_has_remaining_meta_parameters": false,
+  "verification_file_provided": false,
+  "actual_failing_batch_size_known": false,
+  "difference_cause_known": false,
+  "complete": false,
+  "action": "use all precomputed serial references for the failed group, preserve both original outputs, force batch1 thereafter and across same-protocol restarts"
+}
