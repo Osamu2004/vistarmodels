@@ -517,7 +517,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_new_tokens", type=int, default=8192)
     parser.add_argument("--format_retries", type=int, choices=(0, 1, 2), default=2,
                         help="Fixed format-only retry prompts; first valid answer, no GT/metric selection")
-    parser.add_argument("--cd_direction", choices=("symmetric_union", "forward"), default="symmetric_union")
+    parser.add_argument("--cd_direction", choices=("symmetric_union", "forward"), default="forward",
+                        help="Forward follows the official single ordered-pair query; symmetric_union is a legacy adapter extension")
     parser.add_argument("--max_samples", type=int, default=0)
     parser.add_argument("--loveda_tile_size", type=int, choices=(0, 512), default=512,
                         help="Native LoveDA source crop size; 512 aligns with Alters, 0 reproduces whole-image processing")

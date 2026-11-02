@@ -46,7 +46,7 @@ CMD=("${PYTHON_BIN}" "${ENTRY}"
   --format_retries "${FORMAT_RETRIES:-2}"
   --max_samples "${MAX_SAMPLES:-0}"
   --loveda_tile_size "${TILE_SIZE}"
-  --cd_direction "${CD_DIRECTION:-symmetric_union}")
+  --cd_direction "${CD_DIRECTION:-forward}")
 CMD+=("${EXTRA[@]}")
 if [[ -n "${DATA_ROOT:-}" ]]; then CMD+=(--data_root "${DATA_ROOT}"); fi
 if [[ -n "${RSUNIVLM_VISION_TOWER:-}" ]]; then CMD+=(--vision_tower "${RSUNIVLM_VISION_TOWER}"); fi

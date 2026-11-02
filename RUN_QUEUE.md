@@ -4,6 +4,42 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 当前优先：LEVIR官方提示词、A/B单向、二值建筑变化
+
+用户要求先只修改LEVIR。新入口保留512源图裁块、双GPU和每卡batch16；只查询(A,B)，不做reverse/OR，首轮使用官方CD_PROMPT。核对入口默认FORMAT_RETRIES=0，仅使用原始提示词，不把格式重试当作官方流程。SECOND不在本次入口中。详见`baselines/rsunivlm/LEVIR_FORWARD.md`。本机只静态检查，不跑模型/测试；WSL实际核对尚待执行。
+
+离线包`output/offline/rsunivlm_levircd_forward_20261102.bundle`包含完整main历史，不含权重/数据；复制到WSL项目目录后更新：
+
+~~~bash
+cd /root/code/vistarmodels
+git bundle verify ./rsunivlm_levircd_forward_20261102.bundle
+git pull --ff-only ./rsunivlm_levircd_forward_20261102.bundle main
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+# WSL合成回归，不加载预训练权重；本机未执行
+python -m pytest tests/test_rsunivlm_levircd_forward.py -q
+
+# 四对真实开发核对，先验证原生单向接口
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=4 PLAN_ONLY=0 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_levircd_forward_tile512_bs16_smoke4_v1 \
+bash run_bash/rsunivlm_levircd_forward_queue.bash --tile_size 512
+~~~
+
+通过条件：所选4对complete=true；每个raw_text.direction为forward，每条序列含两个图像；pred_mask仅有forward二值掩码，不能有reverse/union。实际尾批可小于16。GT在预测完成并保存后才评分；无效RLE或无EOS截断仍应失败，不给背景填充。状态：本机静态核对，WSL测试/前向/速度/显存未取得回执。
+
+4对核对通过后再跑完整128对；不同目录避免将开发尾批结果混入正式批量运行：
+
+~~~bash
+cd /root/code/vistarmodels
+conda activate vistar_rsunivlm
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 PLAN_ONLY=0 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_levircd_forward_tile512_bs16_full_v1 \
+bash run_bash/rsunivlm_levircd_forward_queue.bash --tile_size 512
+~~~
+
+正式完成看单集`levircd/metrics.json`：processed_samples=128、complete=true、is_full_benchmark=true。根paper_summary只请求LEVIR，因此其“七集完整”的is_full_benchmark=false属预期。旧六集和SECOND输出保留，本轮不导入或重算；原论文指标未改。相同新协议可恢复，不把旧双向OR掩码当作单向预测。
+
 ### 当前交付：论文七集队列，任意正整数batch，双GPU分片
 
 **最新纠正：旧七集试跑最终complete=False，GPU0 SECOND因未知类别词和格式预算耗尽而未完成。用户已指出SECOND不应套“未变化＋六类”一次输出，也不应把双向OR当作模型原生流程。下面保留的旧七集正式命令是历史适配版本，当前不要照抄重跑；数据预检通过仍有效，但不能代替任务接口验证。** 先保留全部原文、预测和汇总；其他六集及GPU1完成状态尚待完整paper_summary.json。原生接口核对与下一步见`baselines/rsunivlm/NATIVE_CHANGE_AUDIT.md`，失败回执见`baselines/rsunivlm/receipts/wsl_paper_second_format_failure_20261102.json`。本轮未发布替代数值实现、未改旧代码/缓存身份、未启动新推理。

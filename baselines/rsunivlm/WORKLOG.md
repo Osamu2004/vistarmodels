@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：按用户要求先修正LEVIR为单向二值查询
+
+队列LEVIR首轮prompt直接使用官方CD_PROMPT，方向固定forward，缓存/输出键改为forward，移除LEVIR reverse生成与OR合并；GT二值解码与IoU/F1、512源图几何、模型/权重、双卡调度、任意batch及OOM策略保持。协议新增levircd_query元数据，旧OR运行身份不兼容，新目录隔离且不导入旧掩码/原文。独立旧Python/启动器默认方向也改为forward，显式legacy symmetric_union仍可用于历史复现。
+
+新增只跑LEVIR的forward_queue入口，默认FORMAT_RETRIES=0，专门核对官方首轮原生输出；先4对smoke，再独立目录全量128。第二集及其他分割分支未改、不重跑。新增WSL合成回归覆盖一次有序双图查询、二值预测与正确评分、保存后读GT、恢复、旧OR拒绝、两分片合并和格式/EOS拒绝。本机按既有要求只AST/Bash/哈希静态检查，不执行测试或模型；WSL运行回执待补。命令在唯一RUN_QUEUE，说明LEVIR_FORWARD；不改论文指标。
+
 ## 2026-11-02：SECOND旧适配失败；纠正原生变化检测接口
 
 用户完整队列尾部回执最终complete=False，GPU0 SECOND仅处理1/297便因00031_forward格式预算耗尽结束；重试子集实际batch13/12，出现land-cover等未知类别及一份未EOS截断。本轮尚未取得完整汇总、原始回答或GPU1结果，不猜测其他六集状态。

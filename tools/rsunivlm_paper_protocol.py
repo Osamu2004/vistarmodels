@@ -45,7 +45,7 @@ def spec(dataset):
             split=value["split"],primary=value["primary_metric"],kind="semantic",label_protocol=value["label_protocol"])
     if dataset=="levircd":
         return dict(classes=["unchanged","building"],expected=128,split="test",primary="building_iou",
-                    kind="binary_change",label_protocol="0 unchanged; raw1/255 changed; direction union")
+                    kind="binary_change",label_protocol="0 unchanged; raw1/255 building change; ordered A/B forward query only")
     if dataset=="second":
         return dict(classes=list(SECOND_CLASSES),expected=593,split="DynamicEarth/Bi-SRNet val593",
             primary="miou_c",kind="semantic_change",label_protocol="six independent class unions across both temporal directions")
@@ -158,6 +158,10 @@ def load_targets(sample,dataset,shape):
 
 
 def prompt(dataset,attempt=0):
+    if dataset=="levircd":
+        # The official demo asks for one building-change foreground. It does
+        # not request a categorical map or a reverse temporal prediction.
+        return original.CD_PROMPT if attempt==0 else original.format_retry_prompt(dataset,attempt)
     names=", ".join(spec(dataset)["classes"])
     task=("Segment this remote-sensing image." if dataset in seg.DATASET_SPECS else
           "Segment the building area that has changed in the second image relative to the first." if dataset=="levircd" else

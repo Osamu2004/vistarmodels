@@ -22,7 +22,11 @@ from tools.rsunivlm_batch_runtime import generate_requests
 
 
 def outputs(dataset):
-    return ("forward","reverse") if dataset=="second" else ("union",) if dataset=="levircd" else ("mask",)
+    return query_directions(dataset)
+
+
+def query_directions(dataset):
+    return ("forward","reverse") if dataset=="second" else ("forward",) if dataset=="levircd" else ("mask",)
 
 
 def aggregate(dataset,rows):
@@ -147,8 +151,6 @@ class Engine:
             sample=case["sample"]
             if protocol.metadata(sample)!=expected_meta[sample.name]: raise ValueError(f"Inputs changed: {sample.name}")
             predictions=case["predictions"]
-            if dataset=="levircd" and "union" not in predictions:
-                predictions={"union":np.maximum(predictions["forward"],predictions["reverse"])}
             checksums={key:hashlib.sha256(value.tobytes()).hexdigest() for key,value in predictions.items()}
             if not case["cached"]:
                 for key,value in predictions.items(): io.save_prediction(root/"pred_mask"/f"{sample.name}_{key}.png",value)
@@ -164,7 +166,7 @@ class Engine:
                     (targets[0]==index)|(targets[1]==index)) for index in range(1,7)}
                 view=protocol.second_metrics(row["class_counts"])
             else:
-                prediction=predictions["union" if dataset=="levircd" else "mask"]
+                prediction=predictions["forward" if dataset=="levircd" else "mask"]
                 confusion=seg.confusion_matrix(prediction,targets[0],num_classes=len(contract["classes"]),ignore_index=255)
                 row["confusion_matrix"]=confusion.tolist()
                 if dataset in seg.DATASET_SPECS and np.any(targets[0]!=255):
@@ -207,7 +209,7 @@ class Engine:
                                 cached[key]=value
                             except (OSError,KeyError,ValueError):
                                 cached={}; break
-                    directions=("forward","reverse") if len(images)==2 else ("mask",)
+                    directions=query_directions(dataset)
                     tiles=((height+size-1)//size)*((width+size-1)//size)
                     case=dict(sample=sample,identity=identity,shape=(height,width),cached=bool(cached),
                         remaining=0 if cached else tiles*len(directions),
@@ -253,6 +255,7 @@ class Engine:
             result=dict(identity=dataset_id,dataset=dataset,rank=self.rank,world_size=self.world_size,
                 complete=True,is_full_benchmark=False,scope="rank shard",processed=len(rows),
                 assigned_samples=[sample.name for sample in assigned],scores=aggregate(dataset,rows),
+                query_directions=list(query_directions(dataset)),
                 effective_batch=self.effective_batch,actual_batch_sizes_this_process=sorted(self.actual_batches),
                 oom_splits=self.oom_splits,rows=rows)
             io.write_json(root/"metrics.json",result)
