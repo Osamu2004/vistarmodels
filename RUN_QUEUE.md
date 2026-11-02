@@ -6,7 +6,30 @@
 
 ### 当前交付：论文七集队列，任意正整数batch，双GPU分片
 
-2026-11-02最新状态：用户WSL已预检通过UAVid新路径`/root/data/uavid`的270对，以及FLAIR新路径`/root/data/flair#1-test`的15,700对，均未加载模型或启动GPU作业。结合之前回执，六集各自已预检通过（LoveDA1669、FLAIR15700、UAVid270、CHN6-CUG903、LEVIR-CD128、SECOND593）；xBD-pre路径仍未确定，七集整套预检和正式推理尚未完成。FLAIR单集预检因与先前UAVid配置不同，正常另存到`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_pfa2f270f4177`，保留原目录，无需删除或覆盖。回执见`baselines/rsunivlm/receipts/wsl_flair_preflight_20261102.json`。
+2026-11-02最新状态：用户WSL已预检通过UAVid新路径`/root/data/uavid`的270对，以及FLAIR新路径`/root/data/flair#1-test`的15,700对，均未加载模型或启动GPU作业。结合之前回执，六集各自已预检通过（LoveDA1669、FLAIR15700、UAVid270、CHN6-CUG903、LEVIR-CD128、SECOND593）。用户现提供xBD根目录`/root/data/xview2`，已更新本地配置；xBD的933张pre-disaster配对及七集整套预检尚待WSL验证。FLAIR单集预检因与先前UAVid配置不同，正常另存到`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_pfa2f270f4177`，保留原目录，无需删除或覆盖。回执见`baselines/rsunivlm/receipts/wsl_flair_preflight_20261102.json`。正式推理尚未启动。
+
+现在同步xBD根目录并重新检查七集；无需重新下载代码包，不修改已通过的FLAIR/UAVid配置：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python - <<'PY'
+import json
+from pathlib import Path
+p = Path('configs/rsunivlm/paper_data_roots.json')
+d = json.loads(p.read_text())
+d['xbd_pre'] = '/root/data/xview2'
+p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + '\n')
+PY
+
+GPU_IDS=0,1 BATCH_SIZE=16 PLAN_ONLY=1 \
+DATASETS=loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second \
+DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
+bash run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+通过条件：七集分别发现1669、15700、270、933、903、128、593个样本且最后Preflight passed。不加载模型或启动GPU作业。xBD评估器支持根目录直接images/labels等既有布局，或根目录下test/images和test/labels等布局；若两者都没有或数量不符，应保留失败并核对目录，不跳图或改群体。
 
 下面保留已通过的FLAIR路径同步及单集预检命令供重查；仅覆盖FLAIR键，保留其余配置：
 

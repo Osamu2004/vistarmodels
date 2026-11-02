@@ -11,7 +11,7 @@
 | LoveDA | Val 1,669 | 七类mIoU/mF1，3px WFm | `/root/data/LoveDA` |
 | FLAIR#1 | 官方test 15,700 | 前12类mIoU/mF1，3px WFm | `/root/data/flair#1-test` |
 | UAVid | 现有OVSISBench/all 270配对资产 | 八类mIoU/mF1，3px WFm | `/root/data/uavid` |
-| xBD-pre | test/pre 933 | 建筑IoU/F1，3px WFm | `/root/data/xview2/test` |
+| xBD-pre | test/pre 933 | 建筑IoU/F1，3px WFm | `/root/data/xview2` |
 | CHN6-CUG | Val 903 | 道路IoU/F1，3px WFm | `/root/data/CHN6-CUG/val` |
 | LEVIR-CD | 官方test 128对 | 双方向并集建筑变化IoU/F1 | `/root/data/LEVIR-CD` |
 | SECOND | DynamicEarth/Bi-SRNet Val 593对 | 六类变化并集mIoU_c/mF1_c | `/root/data/second_dataset` |
@@ -20,7 +20,7 @@ VDD不在当前这份稿件的上述评测集里。本队列只做分割与变�
 
 路径可通过`DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json`覆盖。任一集合缺失或群体不合规时，预检会一次列出错误并在加载模型前停止，不悄悄跳过数据集。`--allow_nonstandard_population`只供开发，使用后不能发布为完整基准。MAX_SAMPLES是每数据集全局前N个，再分配到各卡；0为完整集合。
 
-2026-11-02路径进展：UAVid新路径`/root/data/uavid`的270对，以及FLAIR新路径`/root/data/flair#1-test`的15,700对，均已取得用户WSL预检通过回执；见`receipts/wsl_uavid_preflight_20261102.json`和`receipts/wsl_flair_preflight_20261102.json`。两次均未加载模型或启动GPU进程。FLAIR单集配置不同于先前UAVid配置，自动使用独立哈希输出目录是正常保护行为。当前六集各自已有预检通过证据，xBD-pre实际路径仍待确定，不能据此称七集整套可运行或推理完成。只更新配置JSON，不改变Python旧默认值或数值源码；运行时显式传上述DATA_ROOTS_JSON。
+2026-11-02路径进展：UAVid新路径`/root/data/uavid`的270对，以及FLAIR新路径`/root/data/flair#1-test`的15,700对，均已取得用户WSL预检通过回执；见`receipts/wsl_uavid_preflight_20261102.json`和`receipts/wsl_flair_preflight_20261102.json`。两次均未加载模型或启动GPU进程。FLAIR单集配置不同于先前UAVid配置，自动使用独立哈希输出目录是正常保护行为。当前六集各自已有预检通过证据，用户另提供xBD根路径`/root/data/xview2`，其933张pre-disaster配对及七集共同预检尚待执行，不能据此称推理完成。评估器先查xBD根目录的images/labels等既有布局，再查其test子目录；不因提供根目录而取消严格933群体校验，也不改为训练集。只更新配置JSON，不改变Python旧默认值或数值源码；运行时显式传上述DATA_ROOTS_JSON。
 
 ## 两张卡和任意batch
 

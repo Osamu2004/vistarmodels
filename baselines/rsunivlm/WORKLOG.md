@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：用户提供xBD根目录，准备七集共同预检
+
+用户回复xBD数据路径为`\\wsl.localhost\Ubuntu-22.04\root\data\xview2`，对应`/root/data/xview2`。配置JSON仅修改xbd_pre键，保留已通过的FLAIR/UAVid新路径。只读核对`baselines/segearth_ov/protocols.py:_resolve_xbd_dirs`：支持根目录直接图像/标签布局，或继续尝试test子目录；严格数量仍为933张pre-disaster配对，不因根路径不同改变数据群体或指标。
+
+RUN_QUEUE记录无需再次下载离线包的WSL单键配置修改及七集预检命令。当前六集各自已有通过回执，xBD和七集共同预检仍待用户执行；本机没有WSL会话、不宣称路径存在或模型已运行，未修改Python数值源码、标签或论文分数。
+
 ## 2026-11-02：FLAIR 15,700对预检通过
 
 用户贴出WSL回执：`[preflight] flair: 15700 samples; flair#1-test`，最终`Preflight passed; no model loaded and no GPU process started.`。此前UAVid单集预检占用原请求目录；当前FLAIR单集的datasets/populations/prompts等身份不同，解析器正常保留原目录并另用`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1_pfa2f270f4177`，不是推理错误，不需清理或覆盖。请求GPU0/1、batch16仅为计划配置，未进行CUDA前向。
