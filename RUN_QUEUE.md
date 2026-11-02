@@ -6,6 +6,18 @@
 
 ### 当前交付：论文七集队列，任意正整数batch，双GPU分片
 
+512分块已与Alters源码核对，见`baselines/rsunivlm/ALTERS_TILING.md`；本次没有修改运行代码或协议，不需要为这份核对记录重跑已有预测。新增合成回归仅在WSL运行，不加载权重：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+ALTERS_SOURCE_ROOT=/root/code/vistar \
+python -m pytest tests/test_rsunivlm_alters_tiling.py -q
+~~~
+
+状态：用例已编写，本机仅AST/源码哈希检查，尚未执行。预期10项通过；缺失Alters参考源码或哈希不符应停止并核对，不跳过。正式推理命令及缓存恢复方式保持如下。
+
 范围/数据路径/精确口径见`baselines/rsunivlm/PAPER_QUEUE.md`：LoveDA Val1669、FLAIR test15700、UAVid all270、xBD-pre test933、CHN6-CUG val903、LEVIR-CD test128、SECOND DynamicEarth val593。后两者是变化检测，不使用SECOND生图1694 test；不新增训练/生图任务。每卡加载一次模型复用七集，对每个集合分配互斥样本，最后合并统计而非平均分数。
 
 用户WSL执行前先Ctrl+C结束旧推理并等回到提示符，确认0/1两卡供本轮使用；本机没有该WSL的连接，不代启动。新离线包为外层工作区`output/offline/rsunivlm_paper_queue_20261102.bundle`，复制到`/root/code/vistarmodels`后：

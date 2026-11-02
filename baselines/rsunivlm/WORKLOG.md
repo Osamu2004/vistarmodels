@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：按Alters实际源码核对512源图分块
+
+检查LoveDA/UAVid/CHN6/SECOND四套裁块函数、xBD对CHN6的导入、LEVIR对SECOND的复用，以及FLAIR原生512检查。四套ceil/pad/coords的AST一致；RGB为[0,1]补0，等同队列PIL补黑；左上原点、512步长、右下边缘补齐、原生拼接裁回都一致。LoveDA已填结果沿用论文实验来源核对文档，不把旧256脚本默认值当主表运行配置。未发现需要更改队列裁块数值路径的差异；保留384 SigLIP/RLE网格与Alters内部预测分辨率的区别。
+
+新增ALTERS_TILING.md、源文件/函数哈希及行号审计、供WSL执行的10项实际参考函数合成回归，命令写入唯一RUN_QUEUE。本机只AST解析与哈希比较，不执行测试或模型；没有WSL连接、没有新成绩。运行源码及其协议身份保持不变，既有同协议缓存不受此次文档/用例更新影响。
+
 ## 2026-11-02：实现论文七集队列、任意batch和双GPU分片
 
 按当前CVPR实验节与补充核对七集：LoveDA Val1669、FLAIR test15700、UAVid all270、xBD-pre test933、CHN6 val903、LEVIR-CD test128、SECOND val593。新增paper_protocol/worker/queue与bash入口、路径JSON和593名单（原Vistar名单字节复制，hash见PAPER_QUEUE）；没有把SECOND生图1694或VDD替换进来。分割沿用已有标签/GT/指标数学；SECOND六类方向并集及全局计数按既有DynamicEarth协议实现，RGB标签仅精确已知颜色，不做GT最近色猜测。

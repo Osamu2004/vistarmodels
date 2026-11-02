@@ -1,0 +1,209 @@
+{
+  "schema": "rsunivlm_alters_tiling_static_v1",
+  "date": "2026-11-02",
+  "reference_revision": "839289a4dae5be367e2c019216897eef5c2b2cdb",
+  "queue_base_revision": "a3d89ebe946fcd0dfeb7b3e4e18c42ed6cbc0453",
+  "reference_engines": {
+    "loveda": {
+      "path": "eval_flux2_loveda.py",
+      "sha256": "b4043c645f116f861f234b1b7828ec5e6a250ab81c4925bf874e05e3f54a8a87",
+      "functions": {
+        "_load_rgb_tensor": {
+          "start_line": 224,
+          "end_line": 227,
+          "ast_sha256": "e4591381d62b0f1e20af9f3998ac02ed388bebce09b3e275a5ea34a655a309a6",
+          "source_sha256": "8784e864de9cdc9556d8d79edcb064927b525bd785f21b28601c185f8f65fb43"
+        },
+        "_ceil_to_multiple": {
+          "start_line": 470,
+          "end_line": 471,
+          "ast_sha256": "34e41015ae15293d861aca6cfd4bc89ce53f83a916c286c28f36e230d6e9f24a",
+          "source_sha256": "00641485b140b55aadd24d81b74d674c8394493b5ccf4a50dae1fc25a96fdecd"
+        },
+        "_pad_image_to_tile": {
+          "start_line": 474,
+          "end_line": 482,
+          "ast_sha256": "f3681cb2fc928b5a753856fe82658ef8690c515be0de4d15217d18efeb1d448a",
+          "source_sha256": "8476cd95beafc69f51ce7b1341a392ead51cc0b7647fcdbf8e88efbe97fa4cbe"
+        },
+        "_tile_coords": {
+          "start_line": 496,
+          "end_line": 501,
+          "ast_sha256": "ff2d2028a9e2ad8a4356ff7c924c3d2981e4b16e107a780ed3c4b076bd85cfca",
+          "source_sha256": "6edf27995f9a2724e8fefa0bd40e29b4690a4d76687f56f0e6f1a7dbdced5c8c"
+        },
+        "_predict_tiled_mask": {
+          "start_line": 504,
+          "end_line": 588,
+          "ast_sha256": "6ee69c6b8c5d94096b2fb564505971252d59b596702275fe760b6a9888a4d280",
+          "source_sha256": "6ae323e680ab11b9f8736d4d4d54f02fefefbc04f9d100bea1779e003a4a5501"
+        }
+      }
+    },
+    "uavid": {
+      "path": "eval_flux2_uavid.py",
+      "sha256": "aaafe417257006a9dff27868402c1626f4f5753a85f890fb28969fc478d4d2e6",
+      "functions": {
+        "_load_rgb_tensor": {
+          "start_line": 614,
+          "end_line": 617,
+          "ast_sha256": "e4591381d62b0f1e20af9f3998ac02ed388bebce09b3e275a5ea34a655a309a6",
+          "source_sha256": "8784e864de9cdc9556d8d79edcb064927b525bd785f21b28601c185f8f65fb43"
+        },
+        "_ceil_to_multiple": {
+          "start_line": 1011,
+          "end_line": 1012,
+          "ast_sha256": "34e41015ae15293d861aca6cfd4bc89ce53f83a916c286c28f36e230d6e9f24a",
+          "source_sha256": "00641485b140b55aadd24d81b74d674c8394493b5ccf4a50dae1fc25a96fdecd"
+        },
+        "_pad_image_to_tile": {
+          "start_line": 1015,
+          "end_line": 1023,
+          "ast_sha256": "f3681cb2fc928b5a753856fe82658ef8690c515be0de4d15217d18efeb1d448a",
+          "source_sha256": "8476cd95beafc69f51ce7b1341a392ead51cc0b7647fcdbf8e88efbe97fa4cbe"
+        },
+        "_tile_coords": {
+          "start_line": 1037,
+          "end_line": 1042,
+          "ast_sha256": "ff2d2028a9e2ad8a4356ff7c924c3d2981e4b16e107a780ed3c4b076bd85cfca",
+          "source_sha256": "6edf27995f9a2724e8fefa0bd40e29b4690a4d76687f56f0e6f1a7dbdced5c8c"
+        },
+        "_predict_tiled_mask": {
+          "start_line": 1045,
+          "end_line": 1129,
+          "ast_sha256": "e4e0fa51b38f3cae99bf6ec3649437d9b853a796a847f5ee9389bc83761773dd",
+          "source_sha256": "2fe10c7abed49570f69483e0bfd506522e757f7839eb97e137318e000c7aec00"
+        }
+      }
+    },
+    "chn6_road": {
+      "path": "eval_flux2_chn6_road.py",
+      "sha256": "9638250af50af766c9addb4c627b91141f6be8c0f2eb16b70ee8272c8145ddac",
+      "functions": {
+        "_load_rgb_tensor": {
+          "start_line": 100,
+          "end_line": 103,
+          "ast_sha256": "e4591381d62b0f1e20af9f3998ac02ed388bebce09b3e275a5ea34a655a309a6",
+          "source_sha256": "8784e864de9cdc9556d8d79edcb064927b525bd785f21b28601c185f8f65fb43"
+        },
+        "_ceil_to_multiple": {
+          "start_line": 176,
+          "end_line": 177,
+          "ast_sha256": "34e41015ae15293d861aca6cfd4bc89ce53f83a916c286c28f36e230d6e9f24a",
+          "source_sha256": "00641485b140b55aadd24d81b74d674c8394493b5ccf4a50dae1fc25a96fdecd"
+        },
+        "_pad_image_to_tile": {
+          "start_line": 180,
+          "end_line": 188,
+          "ast_sha256": "f3681cb2fc928b5a753856fe82658ef8690c515be0de4d15217d18efeb1d448a",
+          "source_sha256": "8476cd95beafc69f51ce7b1341a392ead51cc0b7647fcdbf8e88efbe97fa4cbe"
+        },
+        "_tile_coords": {
+          "start_line": 202,
+          "end_line": 207,
+          "ast_sha256": "ff2d2028a9e2ad8a4356ff7c924c3d2981e4b16e107a780ed3c4b076bd85cfca",
+          "source_sha256": "6edf27995f9a2724e8fefa0bd40e29b4690a4d76687f56f0e6f1a7dbdced5c8c"
+        },
+        "_predict_tiled_mask": {
+          "start_line": 210,
+          "end_line": 322,
+          "ast_sha256": "eaa58cdbe3b9a74c07689c73f60b21ad14f804965b59310d9382a7fa5cd459cd",
+          "source_sha256": "bd6b7385dd7b36c601ff806aeeffceb5037814fe3ed3e611f1454edeb72f3eaf"
+        }
+      }
+    },
+    "second": {
+      "path": "eval_flux2_second.py",
+      "sha256": "9d98dacda147a56fb907b98a8c37078d75852982a02dcfe4e3285f0adb4b9544",
+      "functions": {
+        "_load_rgb_tensor": {
+          "start_line": 425,
+          "end_line": 428,
+          "ast_sha256": "e4591381d62b0f1e20af9f3998ac02ed388bebce09b3e275a5ea34a655a309a6",
+          "source_sha256": "8784e864de9cdc9556d8d79edcb064927b525bd785f21b28601c185f8f65fb43"
+        },
+        "_ceil_to_multiple": {
+          "start_line": 746,
+          "end_line": 747,
+          "ast_sha256": "34e41015ae15293d861aca6cfd4bc89ce53f83a916c286c28f36e230d6e9f24a",
+          "source_sha256": "00641485b140b55aadd24d81b74d674c8394493b5ccf4a50dae1fc25a96fdecd"
+        },
+        "_pad_image_to_tile": {
+          "start_line": 750,
+          "end_line": 758,
+          "ast_sha256": "f3681cb2fc928b5a753856fe82658ef8690c515be0de4d15217d18efeb1d448a",
+          "source_sha256": "8476cd95beafc69f51ce7b1341a392ead51cc0b7647fcdbf8e88efbe97fa4cbe"
+        },
+        "_tile_coords": {
+          "start_line": 772,
+          "end_line": 777,
+          "ast_sha256": "ff2d2028a9e2ad8a4356ff7c924c3d2981e4b16e107a780ed3c4b076bd85cfca",
+          "source_sha256": "6edf27995f9a2724e8fefa0bd40e29b4690a4d76687f56f0e6f1a7dbdced5c8c"
+        },
+        "_predict_tiled_mask": {
+          "start_line": 780,
+          "end_line": 881,
+          "ast_sha256": "6730231b99c0748d2ed25f8ded8e2fb3ffa3d435af0aea1835d5f0d3410630da",
+          "source_sha256": "adb6b0f570c412317e1c1ba09ba6b7a904f7aead43cbf9eae9091f01be8db2b7"
+        }
+      }
+    }
+  },
+  "additional_reference_sources_sha256": {
+    "eval_flux2_flair.py": "b6de76eb79e6b9c9b127b9b3e846903222a1d69fffbed04157f7cb2d5054fa71",
+    "tools/flair_gsnet_protocol.py": "a53f5455066b0d11ba045ec67d4480117665f1b7a16404a73f41ee64fbaa41dd",
+    "eval_flux2_xbd_pre.py": "14dd46e2331af0d7a8aa043c6be6b2e761e8062fc8ec86f294755692116402b8",
+    "eval_flux2_levircd.py": "08e2512f2ccab9f60eda1db0ce3c22144bf5d02d4deac8a9919e494b6066437f"
+  },
+  "geometry_ast_identical": true,
+  "contract": {
+    "source_tile_size": 512,
+    "stride": 512,
+    "origin": [
+      0,
+      0
+    ],
+    "order": "row_major",
+    "source_resize": "none",
+    "padding": "black_right_bottom",
+    "paired_crop": "same_coordinates",
+    "stitch": "native_extent; crop_right_bottom_padding_before_scoring",
+    "rsunivlm_vision_input": [
+      384,
+      384
+    ],
+    "rsunivlm_restoration": "OpenCV INTER_NEAREST to full512, then crop valid edge"
+  },
+  "protected_queue_runtime_sha256": {
+    "tools/eval_rsunivlm_paper_queue.py": "3822559c481ca586be4b9654a9e3edb3abc5d3fc7ef6daed13d600c224271218",
+    "tools/rsunivlm_paper_protocol.py": "11886ec48705cfb2cc86998e6ab52278a1f69da02adfb0d2bd6dbc4508677182",
+    "tools/rsunivlm_paper_worker.py": "1e252b0c586fe52ccbcec48ba7863d2ce75b21db695634a44042bb0b005545cb",
+    "tools/rsunivlm_batch_runtime.py": "0aa32aca38917116d25730689833cce85a412dd5e6555dad6331522e9d0d3f22",
+    "baselines/rsunivlm/model.py": "2fa3383d73aff44e839d33c14773c146969b862083ea0a0fdc0743950825b449",
+    "baselines/rsunivlm/protocols.py": "0254d577295afb0205642d6aa1188e32accda52092d4b02aa9dba81b84cc8c4a",
+    "baselines/rsunivlm/evaluate.py": "fa49e52d9887c5b9cbd23abf802aa3d99d5aa4e2a8f979af0b73f65b95f42aa5",
+    "baselines/segearth_ov/protocols.py": "2082658e51f96bf361cada2c5c4c258f535b7c2cf29b0e3fb0ea1215a675e94c",
+    "baselines/flair_protocol.py": "601f5b207e1a4245b8aed697897b6b0eabed9817b7c64cc4502d7befba5847d8",
+    "baselines/binary_boundary_wfm.py": "838044f7b0b5f5446e343cef55f31a1f8c11391a7212afd455b6d999b33edd5b",
+    "baselines/levircd_common.py": "f40e3ca5c7d33caab1ca63421b63c74484075dfe7fddc6937d0518ebafbbeb84",
+    "tools/rsunivlm_batch_import.py": "82ba07ef1b6eeba1f27802e5aa48d2e9a64e6f2e52ed643cddb2c2399da977db",
+    "baselines/rskt_seg/xbd_label_utils.py": "e636423f1a96450c086a6ad26d65fa652029702744fb6545ad6e82f57425b9a2",
+    "assets/splits/second_bisrnet_dynamic_earth_val.txt": "eed4dc3956022e18f426ba9efd30fd0927cd4fa0c065b7058e86e439624ed346"
+  },
+  "queue_runtime_unchanged_from_base": true,
+  "synthetic_test": {
+    "path": "tests/test_rsunivlm_alters_tiling.py",
+    "ast_parsed": true,
+    "executed": false,
+    "expected_cases": 10,
+    "source_root_env": "ALTERS_SOURCE_ROOT",
+    "weights_loaded": false,
+    "source_fingerprint": "source segment SHA-256; portable across Python AST versions"
+  },
+  "evidence_limits": [
+    "Static source audit; no local tests or model execution",
+    "No live WSL source/result verification",
+    "Source tiling parity does not imply identical internal resolution, model predictions or single/batch outputs",
+    "Historical main512 settings are distinct from old launcher defaults256"
+  ]
+}

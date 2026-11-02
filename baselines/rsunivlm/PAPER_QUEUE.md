@@ -30,6 +30,8 @@ VDD不在当前这份稿件的上述评测集里。本队列只做分割与变�
 
 ## 空间、标签与输出
 
+已逐项核对Alters实际裁块源码，源图512/stride512、右下补黑、原图拼接规则一致；详见[源码核对记录](ALTERS_TILING.md)。该对齐不改变RSUniVLM官方384视觉输入，也不宣称其RLE输出与Alters内部预测分辨率相同。
+
 所有任务保持源图原生范围、512无重叠裁块、右/下黑色补齐，官方384视觉处理。每块输出原生矩形RLE，最近邻恢复到完整512再裁掉补齐部分，拼回原图后评分。无TTA、无GT输入、无GT选类或选答案。模型仍为原官方GMoE加载器，expert2、fp16/eager、greedy、KV cache和8192新token上限保持。
 
 五个分割集使用现有`segearth_ov.protocols`的发现/标签解码/评分数学：LoveDA排除raw0/255，FLAIR仅评价raw1..12，UAVid保留moving/static car，xBD使用既有WKT rasterizer，CHN6是二类道路。WFm复用既有3px实现与合并规则。不同数据集统一类别清单RLE提示属于VISTAR适配，不能称作RSUniVLM官方已报告协议；未知标签、无计数、行宽错误或无EOS截断都进入至多两次固定格式重试。只选首个合法输出，不填背景或跳过失败样本。
