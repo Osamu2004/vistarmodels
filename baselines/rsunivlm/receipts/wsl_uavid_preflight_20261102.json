@@ -1,0 +1,19 @@
+{
+  "schema": "rsunivlm_user_preflight_receipt_v1",
+  "date": "2026-11-02",
+  "evidence": "User pasted WSL terminal output in this conversation",
+  "host": "PC-20250412AZHP",
+  "dataset": "uavid",
+  "user_supplied_root": "/root/data/uavid",
+  "discovered_samples": 270,
+  "split": "OVSISBench/all 270 paired assets",
+  "preflight_passed": true,
+  "output_dir": "/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1",
+  "requested_gpu_ids": ["0", "1"],
+  "requested_batch_per_gpu": 16,
+  "model_loaded": false,
+  "gpu_process_started": false,
+  "inference_completed": false,
+  "scores": null,
+  "live_remote_reverification": false
+}

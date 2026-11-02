@@ -9,7 +9,7 @@
 | 数据集 | 群体 | 指标 | 配置文件中的根目录 |
 |---|---|---|---|
 | LoveDA | Val 1,669 | 七类mIoU/mF1，3px WFm | `/root/data/LoveDA` |
-| FLAIR#1 | 官方test 15,700 | 前12类mIoU/mF1，3px WFm | `/root/data/FLAIR-1-2/data/flair#1-test` |
+| FLAIR#1 | 官方test 15,700 | 前12类mIoU/mF1，3px WFm | `/root/data/flair#1-test` |
 | UAVid | 现有OVSISBench/all 270配对资产 | 八类mIoU/mF1，3px WFm | `/root/data/uavid` |
 | xBD-pre | test/pre 933 | 建筑IoU/F1，3px WFm | `/root/data/xview2/test` |
 | CHN6-CUG | Val 903 | 道路IoU/F1，3px WFm | `/root/data/CHN6-CUG/val` |
@@ -20,7 +20,7 @@ VDD不在当前这份稿件的上述评测集里。本队列只做分割与变�
 
 路径可通过`DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json`覆盖。任一集合缺失或群体不合规时，预检会一次列出错误并在加载模型前停止，不悄悄跳过数据集。`--allow_nonstandard_population`只供开发，使用后不能发布为完整基准。MAX_SAMPLES是每数据集全局前N个，再分配到各卡；0为完整集合。
 
-2026-11-02用户提供UAVid新UNC路径`\\wsl.localhost\Ubuntu-22.04\root\data\uavid`，对应上表`/root/data/uavid`。只更新配置JSON，不改变Python旧默认值或数值源码；运行时显式传上述DATA_ROOTS_JSON。该路径尚待WSL预检验证270个配对、标签编码和布局；只收到路径不等于数据已通过验证。上次七集预检的其余未解决路径为FLAIR和xBD-pre。
+2026-11-02路径进展：UAVid新路径`/root/data/uavid`已取得用户WSL预检通过回执，270对、未加载模型或启动GPU进程；见`receipts/wsl_uavid_preflight_20261102.json`。随后用户提供FLAIR新UNC路径`\\wsl.localhost\Ubuntu-22.04\root\data\flair#1-test`，对应上表`/root/data/flair#1-test`，15,700对预检尚待执行。xBD-pre实际路径仍待确定。只更新配置JSON，不改变Python旧默认值或数值源码；运行时显式传上述DATA_ROOTS_JSON。预检通过不等于推理完成。
 
 ## 两张卡和任意batch
 

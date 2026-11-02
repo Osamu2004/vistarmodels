@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：UAVid预检通过，用户提供FLAIR新路径
+
+用户贴出WSL回执：`[preflight] uavid: 270 samples; OVSISBench/all 270 paired assets`，随后`Preflight passed; no model loaded and no GPU process started.`，输出目录`/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1`，请求GPU0/1、每卡batch16。仅证明路径/配对/标签预检通过，不是推理或显存/精度验证；归档小回执，不复制数据或预测。
+
+随后用户提供`\\wsl.localhost\Ubuntu-22.04\root\data\flair#1-test`，对应`/root/data/flair#1-test`。只更新配置JSON的FLAIR字段，保留UAVid新路径与其余字段；RUN_QUEUE加入不依赖重新下载包的单键更新和FLAIR单集预检命令，PAPER_QUEUE同步当前状态。FLAIR15,700对待WSL核验，xBD-pre实际路径仍未解决；本机未启动模型/测试，未改数值源码或论文分数。
+
 ## 2026-11-02：用户提供UAVid新WSL路径
 
 用户七集预检回执：LoveDA1669、CHN6-CUG903、LEVIR-CD128、SECOND593发现成功；FLAIR目录缺失、UAVid旧目录布局不匹配、xBD-pre布局不匹配，build_plan在模型加载前停止。随后用户提供`\\wsl.localhost\Ubuntu-22.04\root\data\uavid`，对应`/root/data/uavid`。仅将配置JSON的UAVid字段及当前命令/说明更新；Python数值源码、旧默认值、模型、512裁块、标签规则和270群体要求不变。运行必须显式传DATA_ROOTS_JSON；命令在RUN_QUEUE，附只覆盖UAVid键的WSL兼容更新方式。

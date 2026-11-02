@@ -6,7 +6,29 @@
 
 ### 当前交付：论文七集队列，任意正整数batch，双GPU分片
 
-2026-11-02数据路径更新：用户提供UAVid新路径`/root/data/uavid`，已写入`configs/rsunivlm/paper_data_roots.json`。上次WSL预检通过LoveDA1669、CHN6-CUG903、LEVIR-CD128、SECOND593；UAVid旧路径、FLAIR、xBD-pre失败，模型未加载。新UAVid尚待预检，FLAIR/xBD-pre实际路径仍待定位；不要将当前状态写成七集可运行或完成。先单独检查UAVid，不使用非标准群体开关：
+2026-11-02最新状态：用户WSL已预检通过UAVid新路径`/root/data/uavid`的270对，未加载模型或启动GPU作业；结合之前回执，目前五集路径发现成功（LoveDA1669、UAVid270、CHN6-CUG903、LEVIR-CD128、SECOND593）。用户新提供FLAIR路径`/root/data/flair#1-test`，已更新本地配置，但15,700对尚待WSL预检；xBD-pre路径仍未确定。不将此状态写成七集可运行或完成。
+
+FLAIR无需重新下载代码包即可同步路径并单独检查；仅覆盖FLAIR键，保留其余配置：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python - <<'PY'
+import json
+from pathlib import Path
+p = Path('configs/rsunivlm/paper_data_roots.json')
+d = json.loads(p.read_text())
+d['flair'] = '/root/data/flair#1-test'
+p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + '\n')
+PY
+
+GPU_IDS=0,1 BATCH_SIZE=16 DATASETS=flair PLAN_ONLY=1 \
+DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json \
+bash run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+通过条件：发现FLAIR15,700对且预检通过；不加载模型、不启动GPU作业。该预检可能读取标签作编码审计，不能当作实际模型前向。下面保留已通过的UAVid命令供重复检查，不使用非标准群体开关：
 
 ~~~bash
 cd /root/code/vistarmodels
