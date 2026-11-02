@@ -1,0 +1,9 @@
+{
+  "loveda": "/root/data/LoveDA",
+  "flair": "/root/data/FLAIR-1-2/data/flair#1-test",
+  "uavid": "/root/data/OVSISBenchDataset/uavid",
+  "xbd_pre": "/root/data/xview2/test",
+  "chn6_cug": "/root/data/CHN6-CUG/val",
+  "levircd": "/root/data/LEVIR-CD",
+  "second": "/root/data/second_dataset"
+}

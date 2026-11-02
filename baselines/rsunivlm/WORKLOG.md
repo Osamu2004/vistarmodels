@@ -1,5 +1,23 @@
 # RSUniVLM 接入记录
 
+## 2026-11-02：实现论文七集队列、任意batch和双GPU分片
+
+按当前CVPR实验节与补充核对七集：LoveDA Val1669、FLAIR test15700、UAVid all270、xBD-pre test933、CHN6 val903、LEVIR-CD test128、SECOND val593。新增paper_protocol/worker/queue与bash入口、路径JSON和593名单（原Vistar名单字节复制，hash见PAPER_QUEUE）；没有把SECOND生图1694或VDD替换进来。分割沿用已有标签/GT/指标数学；SECOND六类方向并集及全局计数按既有DynamicEarth协议实现，RGB标签仅精确已知颜色，不做GT最近色猜测。
+
+batch接受任意正整数，单卡流式跨图积累tile序列；变化任务每序列保留两张配准图。两卡独立副本，各处理模world_size的互斥样本，每卡首次需前向时加载并跨七集复用。父进程校验覆盖/重复后合并全局混淆矩阵、SECOND各类TP/TN/FP/FN和WFm逐图统计，不平均mIoU。OOM折半，尾批/重试可更小；直接批量不做单图等价声明，不导入旧单图结果。
+
+完整预测落盘后才读取GT评分；有效PNG形状/ID/哈希恢复并重评分，损坏/半写入回退同协议原文。只存预测掩码与必要JSON，LEVIR存并集一张，SECOND存双方向两张。某集失败继续其他集但保留incomplete，正式全量完成需七集全部严格覆盖。预检不启动GPU，原始模型、GMoE expert2、384视觉处理、512原生裁块、greedy、KV cache和8192新token上限保持，未修改任何原baseline包Python或共享数值评分模块。新增rasterio/tifffile依赖供FLAIR。
+
+WSL用例已编写：任意奇数/17 batch、单/双图对应、尾批、互斥分片、PNG恢复、全局混淆矩阵合并、六类变化并集、名单/RGB拒绝、OOM不掉样本；本机遵循要求不执行测试/模型，只做AST/bash/JSON/名单及旧源码保护检查。代码与完整main离线包将交付；实际速度、显存、格式有效率、CUDA兼容和全量精度仍待WSL回执。所有命令集中RUN_QUEUE，不修改论文数值或训练。
+
+## 2026-11-02：用户要求先核对训练数据，任意batch/双卡仍在开发
+
+核对当前CVPR主稿与补充：分割为LoveDA、FLAIR、UAVid、xBD-pre、CHN6-CUG；变化检测为LEVIR-CD和SECOND（593对DynamicEarth验证集、六类变化双向合并），不是SECOND生图1694测试对。随后用户要求先解释RSUniVLM训练数据，先完成一手来源核查，暂不把开发草稿打包交付。
+
+原论文arXiv v2第4.1节、附录表10/12明确包含LoveDA与UAVid分割训练以及LEVIR-MCI变化训练，两阶段均涉及上述像素级来源。不能称RSUniVLM在LoveDA/UAVid上是数据集未见的零样本，也不能仅凭用了数据集断言测试泄漏。公开checkpoint逐样本manifest、具体划分和LEVIR-MCI/LEVIR-CD重叠仍未审计。其他未列名的评测集也不直接等同无重叠。完整来源和表列数据见TRAINING_DATA_AUDIT.md；稿件未修改。
+
+跨图batch16草稿已写入工具及WSL合成回归文件，用户进一步要求任意正整数batch和双卡；这些要求尚未完成。草稿未测试、未提交、未推送、未生成新离线包，不改变已交付的85a44ce以前代码能力。后续应继续实现任意batch和双卡，再做静态核查及WSL交付。仍遵从本机不执行测试/模型的要求。
+
 ## 2026-11-02：用户要求增大batch，提供现有直跑batch4配置
 
 用户明确需要加大实际batch；核查当前wrapper与BatchBackend后确认无需代码改动：TILE_BATCH_SIZE=4、VERIFY_BATCH=0时不比较单图，因此不会触发比较失败的serial_fallback；新协议身份也不会继承原VERIFY_BATCH=1目录的回退记录。保留OOM拆批和严格格式重试。配置及完整启动命令写入唯一RUN_QUEUE。

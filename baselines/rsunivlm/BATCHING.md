@@ -1,5 +1,7 @@
 # LoveDA v5：裁块合批与 bareland 恢复
 
+最新推荐入口为[PAPER_QUEUE.md](PAPER_QUEUE.md)的论文七集双GPU队列，`BATCH_SIZE`接受任意正整数，跨图流式填批；每GPU一份模型复用全队列。下文是旧LoveDA单卡入口的版本历史；旧入口也已解除batch参数固定枚举，新的队列不导入单图缓存。
+
 2026-11-02用户回传：v4全量在163/1669后因`Val_Rural_2685_tile512_y0_x0_seg.json`中`bareland`未知标签中断。已完成的九图及部分全量记录不作为完整基准分数。v5已准备代码；本机只做静态检查，WSL回归、实际吞吐、峰值显存和最终分数尚待回执。执行命令统一放在仓库`RUN_QUEUE.md`最上方RSUniVLM段。
 
 ## 改动范围

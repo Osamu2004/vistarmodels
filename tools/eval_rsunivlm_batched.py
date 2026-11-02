@@ -20,6 +20,7 @@ import baselines.rsunivlm.evaluate as legacy
 from baselines.rsunivlm import protocols as protocol
 from tools import rsunivlm_batch_runtime as runtime
 from tools.rsunivlm_batch_import import build_protocol, import_raw_answers, resolve_output_root
+from tools.rsunivlm_batch_prefetch import CrossImagePrefetch, PREFETCH_POLICY
 
 BATCH_MISMATCH_POLICY = "use_serial_references_and_force_batch1"
 
@@ -52,6 +53,7 @@ class BatchBackend(legacy.LazyModel):
         self.verification_records = []
         self.serial_fallback = None
         self.verification_context = []
+        self.actual_batch_sizes = set()
         previous = legacy.read_json(self.root / "batch_verification.json")
         self.protocol_identity = protocol_identity
         if previous and previous.get("protocol_identity") == self.protocol_identity:
@@ -133,10 +135,12 @@ class BatchBackend(legacy.LazyModel):
 
 def main():
     extra = argparse.ArgumentParser(add_help=False)
-    extra.add_argument("--tile_batch_size", type=int, choices=(1,2,4), default=4)
+    extra.add_argument("--tile_batch_size", type=int, default=4)
     extra.add_argument("--import_v4_root", default="")
     extra.add_argument("--verify_batch", type=int, choices=(0,1), default=1)
     options, remaining = extra.parse_known_args()
+    if options.tile_batch_size <= 0:
+        extra.error("--tile_batch_size must be a positive integer")
     sys.argv = [sys.argv[0], *remaining]
     args = legacy.parse_args()
     if args.dataset != "loveda" or args.loveda_tile_size != 512:
@@ -150,10 +154,13 @@ def main():
         dtype=args.dtype, attention=args.attention, max_new_tokens=args.max_new_tokens,
         vision_tower_override=args.vision_tower,
         adapter_source=protocol.fingerprint([path.read_text() for path in adapter_sources]))
-    extension_sources = [Path(__file__), ROOT/"tools/rsunivlm_batch_runtime.py", ROOT/"tools/rsunivlm_batch_import.py"]
+    extension_sources = [Path(__file__), ROOT/"tools/rsunivlm_batch_runtime.py", ROOT/"tools/rsunivlm_batch_import.py",
+                         ROOT/"tools/rsunivlm_batch_prefetch.py"]
     new_base = dict(old_base, protocol_version=4, tile_batch_size=options.tile_batch_size,
         alias_extension=runtime.ALIAS_EXTENSION, batch_policy="one image per sequence; adaptive OOM splitting; same greedy prompts",
         batch_mismatch_policy=BATCH_MISMATCH_POLICY,
+        cross_image_batching=options.tile_batch_size > 4,
+        prefetch_policy=PREFETCH_POLICY if options.tile_batch_size > 4 else None,
         batch_verify=bool(options.verify_batch), extension_sources_sha256={str(path.relative_to(ROOT)):
             hashlib.sha256(path.read_bytes()).hexdigest() for path in extension_sources})
     expected, _, samples, _ = build_protocol(args, new_base)
@@ -171,11 +178,19 @@ def main():
             import_raw_answers(options.import_v4_root, root, args, old_base, new_base)
         backend = BatchBackend(args, options.tile_batch_size, options.verify_batch, root,
                                protocol.fingerprint(expected))
+        selected = samples[:args.max_samples] if args.max_samples else samples
+        prefetch = CrossImagePrefetch(selected, protocol.fingerprint(expected)) if options.tile_batch_size > 4 else None
         original_predict, original_score = legacy.predict_loveda_tiled, legacy.score
         score_index = 0
         def predict(*values, **kwargs):
+            prefetched = prefetch.prepare(*values, **kwargs) if prefetch is not None else {}
             result = runtime.predict_tiled(*values, **kwargs)
             info = result[1]
+            if prefetched:
+                info.update(prefetched)
+                info["reused_queries"] = prefetched["prefetch_reused_queries"]
+                info["tile_generation_seconds"] += prefetched["prefetch_wall_seconds_charged"]
+                info["batch_verification_seconds"] += prefetched["prefetch_verify_seconds_charged"]
             print(f"[RSUniVLM batch] {values[2].name}: tiles={info['num_tiles']}, "
                   f"raw_reused={info['reused_queries']}, batch={backend.effective_batch_size}, "
                   f"generate={info['tile_generation_seconds']:.2f}s, verify={info['batch_verification_seconds']:.2f}s", flush=True)
@@ -196,11 +211,14 @@ def main():
             result.update(tile_batch_size=options.tile_batch_size, effective_tile_batch_size=backend.effective_batch_size,
                           alias_extension=runtime.ALIAS_EXTENSION, verified_batch_sizes=sorted(backend.verified_sizes),
                           oom_splits=backend.oom_splits, serial_fallback=backend.serial_fallback,
+                          actual_batch_sizes_seen_this_process=sorted(backend.actual_batch_sizes),
+                          cross_image_batching=options.tile_batch_size > 4,
                           batch_mismatch_policy=BATCH_MISMATCH_POLICY)
             legacy.write_json(root / "metrics.json", result)
             print(json.dumps(dict(batch_output=str(root), requested_batch_size=options.tile_batch_size,
                 effective_batch_size=backend.effective_batch_size, verified_batch_sizes=sorted(backend.verified_sizes),
-                oom_splits=backend.oom_splits, serial_fallback=backend.serial_fallback), indent=2), flush=True)
+                oom_splits=backend.oom_splits, serial_fallback=backend.serial_fallback,
+                actual_batch_sizes_seen_this_process=sorted(backend.actual_batch_sizes)), indent=2), flush=True)
         finally:
             legacy.predict_loveda_tiled, legacy.score = original_predict, original_score
 

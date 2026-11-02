@@ -1,6 +1,6 @@
 # RSUniVLM：LoveDA 分割与 LEVIR-CD 变化检测
 
-本目录在同一个官方 `llava-qwen-gmoe` checkpoint 上执行两项任务，不新增训练、LoRA 或任务头。
+本目录在同一个官方 `llava-qwen-gmoe` checkpoint 上执行分割与变化检测，不新增训练、LoRA或任务头。最新增加[论文七集队列](PAPER_QUEUE.md)，支持任意正整数batch、跨图填批与双GPU互斥分片；入口`run_bash/rsunivlm_paper_queue.bash`。当前仅本机静态检查，七集真实WSL运行尚待回执；下文保留原LoveDA/LEVIR旧入口历史。
 当前状态（2026-11-02最新）：用户WSL的v4九图已完成；随后全量在163/1669后遇到`bareland`未知词中断。v5新增显式`bareland→barren`映射、512裁块batch4和经过身份核验的v4原文导入；旧预测/分数不复制，原文重建后重新评分。使用独立v5输出目录，原v4保留。详见[BATCHING.md](BATCHING.md)。本机只做静态核查，未运行测试或模型；WSL已在合批差异后回退单图并继续至166/1669，完整成绩仍待回执。九图mIoU=11.17%、mF1=16.59%仅为历史运行验证。
 用户执行入口统一记录在仓库 [RUN_QUEUE.md](../../RUN_QUEUE.md)。
 

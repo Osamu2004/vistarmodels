@@ -4,6 +4,41 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
+### 当前交付：论文七集队列，任意正整数batch，双GPU分片
+
+范围/数据路径/精确口径见`baselines/rsunivlm/PAPER_QUEUE.md`：LoveDA Val1669、FLAIR test15700、UAVid all270、xBD-pre test933、CHN6-CUG val903、LEVIR-CD test128、SECOND DynamicEarth val593。后两者是变化检测，不使用SECOND生图1694 test；不新增训练/生图任务。每卡加载一次模型复用七集，对每个集合分配互斥样本，最后合并统计而非平均分数。
+
+用户WSL执行前先Ctrl+C结束旧推理并等回到提示符，确认0/1两卡供本轮使用；本机没有该WSL的连接，不代启动。新离线包为外层工作区`output/offline/rsunivlm_paper_queue_20261102.bundle`，复制到`/root/code/vistarmodels`后：
+
+~~~bash
+cd /root/code/vistarmodels
+git bundle verify ./rsunivlm_paper_queue_20261102.bundle
+git pull --ff-only ./rsunivlm_paper_queue_20261102.bundle main
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+# TIFF读写依赖；不改CUDA版torch或其他模型环境
+python -m pip install 'rasterio>=1.3,<1.5' 'tifffile>=2023.7,<2025'
+
+# 路径/群体预检，无模型加载或GPU作业
+GPU_IDS=0,1 BATCH_SIZE=16 PLAN_ONLY=1 \
+bash run_bash/rsunivlm_paper_queue.bash
+
+# 可选WSL合成回归；本机没有运行这些测试
+python -m pytest tests/test_rsunivlm_paper_queue.py -q
+
+# 正式完整七集；每张卡最多16个tile序列，改变16为任意正整数即可
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_paper_queue_bs16_2gpu_v1 \
+bash run_bash/rsunivlm_paper_queue.bash
+~~~
+
+若实际数据路径不同，编辑`configs/rsunivlm/paper_data_roots.json`并在预检和正式命令中都设置`DATA_ROOTS_JSON=configs/rsunivlm/paper_data_roots.json`。可用`DATASETS=loveda,levircd`选择部分队列，但该运行不等于论文七集全部完成。任一所选集合缺失时预检一次列出并停止，不下载数据、不用子集替代。
+
+`BATCH_SIZE`为每GPU序列数（16×2卡最多32），每个序列是单块RGB或变化任务的一对RGB；原生512裁块跨图填批。格式重试/尾批可以更小，OOM自动折半。直接批量模式不做单图等价核验，已知差异不隐藏；从独立新目录启动，不混用旧单图缓存。实际大小看`actual_batch=`和raw generation；速度/32GB显存适用性待WSL测量。
+
+产物包括各集`metrics.json`、`shards/rank*/pred_mask`、RLE/回执/进度/错误、GPU日志、环境和PID/退出码记录，以及总`paper_summary.json/csv`。只有预测图片，不保存输入/GT/叠加图。格式预算耗尽的数据集保持incomplete并继续剩余队列；只有全部所选完整人口完成才complete，完整官方七集另需is_full_benchmark=true。状态：实现及本机静态检查，尚无WSL合成测试/前向/完整指标回执。训练暴露差异见TRAINING_DATA_AUDIT.md，不能标成所有数据集零样本。
+
 ### 用户当前要求：增大实际batch，独立batch4完整推理
 
 用户明确要求增大实际batch。当前ec6929f已有`TILE_BATCH_SIZE=4 VERIFY_BATCH=0`入口，无需修改或更新推理代码：关闭单图一致性比较，从而不触发已知的比较失败→永久batch1。保留原单图作业输出；先在其WSL终端按一次Ctrl+C并等回到提示符，再运行下列独立新目录命令。不要同时在同一GPU上启动两份。没有本机WSL连接，不代中断或启动。

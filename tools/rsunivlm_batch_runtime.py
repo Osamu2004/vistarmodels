@@ -20,25 +20,34 @@ ALIAS_EXTENSION = {"bareland": "barren", "bare land": "barren"}
 
 def generate_batch(core, images, prompt, *, verify_processor=False):
     """One RGB image per sequence; all sequences have the identical prompt."""
+    return generate_requests(core, [[image] for image in images], prompt, verify_processor=verify_processor)
+
+
+def generate_requests(core, requests, prompt, *, verify_processor=False):
+    """Arbitrary positive batch; each sequence contains one or two images."""
     if not prompt.startswith("[SEG]"):
         raise ValueError("Dense inference requires a [SEG] instruction")
-    if not images or len(images) > 4 or len({image.size for image in images}) != 1:
-        raise ValueError("Use one to four equally-sized source tiles")
+    if not requests or len({len(request) for request in requests}) != 1 or len(requests[0]) not in (1,2):
+        raise ValueError("Use a nonempty batch with one or two images per sequence")
+    images = [image for request in requests for image in request]
+    if len({image.size for image in images}) != 1:
+        raise ValueError("Batch source tiles must have matching extents")
     start = time.monotonic()
-    if len(images) == 1:
-        response = core.generate(images, prompt)
+    if len(requests) == 1:
+        response = core.generate(requests[0], prompt)
         return [dict(response=response, generation=dict(copy.deepcopy(core.last_generation), inference_batch_size=1,
+                     images_per_sequence=len(requests[0]),
                      batch_elapsed_seconds=time.monotonic()-start))]
     if getattr(core.model.config, "image_aspect_ratio", "square") != "square":
         raise ValueError("Batch runtime is scoped to the recorded square-image checkpoint")
     conversation = copy.deepcopy(core.template)
-    conversation.append_message(conversation.roles[0], "<image>\n" + prompt)
+    conversation.append_message(conversation.roles[0], " ".join(["<image>"]*len(requests[0])) + "\n" + prompt)
     conversation.append_message(conversation.roles[1], None)
     single = core.tokenizer_image_token(conversation.get_prompt(), core.tokenizer,
         core.image_token_index, return_tensors="pt")
     if single.numel() >= core.context_len:
         raise ValueError("Prompt exceeds the checkpoint context")
-    tokens = single.unsqueeze(0).repeat(len(images), 1).to(core.device)
+    tokens = single.unsqueeze(0).repeat(len(requests), 1).to(core.device)
     pixels = core.process_images(images, core.processor, core.model.config)
     if verify_processor:
         for image, batch_pixels in zip(images, pixels):
@@ -50,11 +59,11 @@ def generate_batch(core, images, prompt, *, verify_processor=False):
         raise ValueError("Expected one matching CHW vision tensor per sequence")
     with torch.inference_mode():
         output = core.model.generate(tokens, images=pixels, image_sizes=[image.size for image in images],
-            attention_mask=torch.ones_like(tokens, dtype=torch.bool), modalities=["image"]*len(images),
+            attention_mask=torch.ones_like(tokens, dtype=torch.bool), modalities=["image"]*len(requests),
             granularity=2, do_sample=False, num_beams=1, max_new_tokens=core.max_new_tokens,
             temperature=1.0, top_p=1.0, top_k=50, use_cache=True,
             pad_token_id=core.tokenizer.eos_token_id)
-    if output.ndim != 2 or output.shape[0] != len(images):
+    if output.ndim != 2 or output.shape[0] != len(requests):
         raise ValueError("GMoE output batch differs from the input request batch")
     rows = output.detach().cpu().tolist()
     eos = core.model.generation_config.eos_token_id
@@ -72,7 +81,7 @@ def generate_batch(core, images, prompt, *, verify_processor=False):
             batch_generated_steps=len(row), max_new_tokens=core.max_new_tokens,
             ended_with_eos=first_eos is not None, hit_token_limit=length >= core.max_new_tokens,
             attention_mask="all_valid_identical_prompt_lengths", decoding="greedy",
-            inference_batch_size=len(images), batch_elapsed_seconds=elapsed)))
+            inference_batch_size=len(requests), images_per_sequence=len(requests[0]), batch_elapsed_seconds=elapsed)))
     return results
 
 
@@ -120,11 +129,22 @@ def generated_chunks(backend, jobs, prompt):
             continue
         if len(answers) != len(group):
             raise ValueError("Missing batched model responses")
+        sizes = set()
+        for index, (job, answer) in enumerate(zip(group, answers)):
+            generation = answer.setdefault("generation", {})
+            actual = generation.get("inference_batch_size")
+            if actual is not None:
+                sizes.add(actual)
+                generation["batch_members"] = ([member["identity"] for member in group]
+                    if actual == len(group) else [job["identity"]])
+                generation["batch_position"] = index if actual == len(group) else 0
+        backend.actual_batch_sizes = getattr(backend, "actual_batch_sizes", set()) | sizes
+        print(f"[RSUniVLM batch] Completed dispatch={count}; actual={sorted(sizes)}", flush=True)
         yield group, answers
         offset += count
 
 
-def query_tiles(backend, jobs, *, overwrite=False):
+def query_tiles(backend, jobs, *, overwrite=False, defer_format_errors=False):
     grids, reused, histories = {}, {}, {}
     budget = backend.format_retries
     if budget not in (0, 1, 2):
@@ -142,7 +162,7 @@ def query_tiles(backend, jobs, *, overwrite=False):
                 ("prompt", "response", "generation", "decode_error") if key in record}])
         else:
             histories[path] = []
-        if len(histories[path]) >= 1+budget:
+        if len(histories[path]) >= 1+budget and not defer_format_errors:
             raise ValueError(f"Stored answers remain invalid after alias normalization; inspect {path}")
     for variant in range(1+budget):
         pending = [job for job in jobs if job["path"] not in grids and len(histories[job["path"]]) == variant]
@@ -169,12 +189,13 @@ def query_tiles(backend, jobs, *, overwrite=False):
                     legacy.write_json(path, dict(record, grid_shape=list(grid.shape), grid_policy=RLE_GRID_POLICY))
                     grids[path], reused[path] = grid, False
     failed = [str(job["path"]) for job in jobs if job["path"] not in grids]
-    if failed:
+    if failed and not defer_format_errors:
         raise ValueError(f"Format attempts exhausted; original answers preserved: {failed}")
     return grids, reused
 
 
-def predict_tiled(backend, image, sample, raw_dir, identity, *, tile_size, overwrite):
+def make_tile_jobs(image, sample, raw_dir, identity, *, tile_size):
+    """Keep the original native crop geometry and row-major source order."""
     settings = loveda_spatial_settings(tile_size)
     if tile_size != 512 or image.mode != "RGB":
         raise ValueError("Batched LoveDA retains 512-pixel RGB source tiles")
@@ -190,6 +211,12 @@ def predict_tiled(backend, image, sample, raw_dir, identity, *, tile_size, overw
             jobs.append(dict(image=tile, path=raw_dir/f"{sample.name}_tile{tile_size}_y{y}_x{x}_seg.json",
                 identity=fingerprint([identity,"loveda_source_tile",metadata]), spatial=metadata,
                 x=x, y=y, h=h, w=w))
+    return jobs
+
+
+def predict_tiled(backend, image, sample, raw_dir, identity, *, tile_size, overwrite):
+    jobs = make_tile_jobs(image, sample, raw_dir, identity, tile_size=tile_size)
+    width, height = image.size
     start, before_verify = time.monotonic(), backend.verification_seconds
     grids, reused = query_tiles(backend, jobs, overwrite=overwrite)
     generation_seconds = time.monotonic()-start

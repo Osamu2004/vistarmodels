@@ -1,0 +1,61 @@
+{
+  "schema": "rsunivlm_paper_queue_static_v1",
+  "date": "2026-11-02",
+  "base_commit": "85a44ce2381064c0be79fee24528147b857f5769",
+  "ast_parsed": [
+    "tools/eval_rsunivlm_paper_queue.py",
+    "tools/rsunivlm_paper_protocol.py",
+    "tools/rsunivlm_paper_worker.py",
+    "tools/rsunivlm_batch_runtime.py",
+    "tools/rsunivlm_batch_prefetch.py",
+    "tools/eval_rsunivlm_batched.py",
+    "tests/test_rsunivlm_paper_queue.py",
+    "tests/test_rsunivlm_cross_image_batch.py",
+    "tests/test_rsunivlm_batch_runtime.py"
+  ],
+  "shell_syntax_checked": [
+    "run_bash/rsunivlm_paper_queue.bash",
+    "run_bash/rsunivlm_eval.bash",
+    "run_bash/rsunivlm_loveda.bash"
+  ],
+  "protected_source_sha256": {
+    "baselines/rsunivlm/__init__.py": "8cf55428f9ab3228ef672f750104b33b6f81c78f4b1899e3a8621b337815073c",
+    "baselines/rsunivlm/evaluate.py": "fa49e52d9887c5b9cbd23abf802aa3d99d5aa4e2a8f979af0b73f65b95f42aa5",
+    "baselines/rsunivlm/model.py": "2fa3383d73aff44e839d33c14773c146969b862083ea0a0fdc0743950825b449",
+    "baselines/rsunivlm/protocols.py": "0254d577295afb0205642d6aa1188e32accda52092d4b02aa9dba81b84cc8c4a",
+    "baselines/segearth_ov/protocols.py": "2082658e51f96bf361cada2c5c4c258f535b7c2cf29b0e3fb0ea1215a675e94c",
+    "baselines/binary_boundary_wfm.py": "838044f7b0b5f5446e343cef55f31a1f8c11391a7212afd455b6d999b33edd5b",
+    "baselines/flair_protocol.py": "601f5b207e1a4245b8aed697897b6b0eabed9817b7c64cc4502d7befba5847d8",
+    "baselines/levircd_common.py": "f40e3ca5c7d33caab1ca63421b63c74484075dfe7fddc6937d0518ebafbbeb84",
+    "baselines/rskt_seg/xbd_label_utils.py": "e636423f1a96450c086a6ad26d65fa652029702744fb6545ad6e82f57425b9a2"
+  },
+  "second_split_unique_count": 593,
+  "second_split_sha256": "eed4dc3956022e18f426ba9efd30fd0927cd4fa0c065b7058e86e439624ed346",
+  "tests_executed": false,
+  "model_loaded": false,
+  "gpu_executed": false,
+  "remote_executed": false,
+  "authored_wsl_tests": [
+    "tests/test_rsunivlm_paper_queue.py",
+    "tests/test_rsunivlm_cross_image_batch.py",
+    "tests/test_rsunivlm_batch_runtime.py"
+  ],
+  "pending": [
+    "WSL synthetic regressions",
+    "actual seven dataset preflight",
+    "single and paired CUDA batch forwards",
+    "GPU throughput and peak memory",
+    "full population metrics and format failure rates"
+  ],
+  "new_source_sha256": {
+    "tools/eval_rsunivlm_paper_queue.py": "3822559c481ca586be4b9654a9e3edb3abc5d3fc7ef6daed13d600c224271218",
+    "tools/rsunivlm_paper_protocol.py": "180325ecc4ee96c318970cda68336ed4cef3a08302377cad5b921a78590396bf",
+    "tools/rsunivlm_paper_worker.py": "1e252b0c586fe52ccbcec48ba7863d2ce75b21db695634a44042bb0b005545cb",
+    "tools/rsunivlm_batch_runtime.py": "0aa32aca38917116d25730689833cce85a412dd5e6555dad6331522e9d0d3f22",
+    "tools/rsunivlm_batch_prefetch.py": "06a18646b2607d7940c259247c7f2a827a86047e3191909e25c794a751db7ec6",
+    "tools/eval_rsunivlm_batched.py": "5d6ad53d0f3a79c1304f9334d4571fcc4fd9c29565c5cacb95f6b6f5591a9a41",
+    "tests/test_rsunivlm_paper_queue.py": "cc626812a2ec44f5ce3dbdf4a6eafad7e83983efcc2f6f140154fe9edc0638f7",
+    "tests/test_rsunivlm_cross_image_batch.py": "9cc291706810477a41976d6d95fc7015010ec20ba579d4cd15331d3986e51751",
+    "tests/test_rsunivlm_batch_runtime.py": "f0582ae28f21d84590e2e738d01f6d853de66c42ef26864538b7d11ce4da102f"
+  }
+}
