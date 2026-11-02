@@ -4,6 +4,34 @@
 
 ## RSUniVLM：LoveDA Val 分割与 LEVIR-CD test 变化检测
 
+### 用户当前要求：增大实际batch，独立batch4完整推理
+
+用户明确要求增大实际batch。当前ec6929f已有`TILE_BATCH_SIZE=4 VERIFY_BATCH=0`入口，无需修改或更新推理代码：关闭单图一致性比较，从而不触发已知的比较失败→永久batch1。保留原单图作业输出；先在其WSL终端按一次Ctrl+C并等回到提示符，再运行下列独立新目录命令。不要同时在同一GPU上启动两份。没有本机WSL连接，不代中断或启动。
+
+已知batch3和单图存在1/3差异，原因未定。新运行作为明确的批量协议单独记录，不宣称与单图逐像素等价。此次`IMPORT_V4_ROOT=`不导入单图原文，完整1669张从头按同一批量路径推理，避免把已知非等价的单图缓存混成“全量batch4”。原有输入、权重、512源图裁块、384视觉处理、fp16/eager、greedy、8192新token、至多两次格式重试与全部评分函数不变。
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+GPU_IDS=1 NPROC_PER_NODE=1 \
+TILE_SIZE=512 TILE_BATCH_SIZE=4 VERIFY_BATCH=0 \
+DTYPE=float16 ATTENTION=eager \
+DATA_ROOT=/root/data/LoveDA SPLIT=val \
+RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
+RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
+RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
+BOOTSTRAP_RSUNIVLM=0 FORMAT_RETRIES=2 \
+MAX_SAMPLES=0 SAVE_IMAGES=0 IMPORT_V4_ROOT= \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_loveda_val_native_tile512_rle_v5_bs4_direct \
+bash run_bash/rsunivlm_loveda.bash
+~~~
+
+一张1024原图有4个512裁块，首次推理可4条独立序列合批。格式重试仅对失败子集，实际batch可能1–3；CUDA OOM仍保留拆批到2/1，不伪造batch或跳图。只保存预测掩码及必要文本/评分回执，run_config.protocol.batch_verify=false，raw_text的generation.inference_batch_size记录实际批量；最终metrics记录requested/effective batch，不能仅凭目录名断言实际值。产物路径以终端输出及run_config为准。完成条件仍为1669、complete=true、is_full_benchmark=true。
+
+状态：命令已按当前源码核对，未在本机执行测试/模型，也未代在WSL启动；新的实际batch、速度、显存和最终指标待用户回执。单图回退路径仍保留给VERIFY_BATCH=1，现有离线代码包已经支持本命令，无需重新下载包。
+
 ### 最新WSL进度：回退与格式恢复已运行到166/1669
 
 用户回执时任务正在继续：首次实际batch3有1/3与单图不一致，已统一采用单图参考并固定batch1；Val_Rural_2685成功完成，越过旧163张断点。该图4裁块复用1份原文，另外2个缺计数water回答经过既有重试后恢复，随后Val_Rural_2686/2687均完成。后两图生成分别6.50s/8.43s，verify=0；首次27.33s含核验9.71s，不作为稳定吞吐。进度条剩余约3h20–30m，仅为当时动态估计。
