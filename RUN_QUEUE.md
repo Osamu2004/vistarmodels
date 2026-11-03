@@ -4,6 +4,42 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-03 当前：失败样本独立补跑，等待原七集队列结束
+
+状态：用户日志显示FLAIR约54%/60%，有格式失败但队列仍继续；原七集完成状态未知。新补跑入口仅静态检查，WSL合成回归和真实恢复均未运行。本次只新增恢复工具/测试/文档，没有修改当前队列的数值源码。先等待整个旧队列退出，再更新；不要并行运行旧队列和恢复入口。原因/恢复范围见`baselines/rsunivlm/FAILED_RECOVERY.md`。
+
+下载`rsunivlm_failed_recovery_20261103.zip`到WSL项目目录后，使用本地离线包安装，不依赖GitHub连接；安装器保留用户手改的数据路径JSON。不包含权重/数据。
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m zipfile -e ./rsunivlm_failed_recovery_20261103.zip ./rsunivlm_failed_recovery_update
+python ./rsunivlm_failed_recovery_update/install_offline.py --repo . \
+  --bundle ./rsunivlm_failed_recovery_update/rsunivlm_failed_recovery_20261103.bundle
+
+python -m pytest tests/test_rsunivlm_failed_recovery.py \
+  tests/test_rsunivlm_native_semantic.py tests/test_rsunivlm_paper_queue.py \
+  tests/test_rsunivlm_second_undirected.py tests/test_rsunivlm_levircd_forward.py -q
+~~~
+
+测试通过才执行；测试失败保留输出并停止补跑，不把未运行记为通过。以下`SOURCE_RUN`填原来终端的Actual OUTPUT_DIR，若有`_p...`请完整保留。预检自动选择所有有格式失败且已处理完整名单的数据集，不启动GPU：
+
+~~~bash
+SOURCE_RUN=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1
+python tools/retry_rsunivlm_failed.py --source_run "$SOURCE_RUN" --plan_only
+~~~
+
+原队列已退出、预检通过且两卡空闲后，沿用源运行的双卡和每卡batch16上限（失败查询不足时实际batch会更小），执行同一补跑：
+
+~~~bash
+python tools/retry_rsunivlm_failed.py --source_run "$SOURCE_RUN"
+~~~
+
+可选`--datasets flair`仅补FLAIR；默认覆盖原七集中所有符合条件的失败集合。可选`--gpu_ids 0,1`改变卡号但数量必须与源分片数一致；不新增训练。默认输出为源目录加`_failed_retry_r2`，工具打印实际目录。成功整图掩码硬链接/跨盘复制，失败整图中有效原文复用；只对坏/缺失查询执行模型。输入/源码/权重身份改变时停止，不能跨协议硬导入；预算原已为2时不重复无效模板。
+
+产物：`recovery_import.json`、逐卡原文/掩码/失败记录、每集`metrics.json`、`paper_summary.json/csv`。通过条件：源目录保持，已成功推理不重复计算；所有需要的集合完整时`complete=true`、`num_failed=0`，成功数等于该集原名单。若仍有失败，队列会处理完其余样本，最后返回非零；保留partial结果和错误原文，不当作全量论文分数。新的首个有效固定模板策略/来源单独记录，不替换论文分数。
+
 ### 2026-11-03 当前：格式失败后继续，不中止数据集
 
 用户32张FLAIR回执确认两卡已加载模型、实际batch16，分别因`building:1`等损坏RLE而在0/16停止。新代码将格式预算耗尽改成记录失败整图并继续剩余样本/数据集。`FORMAT_RETRIES=0`仍是仅一次原始模板；不是无限重试或放宽解码，不用背景补齐。最终成功子集分数注明partial，失败未补齐时complete=false；全队列处理完才返回非零状态。详情见`baselines/rsunivlm/CONTINUE_FORMAT_FAILURES.md`。

@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-03",
+  "source": "User-pasted terminal log in this conversation; not a direct WSL filesystem inspection",
+  "stage": "ongoing FLAIR native classwise inference",
+  "snapshots_not_synchronized": true,
+  "ranks": [
+    {"rank": 0, "attempted": 4240, "assigned": 7850, "failed": 966, "scored": 3274, "elapsed": "8:27:56"},
+    {"rank": 1, "attempted": 4704, "assigned": 7850, "failed": 1131, "elapsed": "8:28:42"}
+  ],
+  "batch": 16,
+  "format_retries": 0,
+  "examples": [
+    {"file": "D071_2020_Z9_UA_070213_class_01_pervious_surface_y0_x0.json", "error": "Invalid RLE item at row 2: ' perviousondir'"},
+    {"file": "D075_2021_Z1_UU_071150_class_01_pervious_surface_y0_x0.json", "error": "Ragged descriptor rows"},
+    {"file": "D075_2021_Z1_UU_071138_class_05_coniferous_y0_x0.json", "error": "Invalid RLE item at row 14: ' conj. others *1'"},
+    {"file": "D075_2021_Z1_UU_071144_class_05_coniferous_y0_x0.json", "error": "Invalid RLE item at row 4: ' conj. *1'"},
+    {"file": "D075_2021_Z1_UU_071146_class_05_coniferous_y0_x0.json", "error": "Invalid RLE item at row 15: ' conj'"}
+  ],
+  "diagnosis": "Generated descriptor format errors; one bad query makes the whole image incomplete",
+  "oom_seen_in_this_fragment": false,
+  "data_file_error_seen_in_this_fragment": false,
+  "batch_causality_tested": false,
+  "complete": false,
+  "is_full_benchmark_result": false,
+  "recovery_executed": false
+}
