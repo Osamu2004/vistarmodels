@@ -4,6 +4,54 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-04 当前：离线修复已保存RLE分隔符，原解码器完整校验
+
+用户要求将road**2/building:1等规范为road*2/building*1，再用原解码器完整校验。新增纯CPU格式修复与重建工具；只在原所有尝试均非法时处理明确分隔符，不改词汇/计数/换行/EOS，不修复缺数、ragged、截断或未知映射。原raw_text/预测/评分保留，派生协议在独立_formatfix_v1目录；已成功掩码/回答复用。原15个数值源码不改，后处理策略另记identity和编辑审计；详见baselines/rsunivlm/FORMAT_REPAIR.md。
+
+离线交付文件为外层工作区output/offline/rsunivlm_formatfix_20261104.zip。它包含已提交main完整历史、本次修复代码和既有guarded/DataLoader入口，不包含未提交的其他基线改动、权重、数据或预测。将ZIP复制到WSL的/root/code/vistarmodels，等原队列退出后安装；安装本身不运行测试或推理，保留用户数据路径JSON，其他本地修改受Git正常保护：
+
+~~~bash
+cd /root/code/vistarmodels
+python -m zipfile -e ./rsunivlm_formatfix_20261104.zip ./rsunivlm_formatfix_update_20261104
+bash ./rsunivlm_formatfix_update_20261104/install_update.bash /root/code/vistarmodels
+~~~
+
+通过条件：包内SHA验证、Git bundle verify与快进导入成功；若Git报告其他本地冲突则停止，不覆盖。ZIP/bundle SHA和实际tip以外层output/offline同名receipt为准。
+
+代码发布后先在WSL原环境运行合成回归（无权重/CUDA前向）；本机不运行测试：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m pytest tests/test_rsunivlm_format_repair.py \
+  tests/test_rsunivlm_format_repair_pipeline.py tests/test_rsunivlm_failed_recovery.py -q
+~~~
+
+通过条件：全部通过；失败则保留输出停止。等原队列完全退出再执行，不能同时修改同一来源。默认覆盖来源原七集，允许来源此前因CUDA中断，已有坏格式可先修，未生成查询保留为待推理；纯CPU路径不需要恢复第二张卡，不加载模型也不验证当前权重载入。可先用--plan_only只核对配置/来源结束状态，不导入/修复/评分。
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+SOURCE_RUN=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1
+RSUNIVLM_NUM_WORKERS=2 RSUNIVLM_PREFETCH_FACTOR=2 \
+python tools/repair_rsunivlm_format.py --source_run "$SOURCE_RUN"
+~~~
+
+可加--datasets flair只处理FLAIR。默认Actual OUTPUT_DIR为源目录_formatfix_v1（若身份冲突按原规则有_p后缀），后续仍用相同source_run命令续跑此目录。format_repair_report.json与format_repair_scan.jsonl列出修复/拒绝及待生成状态；每条被接受的修复保留完整原response和分隔符编辑清单。CPU阶段退出0只表示该阶段完成，不能当全量完整；看paper_summary.complete和报告offline_complete/deferred_queries。原来format_retries=0不会在默认模式下增加。
+
+仅需要继续生成剩余坏/缺失查询时，在两张卡均恢复、资源可用且测试通过后，显式启用以下可选GPU分支。它将预算明确改为既有两次固定备用提示，在独立_formatfix_v1_retry2目录记录新策略；先离线修复，CPU已完整则不启动GPU。当前用户仅要求写代码，本机不执行该分支：
+
+~~~bash
+CUDA_LAUNCH_BLOCKING=0 PYTHONFAULTHANDLER=1 \
+RSUNIVLM_NUM_WORKERS=2 RSUNIVLM_PREFETCH_FACTOR=2 \
+python tools/repair_rsunivlm_format.py --source_run "$SOURCE_RUN" --run_remaining
+~~~
+
+模型补跑已连接guarded监督/DataLoader，不使用旧裸launch。不能规范的历史在预算允许时才执行备用提示，不无限重试；失败未补齐仍partial。不将结果改写到原始目录或论文。当前仅静态检查，真实修复率、完整性/性能均待WSL回执；20261103 DataLoader包本身不含此功能，本次使用20261104格式修复包。
+
 ### 2026-11-03 DataLoader离线更新包
 
 用户要求制作离线包。固定已提交的DataLoader实现（代码提交f29b995）并附完整main Git历史、路径保护导入器、SHA256校验和安装说明；不需要旧增量包前置提交，不包含权重/数据/已有预测或其他未提交基线改动。外层工作区产物：output/offline/rsunivlm_dataloader_20261103.zip；实际bundle tip与归档SHA记录在同名receipt。只做归档/Git传输校验，不运行本机pytest、DataLoader worker、模型或CUDA。

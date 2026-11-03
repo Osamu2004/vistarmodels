@@ -1,5 +1,7 @@
 # RSUniVLM 格式失败补跑
 
+2026-11-04新增先不调用模型的机械修复：见[FORMAT_REPAIR.md](FORMAT_REPAIR.md)，可将明确分隔符错误规范后用原解码器完整校验，并在CPU重建/评分；缺计数、ragged或未生成查询不猜补。本文的模型补跑入口现已接入最新guarded监督与DataLoader；来源若为CPU修复目录，须有匹配的offline_runtime_finished.json，且仍要求每个来源分片已完成查询人口。
+
 ## 当前失败是什么
 
 用户2026-11-03的FLAIR终端片段显示两卡仍在继续：rank0处理4240/7850、failed966；rank1处理4704/7850、failed1131。这是不同时间的进度快照，不是最终总数或完整基准结果。

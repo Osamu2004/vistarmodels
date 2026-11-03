@@ -1,5 +1,15 @@
 # RSUniVLM 接入记录
 
+## 2026-11-04：显式RLE分隔符离线修复与CPU重建
+
+用户明确要求实现road**2/building:1→road*2/building*1并用原解码器完整校验。新增rsunivlm_format_repair.py，只替换完整类别/整数间的ASCII冒号或重复星号；只有所有原尝试非法时才取首个规范后合法候选。任何已有合法尝试、类别词/计数/换行/EOS均不改；ragged/缺计数/显式未结束/未知原映射等不放宽，不填背景。每个接受修复的attempt保存精确原文、前后SHA和编辑列表。
+
+新增repair_rsunivlm_format.py默认纯CPU导入来源缓存、机械修复、原Engine重建/评分；OfflineEngine禁止模型core，缺失查询只记待生成不伪造模型attempt。来源可以是已退出的CUDA中断分片；源锁、plan/config/15个数值源码与原文/输入身份必须一致。派生_formatfix_v1协议纳入后处理/工具/导入器SHA，原目录不改；完整旧掩码硬链接/跨盘复制，CPU汇总仍沿用原计分，不平均子集mIoU。未推理查询使exhausted_population=False，保留partial，不当作格式失败已跑完整人口。
+
+显式--run_remaining才允许在_formatfix_v1_retry2派生策略下用两个既有固定模板补推理，并经最新guarded/DataLoader监督。旧retry_rsunivlm_failed.py也改路由至guarded，并仅接受身份匹配的CPU结束回执；未完成查询人口仍拒绝旧格式补跑入口。新的CPU结束记录单独存offline_runtime_finished.json，不覆盖GPU故障回执。未自动执行任何GPU任务或更新论文。
+
+新增WSL合成回归覆盖机械规则及原解码、失败候选不保存、历史合法优先、原计数/EOS、来源不变、CPU重建与重复续跑、缺失/CUDA中断、输出/活动锁/数值身份保护及显式监督补推理。按用户要求，本机仅AST/Bash/源码哈希静态检查，不运行测试/解码/模型/CUDA；实际修复率和WSL评分待回执。用户命令统一RUN_QUEUE；另制作20261104格式修复离线包，已提交main完整历史，路径保护导入器保留用户JSON，包SHA/tip/传输验证以外层output/offline的manifest和receipt为准。20261103离线包不包含新修复工具。
+
 ## 2026-11-03：按用户要求制作DataLoader离线交付
 
 用户要求离线包。以已提交DataLoader代码f29b995及本段安装文档为固定Git快照，制作含完整main历史的bundle和ZIP，随附原路径保护导入器、SHA校验安装脚本、中文README与静态验证记录；不包含任何未提交基线改动或模型/数据/预测。RUN_QUEUE新增离线解压/安装命令，安装不启动测试/GPU；WSL测试与原七集续跑单独由用户执行。

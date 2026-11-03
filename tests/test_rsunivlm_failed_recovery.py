@@ -194,3 +194,14 @@ def test_runtime_assets_check_vision_identity_without_loading_weights(tmp_path,m
     config.write_text('{"hidden_size": 16}\n')
     with pytest.raises(ValueError,match="Vision checkpoint files changed"):
         recovery.verify_runtime_assets(plan)
+
+
+def test_model_retry_routes_through_guarded_supervision(tmp_path,monkeypatch):
+    source,plan,*_=completed_source(tmp_path,monkeypatch)
+    dispatched=[]
+    monkeypatch.setattr(recovery,"verify_runtime_assets",lambda value:None)
+    monkeypatch.setattr(recovery,"import_predictions",lambda *args:{"synthetic":True})
+    monkeypatch.setattr(recovery.guarded,"launch",lambda value,legacy:dispatched.append((value,legacy)) or 0)
+    monkeypatch.setattr(sys,"argv",["retry","--source_run",str(source)])
+    assert recovery.main()==0
+    assert len(dispatched)==1 and dispatched[0][1] is queue

@@ -21,6 +21,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 
 from tools import eval_rsunivlm_paper_queue as queue
+from tools import eval_rsunivlm_guarded as guarded
 from tools import rsunivlm_native_semantic as native
 from tools import rsunivlm_paper_protocol as protocol
 from tools import rsunivlm_paper_worker as worker
@@ -87,7 +88,9 @@ def prepare(source, requested, gpu_ids=None, retries=2):
     old=io.read_json(source/"plan.json"); config=io.read_json(source/"run_config.json")
     if not old or not config or old.get("identity")!=fingerprint(old.get("protocol")) or config.get("protocol")!=old["protocol"] or config.get("identity")!=old["identity"]:
         raise ValueError("Source plan/config identity is missing or inconsistent")
-    if not (source/"runtime_finished.json").is_file():
+    offline_finished=io.read_json(source/"offline_runtime_finished.json")
+    valid_offline=bool(offline_finished and offline_finished.get("identity")==old["identity"] and offline_finished.get("mode")=="offline_format_repair")
+    if not (source/"runtime_finished.json").is_file() and not valid_offline:
         raise ValueError("Wait for the original whole queue to finish; runtime_finished.json is missing")
     if old["protocol"].get("code_sha256")!=queue.source_identity():
         raise ValueError("Numerical source changed since the original run; do not import caches across unverified code")
@@ -253,7 +256,7 @@ def main():
             io.write_json(output/"recovery_import.json",dict(**report,**counters,source=str(source),source_identity=old["identity"],target_identity=new["identity"]))
             print(f"[recovery] cache import: {counters}",flush=True)
             (output/"logs").mkdir(exist_ok=True)
-            return queue.launch(new)
+            return guarded.launch(new, legacy=queue)
 
 
 if __name__=="__main__": raise SystemExit(main())

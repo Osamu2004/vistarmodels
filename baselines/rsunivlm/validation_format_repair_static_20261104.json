@@ -1,0 +1,46 @@
+{
+  "time_utc": "2026-11-03T16:59:37.618806+00:00",
+  "validation": "static_only",
+  "ast_checked": [
+    "tools/rsunivlm_format_repair.py",
+    "tools/repair_rsunivlm_format.py",
+    "tools/retry_rsunivlm_failed.py",
+    "tests/test_rsunivlm_format_repair.py",
+    "tests/test_rsunivlm_format_repair_pipeline.py",
+    "tests/test_rsunivlm_failed_recovery.py"
+  ],
+  "bash_command_blocks_checked": 4,
+  "scoped_diff_check": true,
+  "protected_numerical_file_count": 15,
+  "protected_files_unchanged_vs": "0b4f0fc73952a2934fcd505f68e4e78ed214d96a",
+  "protected_code_sha256": {
+    "tools/eval_rsunivlm_paper_queue.py": "52e37877049d94d2a8af33d08996ae28816e4a372fcb7d7a9165ed86b0e32bfc",
+    "tools/rsunivlm_paper_protocol.py": "16c8b5b2ce75ff6ac8f192ba870a39ac9681a70b9e5a849310af7c877c20ef9e",
+    "tools/rsunivlm_paper_worker.py": "86befcad4eb9a88454bb3b9865e8334d0facbcc12c2a4a9426580e7127b78e65",
+    "tools/rsunivlm_batch_runtime.py": "0aa32aca38917116d25730689833cce85a412dd5e6555dad6331522e9d0d3f22",
+    "tools/rsunivlm_native_semantic.py": "e4a2b77c4400913c77e37f46e16b857fb58cdb78f2278c58b352fb7541bf3b36",
+    "baselines/rsunivlm/model.py": "2fa3383d73aff44e839d33c14773c146969b862083ea0a0fdc0743950825b449",
+    "baselines/rsunivlm/protocols.py": "0254d577295afb0205642d6aa1188e32accda52092d4b02aa9dba81b84cc8c4a",
+    "baselines/rsunivlm/evaluate.py": "43c854987b554966fc3fb7cc66525e3cae456ed1955700fb26592996130e58e2",
+    "baselines/segearth_ov/protocols.py": "2082658e51f96bf361cada2c5c4c258f535b7c2cf29b0e3fb0ea1215a675e94c",
+    "baselines/flair_protocol.py": "601f5b207e1a4245b8aed697897b6b0eabed9817b7c64cc4502d7befba5847d8",
+    "baselines/binary_boundary_wfm.py": "838044f7b0b5f5446e343cef55f31a1f8c11391a7212afd455b6d999b33edd5b",
+    "baselines/levircd_common.py": "f40e3ca5c7d33caab1ca63421b63c74484075dfe7fddc6937d0518ebafbbeb84",
+    "tools/rsunivlm_batch_import.py": "82ba07ef1b6eeba1f27802e5aa48d2e9a64e6f2e52ed643cddb2c2399da977db",
+    "baselines/rskt_seg/xbd_label_utils.py": "e636423f1a96450c086a6ad26d65fa652029702744fb6545ad6e82f57425b9a2",
+    "assets/splits/second_bisrnet_dynamic_earth_val.txt": "eed4dc3956022e18f426ba9efd30fd0927cd4fa0c065b7058e86e439624ed346"
+  },
+  "runtime_code_sha256": {
+    "tools/rsunivlm_format_repair.py": "88e03a46f8442497904d72b45e6a29ccee93fff06374371ca043834850ace484",
+    "tools/repair_rsunivlm_format.py": "f8cae0532efbfdb229f0059ec92980dbeeb297084c582dbee74dbc4a9f71b972",
+    "tools/retry_rsunivlm_failed.py": "5984fe687cd7da0e1b2f85975120323593cd16c2e9fcfc2fbdaf6fbebcf0270f"
+  },
+  "tests_executed": false,
+  "decoder_executed": false,
+  "model_or_cuda_executed": false,
+  "wsl_run": false,
+  "actual_repaired_query_count": null,
+  "scores_computed": false,
+  "default_mode": "offline_normalize_and_score_only",
+  "optional_gpu_mode": "explicit --run_remaining through guarded supervision"
+}
