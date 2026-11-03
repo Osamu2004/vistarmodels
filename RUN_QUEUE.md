@@ -4,6 +4,46 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-03 当前：DataLoader并行RGB读取，保持原目录与原组批续跑
+
+按用户要求参考相邻Vistar验证加载器，新增每卡2个CPU worker、每worker预取2个原图/时相对；GPU batch仍每卡16条裁块查询。spawn、有序返回、独立CPU generator，无随机变换或GT预读；原15个数值源码不变，原缓存判定/查询批次/分片保持。详见baselines/rsunivlm/DATALOADER.md。用户曾报告两平台缺第二张卡，当前尚无恢复回执；缺卡保护保留，本次不自动启动实验。
+
+更新后在WSL先跑合成回归（无模型权重/无CUDA前向），包含真实spawn进程测试；本机不运行：
+
+~~~bash
+cd /root/code/vistarmodels
+git pull --ff-only
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m pytest tests/test_rsunivlm_guarded.py tests/test_rsunivlm_data_loading.py -q
+~~~
+
+通过条件：合成测试全部通过。失败则停止并保留输出，不改旧结果、不强制跳过协议校验。DataLoader=2的合成spawn检查不是实际模型吞吐或GPU稳定性验证。
+
+两卡重新被系统识别、CUDA恢复且回归通过后，以相同原七集/原目录续跑。CUDA_LAUNCH_BLOCKING显式恢复0以退出此前同步诊断模式，监督和faulthandler继续保留；数值参数不变。NUM_WORKERS/PREFETCH_FACTOR是I/O配置，不改变原模型batch或生成预算。
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+CUDA_LAUNCH_BLOCKING=0 PYTHONFAULTHANDLER=1 \
+GPU_IDS=0,1 BATCH_SIZE=16 NUM_WORKERS=2 PREFETCH_FACTOR=2 \
+MAX_SAMPLES=0 PLAN_ONLY=0 SEMANTIC_MODE=native_classwise \
+FORMAT_RETRIES=0 MAX_NEW_TOKENS=32000 \
+RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
+RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
+RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
+DATASETS=loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second \
+DATA_ROOTS_JSON=/root/code/vistarmodels/configs/rsunivlm/paper_data_roots.json \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1 \
+bash /root/code/vistarmodels/run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+运行时应打印[RGB DataLoader] workers/GPU=2、prefetch/worker=2、ordered=True。原有效掩码/原文复用，旧格式预算耗尽仍跳过；进度重新扫描不表示重新生图。每集/卡shards/rankNNN/data_loading.json记录实际等待时间/解码时间/消费数；guarded_runtime_finished.json记录I/O选项与代码SHA。若出现_p后缀、数据身份异常、CUDA致命错或设备缺失，保留首次日志并停止，不把局部结果当全量评分。
+
+真实提速以WSL时间统计为准，不能从使用DataLoader推定生成算子更快。可用NUM_WORKERS=0隔离I/O差异，保持同一原输出/模型参数；不要同时跑两个写同一目录的队列。独立格式补跑入口维持原策略，本次改动适用于七集主队列。
+
 ### 2026-11-03 发布故障保护后更新与续跑
 
 用户要求提交推送并提供运行命令。本轮发布仅含RSUniVLM监督入口、Bash入口、回归测试及相关审查/诊断记录，其他基线的本地修改不纳入。Git发布以实际push回执为准；本机仍未执行测试、模型或CUDA检查。WSL七集尚未恢复完成，宿主缺卡原因尚未确定。

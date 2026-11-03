@@ -1,0 +1,39 @@
+{
+  "time_utc": "2026-11-03T12:35:27.206732+00:00",
+  "validation": "static_only",
+  "ast_checked": [
+    "tools/rsunivlm_data_loading.py",
+    "tools/eval_rsunivlm_guarded.py",
+    "tests/test_rsunivlm_data_loading.py",
+    "tests/test_rsunivlm_guarded.py"
+  ],
+  "bash_syntax_checked": [
+    "run_bash/rsunivlm_paper_queue.bash",
+    "RUN_QUEUE.md DataLoader commands"
+  ],
+  "protected_numerical_file_count": 15,
+  "protected_files_unchanged_vs": "654e702",
+  "runtime_code_sha256": {
+    "tools/rsunivlm_data_loading.py": "407f7fd057749a7092d202a013bdf9b5f366b38118d020b5d74312e3c97e3aaf",
+    "tools/eval_rsunivlm_guarded.py": "b3ef44ba7bbe87a13eaf09d1c4963096fba9860a11366bd608c285fb0ddc8292"
+  },
+  "vistar_references": {
+    "gencore/data_provider/loveda_unigen.py": "4d4a55320fe2f4745b00883358ac40538b598cc08d82c29936c4642b099007ff",
+    "gencore/data_provider/second_unigen.py": "ecec719029af0c0d2a7342de96b896ef8113e24a65e4a2734b2b1435886972af",
+    "apps/data_provider/base.py": "2e83d72189be29a48b03d9b2323f9d8059ca3616b3d12a8ef3a128d531892517"
+  },
+  "defaults": {
+    "cpu_workers_per_gpu": 2,
+    "prefetch_per_worker": 2,
+    "gpu_query_batch": 16,
+    "spawn": true,
+    "pin_memory": false,
+    "shuffle": false
+  },
+  "tests_executed": false,
+  "model_or_cuda_executed": false,
+  "wsl_run": false,
+  "speedup_measured": false,
+  "old_cache_reuse_runtime_verified": false,
+  "git_published_at_validation": false
+}

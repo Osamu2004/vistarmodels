@@ -1,5 +1,15 @@
 # RSUniVLM 接入记录
 
+## 2026-11-03：参考Vistar验证DataLoader，保留原七集缓存续跑
+
+用户指出同步读图过慢，要求使用DataLoader且与当前一样续跑，随后明确参考自己的Vistar代码。只读核对相邻vistar的LoveDA/SECOND验证shuffle=False、drop_last=False及基类prefetch=2/pin_memory=False；未修改Vistar文件或引入训练随机增强。
+
+新增rsunivlm_data_loading.py，guarded worker安装有序RGB读取包装，真实protocol解码函数不改。每卡默认2个spawn CPU worker、每worker预取2个源样本；DataLoader关闭自动组批，原评估逻辑继续按类别/时相和512源裁块组装每卡batch16。CPU uint8共享内存传输、独立CPU generator、FIFO、原global-index-mod-world分片、元数据检查、失败后恢复模块与关闭workers；不读取GT像素，不做CUDA/权重加载。每集/卡I/O统计和运行时代码SHA独立记录，不修改原15个数值源码或缓存identity，原掩码/有效原文/坏原文预算仍由旧evaluate判定。
+
+新增WSL合成回归覆盖像素/时相/FLAIR、spawn顺序与CPU RNG、七集同批输入/掩码/计数、全缓存和部分原文续跑、零重试格式失败、双分片、坏未来图片/异常清理/空分片。未在本机执行测试、模型或CUDA，只做AST/Bash/JSON与保护源码逐字静态检查。真实速度、WSL回归和显卡恢复均待用户回执，不宣称已提速。
+
+RUN_QUEUE记录更新/测试与同原输出完整命令，NUM_WORKERS=2/PREFETCH_FACTOR=2可调；正常吞吐命令将旧CUDA_LAUNCH_BLOCKING诊断从1恢复0，监督与faulthandler保留，生成数值参数不改。所有其他基线修改保留；发布状态以Git回执为准，未启动新实验。
+
 ## 2026-11-03：按用户要求发布监督保护与原七集续跑命令
 
 用户要求push并给运行代码。仅暂存本任务的监督入口/Bash/合成回归、故障审查/回执与RUN_QUEUE/本记录，保留其他基线本地修改。再次做AST/Bash/JSON/差异及15个数值源码相对fccfd94的逐字核对，不在本机运行测试、CUDA或模型。发布状态以随后真实Git回执为准，不把本地提交当已推送或WSL验证。

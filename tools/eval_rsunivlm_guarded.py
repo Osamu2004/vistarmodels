@@ -127,6 +127,8 @@ def run_worker(plan_path, rank):
     plan = json.loads(Path(plan_path).read_text())
     from tools import eval_rsunivlm_paper_queue as legacy
     from tools.rsunivlm_paper_worker import Engine
+    from tools.rsunivlm_data_loading import LoaderOptions, install_data_loading
+    install_data_loading(Engine, LoaderOptions.from_env())
     install_engine_guard(Engine, plan, rank)
     print(f'[guard {rank}] Original identity/CUDA initialization checks begin', flush=True)
     return legacy.worker(plan_path, rank)
@@ -158,7 +160,13 @@ def launch(plan, *, legacy):
     launch_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ') + f'_{os.getpid()}'
     report = dict(identity=plan['identity'], launch_id=launch_id, complete=False,
                   controller_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                  gpu_ids=plan['gpu_ids'], owned_pids=[], exit_codes=[], workers_started=False)
+                  gpu_ids=plan['gpu_ids'], owned_pids=[], exit_codes=[], workers_started=False,
+                  cuda_launch_blocking=os.environ.get('CUDA_LAUNCH_BLOCKING', 'unset'))
+    report['data_loading'] = dict(
+        num_workers=os.environ.get('RSUNIVLM_NUM_WORKERS', '2'),
+        prefetch_factor=os.environ.get('RSUNIVLM_PREFETCH_FACTOR', '2'),
+        timeout=os.environ.get('RSUNIVLM_LOADER_TIMEOUT', '120'),
+        loader_sha256=hashlib.sha256((ROOT/'tools/rsunivlm_data_loading.py').read_bytes()).hexdigest())
     processes, threads, pump_errors, failure = [], [], [], None
 
     def pump(process, gpu):
