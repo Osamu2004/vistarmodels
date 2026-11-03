@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-03",
+  "source": "User attachment 95d92530-e8d9-48c5-b3ec-97a2a6eb2c68",
+  "output_dir": "/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1",
+  "runtime_finished": {"owned_pids": [15324, 15326], "exit_codes": [-11, -11]},
+  "confirmed_termination": "SIGSEGV for both child processes",
+  "new_worker_start_or_model_load_visible": false,
+  "gpu_log_timestamps_provided": false,
+  "gpu_log_tails": "Previously seen FLAIR CUDA illegal-address failures and same-process downstream cascade",
+  "prior_flair_snapshot": {
+    "rank0": {"attempted": 5696, "assigned": 7850, "format_failed": 1337},
+    "rank1": {"attempted": 6688, "assigned": 7850, "scored": 5069, "format_failed": 1619}
+  },
+  "initial_cuda_failure_cause": "unknown",
+  "resume_sigsegv_location": "unknown; no fatal stack yet",
+  "oom_confirmed": false,
+  "batch_causality_confirmed": false,
+  "diagnostic_next": "WSL staged imports and CUDA device initialization under python -X faulthandler; no weights or forward",
+  "numerical_source_files_modified": false,
+  "tests_or_model_executed_locally": false,
+  "wsl_checks_executed_by_agent": false
+}

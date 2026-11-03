@@ -1,5 +1,47 @@
 # RSUniVLM 接入记录
 
+## 2026-11-03：按用户要求发布监督保护与原七集续跑命令
+
+用户要求push并给运行代码。仅暂存本任务的监督入口/Bash/合成回归、故障审查/回执与RUN_QUEUE/本记录，保留其他基线本地修改。再次做AST/Bash/JSON/差异及15个数值源码相对fccfd94的逐字核对，不在本机运行测试、CUDA或模型。发布状态以随后真实Git回执为准，不把本地提交当已推送或WSL验证。
+
+RUN_QUEUE新增先更新并在WSL执行test_rsunivlm_guarded.py，再按原GPU0,1/batch16/native_classwise/七集/512源裁块/32k/零格式重试/原输出续跑的完整命令。显式保留原官方副本和双权重路径，CUDA_LAUNCH_BLOCKING为诊断同步；无改驱动、降batch、换卡数或删缓存。缺卡时监督入口应拒绝启动，宿主设备恢复仍未取得回执，格式失败仍需独立补跑，不声称全量评分完成。
+
+## 2026-11-03：Windows侧同样缺卡，完成静态审查并补致命退出保护
+
+用户澄清Windows PowerShell和WSL的nvidia-smi都只显示一张卡。当前必须将宿主设备/驱动异常与Python控制流分开；没有PnP/事件记录，不能把供电、PCIe、显卡故障、TDR或负载触发的驱动bug写成根因。暂停继续负载建议，RUN_QUEUE新增Windows只读设备/事件采集，未执行重启或驱动修改。
+
+逐项核对队列/模型/批处理/原生类别模式/生成参数、官方66dce1d的GMoE/多模态拼接/示例及本机已下载配置。确认旧worker在illegal address后继续复用Engine，是后续集合连锁失败缺陷；父进程对worker信号退出没有fail-stop且追加日志无启动边界。B16与32k/use_cache是长尾显存风险而非已验证掉卡原因；官方示例亦用32k，不能仅因该值归因。未发现两模型错误共用物理GPU0、跨批持续保存GPU输出或重置/超频/禁用设备指令。实际WSL依赖/源码修改与初始故障算子仍未取证。完整证据与边界见GPU_FAILURE_AUDIT_20261103.md。
+
+新增eval_rsunivlm_guarded.py监督入口，Bash转入该入口，原15个数值身份源码保持。前置只读nvidia-smi选卡存在性/UUID校验；缺卡阻止启动；包装原evaluate仅在CUDA致命异常后以SystemExit跳出旧捕获，父进程停止自己启动的peer；faulthandler、启动独立日志、批次CPU元数据及明确不完整运行回执保留，致命错误不再合并旧summary误作新结果。提示/权重/分块/batch/token预算/评分数学不变，保护代码单独记SHA。未声称修复宿主异常。
+
+新增WSL合成回归覆盖缺卡、UUID重复、致命错退出、普通格式/OOM、对象透传及同队列peer终止。遵守用户要求本机仅AST/Bash/源码哈希静态检查；没有运行测试/模型、连接WSL或启动GPU，当前未提交/推送，也未在用户机器安装。
+
+## 2026-11-03：faulthandler定位设备检测崩溃，纯torch隔离待运行
+
+用户直接粘贴诊断回执：队列依赖与Engine/torch导入通过；第3阶段torch.cuda.is_available在torch/cuda/__init__.py:180触发SIGSEGV，尚未到get_device_name或权重加载。故障确认在CUDA可用性检测路径，不能只据此断定驱动损坏、排除项目依赖冲突或解释最初batch16推理非法地址。官方torch源码的默认检查经cudaGetDeviceCount/cuInit，WSL CUDA依赖宿主Windows驱动；实际用户环境版本/库路径本轮尚未核对。
+
+RUN_QUEUE新增同环境nvidia-smi及仅导入torch的一元素CUDA检查，隔离项目导入影响，保持原模型/两卡batch16/输出身份。仅纯torch也失败且其他WSL任务已保存时，提供Windows PowerShell的wsl --shutdown、wsl -d Ubuntu-22.04作为状态恢复尝试，明确停止所有WSL进程且不是已验证修复；重开后需重复纯torch及项目启动检查才续跑。没有自动关闭WSL、连接其他SSH、修改15个数值源码或启动本机测试/模型；尚无纯torch检查或恢复回执。新JSON仅记录已收到的栈和未验证假设。
+
+## 2026-11-03：新回执确认双worker SIGSEGV，先隔离启动阶段
+
+用户附件95d92530给出runtime_finished.json：owned_pids=[15324,15326]，exit_codes=[-11,-11]。按POSIX/Python子进程约定为SIGSEGV，说明本轮两个worker原生崩溃；不能归为普通OOM或RLE失败。日志尾部仍为旧FLAIR非法地址及后续集合连锁，未有日志时间，不将其计为新增推理。补齐旧rank0快照：5696/7850、格式失败1337；rank1仍6688/7850、成功5069/失败1619。原错误与新段错误是否同根因未知。
+
+核对worker在打印数据集start前依次导入worker/torch、核对身份、CUDA可用性及get_device_name，Engine构造不加载权重。RUN_QUEUE新增与原导入顺序一致的GPU0启动诊断，python -X faulthandler配合阶段标记，仅导入/初始化设备、不加载权重或写原输出；通过也不声称双卡/完整worker已恢复。保留batch16、两卡分片与缓存身份；未改15个数值源码、依赖或原输出，未连接WSL或本机执行测试/模型。需要实际段错误栈后再定修复，不盲目降batch或重装。
+
+## 2026-11-03：同步续跑只显示预检与汇总，尚无worker退出原因
+
+用户按原目录/原batch16/原七集启用CUDA_LAUNCH_BLOCKING=1重启，预检人口均正确，但没有worker启动或推理日志即汇总complete=false并返回shell。只据此不能说再次发生CUDA非法访问或OOM。核对launch会将每卡stdout追加到logs/gpu_N.log，并将最新退出码写入runtime_finished.json；worker进入数据集前还有源码/上游/权重身份与CUDA可用性等初始化检查。merge会复用同身份旧分片metrics，旧complete=false不代表本轮产生新预测。
+
+为用户准备只读、流式日志尾部诊断命令至RUN_QUEUE，含解释器、runtime退出码、worker记录和日志修改时间/尾部，以区分旧记录、初始化异常、信号终止或原生崩溃。没有得到这些WSL输出前不归因具体内核/批量/驱动，不修改数值源码或缓存。没有连接WSL、运行模型或本机测试。
+
+## 2026-11-03：GPU1 FLAIR非法显存访问导致同进程后续集合连锁失败
+
+读取用户附件5fe6955d的完整终端片段：rank1在FLAIR6688/7850处，成功5069/格式失败1619，触发CUDA illegal memory access；随后UAVid/xBD/CHN6/LEVIR/SECOND各自0张即报同样错误，最终complete=false并回到shell。未看到rank0状态，不推断全部数据集结果。该新片段包含先前格式日志没有的CUDA致命错误，两者分别记录。
+
+核对当前worker源码，所有Exception均写出错误后继续复用同一Engine；NVIDIA官方文档明确illegal address后CUDA进程处于不一致状态，必须退出/重启。可确认连锁传播的控制流问题，首次出错算子仍需errors/rank1_flair.json完整栈及CUDA_LAUNCH_BLOCKING=1同步定位，不能据此认定OOM、batch因果或特定attention/驱动缺陷。现存mask/hash与raw_text恢复逻辑可用于新进程同协议续跑，未处理人口应先补齐，再做格式恢复。
+
+本轮仅记录证据和WSL只读/续跑命令至RUN_QUEUE，不修改队列/模型/提示/解码/指标源码或依赖，保护原输出身份。没有连接WSL、启动GPU或运行本机实验/测试，未取得重启后恢复回执。控制流的致命错误退出/进程隔离修正仍待单独实施与兼容性验证，不把同步诊断开关称作修复。
+
 ## 2026-11-03：独立补跑格式失败，保护正在执行的数值源码
 
 用户日志FLAIR两卡分别4240/7850、failed966及4704/7850、failed1131，仍在继续；主要是缺计数、损坏RLE项和不等宽行，未显示OOM或数据损坏，不能推定batch因果。failed按整图计算，12类任一查询出错便排除整图。相同原命令只跳过已耗尽零重试预算的坏原文，不能自动重新生成。

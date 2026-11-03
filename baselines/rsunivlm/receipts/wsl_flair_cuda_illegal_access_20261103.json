@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-03",
+  "source_attachment": "/Users/zhouziyu/.codex/attachments/5fe6955d-2889-48fd-9e36-3bdd9db2f04f/已粘贴的文本.txt",
+  "source_kind": "user-pasted terminal fragment; no direct WSL inspection",
+  "output_dir": "/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1",
+  "rank": 1,
+  "first_fatal_dataset": "flair",
+  "assigned": 7850,
+  "attempted_at_last_progress": 6688,
+  "successful_at_last_progress": 5069,
+  "format_failed_at_last_progress": 1619,
+  "not_attempted_at_last_progress": 1162,
+  "fatal_error": "CUDA error: an illegal memory access was encountered",
+  "subsequent_rank1_datasets_with_same_error_before_any_scored_sample": ["uavid", "xbd_pre", "chn6_cug", "levircd", "second"],
+  "queue_returned_to_shell": true,
+  "complete": false,
+  "rank0_status": "not present in this fragment",
+  "first_failing_cuda_operation": "unknown; saved traceback / synchronous reproduction needed",
+  "batch_causality_established": false,
+  "observed_control_flow_defect": "worker catches fatal CUDA exception then continues with the same Engine/process",
+  "recovery_order": "fresh-process same-protocol resume of unprocessed population, then separate bounded format-failure recovery",
+  "debug_env": {"CUDA_LAUNCH_BLOCKING": "1"},
+  "debug_flag_scope": "synchronous error localization; not a confirmed kernel fix; may reduce throughput",
+  "source_files_modified": false,
+  "local_tests_run": false,
+  "local_model_run": false,
+  "remote_resume_launched": false,
+  "sources": [
+    "https://docs.nvidia.com/cuda/cuda-runtime-api/cuda_runtime_api/group__CUDART__TYPES.html",
+    "https://docs.pytorch.org/docs/stable/notes/cuda"
+  ]
+}

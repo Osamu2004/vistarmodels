@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-03",
+  "source": "User-pasted WSL faulthandler output in this conversation",
+  "environment": "vistar_rsunivlm",
+  "gpu_visibility": "0",
+  "imports_passed": ["tools.eval_rsunivlm_paper_queue", "tools.rsunivlm_paper_worker.Engine", "torch"],
+  "failing_call": "torch.cuda.is_available()",
+  "signal": "SIGSEGV",
+  "python_stack": [
+    {"file": "/root/anaconda3/envs/vistar_rsunivlm/lib/python3.10/site-packages/torch/cuda/__init__.py", "line": 180, "function": "is_available"},
+    {"file": "<stdin>", "line": 9, "function": "<module>"}
+  ],
+  "model_weights_loaded": false,
+  "model_forward_executed": false,
+  "cuda_get_device_name_reached": false,
+  "root_cause": "Not yet established; isolate pure torch from project imports before attributing runtime/library/WSL/driver cause",
+  "pure_torch_check_received": false,
+  "nvidia_smi_current_output_received": false,
+  "wsl_restart_performed_by_agent": false,
+  "recovery_confirmed": false,
+  "numerical_source_files_modified": false,
+  "tests_or_model_executed_locally": false,
+  "sources": [
+    "https://github.com/pytorch/pytorch/blob/v2.11.0/torch/cuda/__init__.py",
+    "https://docs.nvidia.com/cuda/wsl-user-guide/index.html",
+    "https://learn.microsoft.com/en-us/windows/wsl/basic-commands#shutdown"
+  ]
+}

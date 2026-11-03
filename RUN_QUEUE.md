@@ -4,6 +4,226 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-03 发布故障保护后更新与续跑
+
+用户要求提交推送并提供运行命令。本轮发布仅含RSUniVLM监督入口、Bash入口、回归测试及相关审查/诊断记录，其他基线的本地修改不纳入。Git发布以实际push回执为准；本机仍未执行测试、模型或CUDA检查。WSL七集尚未恢复完成，宿主缺卡原因尚未确定。
+
+先更新代码并在WSL运行只用合成对象的监督回归（无权重/无CUDA前向）：
+
+~~~bash
+cd /root/code/vistarmodels
+git pull --ff-only
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m pytest tests/test_rsunivlm_guarded.py -q
+~~~
+
+通过条件：pytest全部通过；失败则保留输出并停止，不启动完整队列。依赖沿用原环境，无需为此更新torch/驱动。
+
+Windows和WSL重新识别两张卡、CUDA初始化恢复且上述合成回归通过后，使用原batch16/原两卡/原输出目录续跑。GPU清单缺失/不明确时新入口会在模型worker启动前拒绝；worker段错误或已知CUDA致命错使本次队列停止，不再继续另一个数据集。CUDA_LAUNCH_BLOCKING=1保留用于初始非法地址定位，会牺牲吞吐，不是修复或恢复成功的证据。
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+CUDA_LAUNCH_BLOCKING=1 PYTHONFAULTHANDLER=1 \
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 PLAN_ONLY=0 \
+SEMANTIC_MODE=native_classwise FORMAT_RETRIES=0 MAX_NEW_TOKENS=32000 \
+RSUNIVLM_ROOT=/root/code/vistarmodels/third_party/RSUniVLM_clean_66dce1d \
+RSUNIVLM_MODEL_PATH=/root/data/weight/llava-qwen-gmoe \
+RSUNIVLM_VISION_TOWER=/root/data/weight/siglip-so400m-patch14-384 \
+DATASETS=loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second \
+DATA_ROOTS_JSON=/root/code/vistarmodels/configs/rsunivlm/paper_data_roots.json \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1 \
+bash /root/code/vistarmodels/run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+同身份已完成掩码/有效原文会复用，进度条重新扫描和评分不等于重新生成；旧零重试格式失败仍按原策略保留，需等中断人口补齐后使用独立格式恢复入口。监督记录为guarded_runtime_finished.json，每轮新日志为logs/guard_<启动ID>_gpu_0.log和gpu_1.log，故障dispatch记录为guard_inflight_rank000/001.json。原15个数值源码未变，若实际OUTPUT_DIR产生协议后缀则先核对身份，不能当旧目录续跑成功。
+
+### 2026-11-03 当前：Windows与WSL都缺第二张卡，先采集宿主日志
+
+用户明确两平台nvidia-smi均只显示一张卡。当前不继续七集/纯CUDA负载诊断，也不把缺卡只当WSL配置错误。首次非法地址与宿主设备异常先后关系未知；保护修改及详细源码证据见baselines/rsunivlm/GPU_FAILURE_AUDIT_20261103.md。
+
+在Windows PowerShell（不是WSL）执行以下只读命令，将输出保存后贴回；它不改驱动、设备、电源设置或TDR注册表：
+
+~~~powershell
+Get-Date
+Get-PnpDevice -Class Display |
+  Select-Object Status, FriendlyName, InstanceId | Format-List
+
+Get-CimInstance Win32_VideoController |
+  Select-Object Name, Status, ConfigManagerErrorCode, DriverVersion, PNPDeviceID | Format-List
+
+Get-WinEvent -FilterHashtable @{LogName='System'; StartTime=(Get-Date).AddHours(-24)} -ErrorAction SilentlyContinue |
+  Where-Object { $_.ProviderName -match 'nvlddmkm|^Display$|WHEA-Logger|Kernel-PnP' } |
+  Select-Object -First 30 TimeCreated, Id, ProviderName, Message | Format-List
+~~~
+
+依据：PnP能否仍看见第二张卡、错误码、驱动恢复事件与WHEA/PCIe事件可缩小驱动/设备路径；无事件输出也不能排除故障。采集后、其他工作保存且任务停止时，可以正常重启Windows再核对两张卡；不是只重启WSL即可保证恢复。没有收到宿主日志前不宣称供电不足、显卡损坏或特定驱动bug。
+
+本地新增独立guarded controller并让Bash默认走它：所选index/UUID缺失时不启动；致命CUDA错立即退出；任一worker崩溃即停止本队列peer；记录启动边界/故障批次，不在致命退出后合并旧指标。本轮未推送/未安装到WSL，15个数值身份源码不改，原输出身份保留。仅静态检查，以下测试只在两平台设备恢复后由用户WSL执行；现在先不运行。
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m pytest tests/test_rsunivlm_guarded.py -q
+~~~
+
+该测试使用合成对象，不加载权重、不做CUDA前向；无回执不记通过。真正续跑还需两卡识别和CUDA初始化恢复。保护代码不是已经证明能消除宿主掉卡；不静默降batch、减token或改两卡分片混入旧结果。
+
+### 2026-11-03 当前：启动崩溃位于torch.cuda.is_available
+
+用户WSL faulthandler回执：队列依赖、worker与torch导入均通过；在第3阶段torch.cuda.is_available内SIGSEGV，栈为环境torch/cuda/__init__.py:180、stdin:9，尚未加载权重、输入或执行模型forward。当前未验证已安装torch的具体调用源码；官方实现默认经cudaGetDeviceCount触发驱动初始化。故障定位到设备可用性检测路径，尚不能区分先导入项目依赖造成的原生冲突、CUDA运行库问题或WSL/宿主GPU状态，也不能声称已排除最初推理非法地址与batch的关系。回执见baselines/rsunivlm/receipts/wsl_cuda_is_available_sigsegv_20261103.json。
+
+先在同一WSL环境获取nvidia-smi，并单独仅导入torch检查设备与一个元素的CUDA运算；不导入项目、不加载权重、不写原实验结果。该检查只由用户在WSL运行，本机不执行：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+timeout 10s nvidia-smi
+
+CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=1 python -u -X faulthandler - <<'PY'
+import torch
+print('PyTorch:', torch.__version__, 'CUDA build:', torch.version.cuda, flush=True)
+print('Checking CUDA availability...', flush=True)
+print('CUDA available:', torch.cuda.is_available(), flush=True)
+print('Testing one CUDA tensor...', flush=True)
+x = torch.ones(1, device='cuda')
+torch.cuda.synchronize()
+print('CUDA test passed:', x.item(), flush=True)
+PY
+~~~
+
+判断：纯torch仍在设备检查崩溃，说明不需要项目导入即可触发，优先处理运行时/WSL/宿主驱动路径；纯torch通过则保留环境，继续比较导入顺序，不能据此重装或判定设备已稳定。nvidia-smi能显示GPU也不等于CUDA tensor/模型forward通过。若超时退出124记录为超时，不伪称驱动损坏。
+
+仅当纯torch也失败且确认没有其他WSL任务需要保留时，可在Windows PowerShell尝试重启WSL状态。wsl --shutdown会终止所有运行中的WSL发行版/进程；用户先保存工作。它不删除磁盘上的实验输出，但不是已验证修复。此处不自动执行、不重置GPU、不重装依赖、不修改数值源码：
+
+~~~powershell
+wsl --shutdown
+wsl -d Ubuntu-22.04
+~~~
+
+重新进入后激活原环境并重复上面的纯torch检查。只有它成功且原项目启动检查也通过，才继续原七集命令；保持两卡、batch16、原输出身份复用已有结果。若仍失败，保留本次版本/完整崩溃栈与nvidia-smi输出后再诊断，不连续盲重启。本轮未取得上述纯torch/重启回执，未宣称恢复。
+
+### 2026-11-03 当前：两worker退出码均为-11，定位启动段错误
+
+用户附件95d92530回执：runtime_finished.json的owned_pids为15324/15326，exit_codes为[-11,-11]，表示两个子进程被SIGSEGV终止；不是普通Python异常退出。两卡日志尾部仍是此前FLAIR非法地址及后续集合连锁失败，未提供日志时间，不能当作本轮新推理。新一轮没有worker start日志，结合源码只能将范围缩至进入数据集循环前；具体导入库/CUDA初始化位置及首次非法地址的关系尚未知，不能据此判定OOM、batch16或驱动因果。原轮rank0快照5696/7850、格式失败1337；rank1快照6688/7850、成功5069/失败1619。回执见baselines/rsunivlm/receipts/wsl_resume_sigsegv_20261103.json。
+
+先在WSL原环境单独检查GPU0的启动阶段，保持与worker一致的先队列依赖、再worker/torch导入顺序；开启faulthandler以在段错误时打印当时Python栈。此命令只导入模块和初始化CUDA，不读取权重、不推理、不写原实验目录；无需更新代码。不要与旧队列并行运行。
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=1 TOKENIZERS_PARALLELISM=false \
+CUDA_LAUNCH_BLOCKING=1 python -u -X faulthandler - <<'PY'
+print('[1/4] import queue dependencies', flush=True)
+import tools.eval_rsunivlm_paper_queue
+print('[2/4] import worker / torch', flush=True)
+from tools.rsunivlm_paper_worker import Engine
+import torch
+print('[3/4] CUDA availability:', torch.cuda.is_available(), flush=True)
+print('[4/4] initialize CUDA device', flush=True)
+print(torch.cuda.get_device_name(0), flush=True)
+print('Startup checks passed; no weights loaded or inference performed.', flush=True)
+PY
+~~~
+
+失败条件：任何段错误或异常，保留从最后一个阶段标记开始的完整堆栈，不继续盲跑七集。通过条件：打印Startup checks passed；它仅排除这一次进程中的导入/设备初始化失败，不证明推理恢复或解释原双卡段错误。若通过，再给原七集命令增加PYTHONFAULTHANDLER=1，保留CUDA_LAUNCH_BLOCKING=1、原batch/卡数/输出，定位完整worker实际路径；无需删除缓存、升级依赖或重建环境。本机未执行该检查、模型或测试，当前仅核对源码/命令语法与回执。
+
+### 2026-11-03 当前：同步续跑预检后立即退出，先读worker退出码
+
+用户重新执行原双卡batch16命令并启用CUDA_LAUNCH_BLOCKING=1，七集预检全部通过，实际OUTPUT_DIR保持原目录；随后直接汇总complete=false，无worker start/模型加载/新推理进度。当前只能确认预检与汇总，不能确认新一轮CUDA非法访问或OOM。源码的merge会读取同身份已有分片metrics，因此该complete=false可能包含上一轮不完整记录。最新worker退出码、日志时间与尾部缺失，不能把这一现象直接说成已完成续跑或再次模型错误。回执见baselines/rsunivlm/receipts/wsl_sync_resume_immediate_exit_20261103.json。
+
+先用精简命令读取最新退出码与两卡日志尾部（只读，不启动模型）：
+
+~~~bash
+RSUNIVLM_RUN=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1
+cat "$RSUNIVLM_RUN/runtime_finished.json"
+tail -n 60 "$RSUNIVLM_RUN/logs/gpu_0.log"
+tail -n 60 "$RSUNIVLM_RUN/logs/gpu_1.log"
+~~~
+
+需要核对日志是否为旧内容时，用下面完整检查，包含记录修改时间与worker回执。只读文件，不加载模型或启动GPU；日志使用deque流式读取尾部，不把完整长日志读进内存：
+
+~~~bash
+cd /root/code/vistarmodels
+python - <<'PY'
+import json
+import sys
+from collections import deque
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+root = Path('/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1')
+zone = timezone(timedelta(hours=8))
+print('Python:', sys.executable)
+for name in ('runtime.json', 'runtime_finished.json', 'worker_0.json', 'worker_1.json'):
+    path = root / name
+    print('\nFILE:', path)
+    if not path.is_file():
+        print('MISSING')
+        continue
+    print('Modified:', datetime.fromtimestamp(path.stat().st_mtime, zone).isoformat())
+    print(json.dumps(json.loads(path.read_text()), ensure_ascii=False, indent=2))
+for gpu in (0, 1):
+    path = root / 'logs' / f'gpu_{gpu}.log'
+    print('\nLOG:', path)
+    if not path.is_file():
+        print('MISSING')
+        continue
+    print('Modified:', datetime.fromtimestamp(path.stat().st_mtime, zone).isoformat())
+    with path.open(errors='replace') as stream:
+        print(''.join(deque(stream, maxlen=45)))
+PY
+~~~
+
+本轮没有修改模型/数值源码、删除缓存或启动WSL任务。暂不盲目变更batch、卡数、模型或依赖，先依据退出码区分Python初始化异常、原生进程崩溃与外部终止；若得到被强制终止的证据，再检查系统OOM/驱动记录。
+
+### 2026-11-03 当前：FLAIR遇CUDA非法访问，先新进程续跑未处理部分
+
+用户最新终端回执：GPU1/rank1的FLAIR在6688/7850处报`CUDA error: an illegal memory access was encountered`；此前5069张成功、1619张格式失败，尚余1162张未遍历。随后同一进程中的UAVid/xBD/CHN6/LEVIR/SECOND均0张报相同CUDA错误。最终队列返回shell，complete=false；GPU0状态未在片段中出现。回执：`baselines/rsunivlm/receipts/wsl_flair_cuda_illegal_access_20261103.json`。
+
+该问题与RLE格式失败分开。现有worker捕获所有Exception后继续使用同一个Engine，是导致后续CUDA错误连锁的控制流缺陷；尚未修改该数值源码，以保护已有缓存身份。首次出错的具体算子/驱动原因未知，不能把illegal address当作普通OOM或直接归因batch16。NVIDIA说明非法地址错误后进程必须重启，PyTorch的CUDA_LAUNCH_BLOCKING=1用于同步定位异常，会降低吞吐，不是已确认修复。
+
+先打印已保存完整堆栈（只读，不加载模型；终端没有完整Python栈，需此内容定位首次失败）：
+
+~~~bash
+cd /root/code/vistarmodels
+python - <<'PY'
+import json
+from pathlib import Path
+root = Path('/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1')
+path = root / 'errors/rank1_flair.json'
+data = json.loads(path.read_text())
+print(path)
+print(data.get('traceback') or data.get('error'))
+PY
+~~~
+
+然后使用原七集/原输出目录/原两卡与batch16重新启动；保留原源码/权重/输入元数据，不先升级依赖。CUDA_LAUNCH_BLOCKING仅增加同步诊断。该命令尚未执行，无恢复效果或新分数回执：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+
+CUDA_LAUNCH_BLOCKING=1 \
+GPU_IDS=0,1 BATCH_SIZE=16 MAX_SAMPLES=0 PLAN_ONLY=0 \
+SEMANTIC_MODE=native_classwise FORMAT_RETRIES=0 MAX_NEW_TOKENS=32000 \
+DATASETS=loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second \
+DATA_ROOTS_JSON=/root/code/vistarmodels/configs/rsunivlm/paper_data_roots.json \
+OUTPUT_DIR=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1 \
+bash run_bash/rsunivlm_paper_queue.bash --tile_size 512
+~~~
+
+同协议成功掩码和有效原文会复用并重新评分，进度可能从0重新扫描；这不是全部重新生成。当前格式错误的1619张不会因该命令自动重新尝试。先补齐CUDA中断人口，待所有分片`exhausted_population=true`后，再使用下方格式恢复入口；它会拒绝仍因CUDA/IO中断的分片。若非法访问再次出现，保留首次异常的同步堆栈并停止重复盲跑。通过条件是未处理样本继续前进且不再发生CUDA连锁；全量complete仍需另行补齐格式失败，不能把局部成功子集当论文分数。
+
 ### 2026-11-03 当前：失败样本独立补跑，等待原七集队列结束
 
 状态：用户日志显示FLAIR约54%/60%，有格式失败但队列仍继续；原七集完成状态未知。新补跑入口仅静态检查，WSL合成回归和真实恢复均未运行。本次只新增恢复工具/测试/文档，没有修改当前队列的数值源码。先等待整个旧队列退出，再更新；不要并行运行旧队列和恢复入口。原因/恢复范围见`baselines/rsunivlm/FAILED_RECOVERY.md`。

@@ -1,0 +1,19 @@
+{
+  "time_utc": "2026-11-03T11:50:52.309818+00:00",
+  "validation": "static_only",
+  "python_ast": [
+    "tools/eval_rsunivlm_guarded.py",
+    "tests/test_rsunivlm_guarded.py"
+  ],
+  "bash_syntax": [
+    "run_bash/rsunivlm_paper_queue.bash",
+    "RUN_QUEUE.md publication commands"
+  ],
+  "protected_numerical_files_unchanged_vs": "fccfd94",
+  "protected_file_count": 15,
+  "controller_sha256": "138b83c9525a1c0ceed3bfffab17f525a33c417417b40bf9cb29a070114e3b62",
+  "tests_executed": false,
+  "model_or_cuda_executed": false,
+  "windows_or_wsl_contacted": false,
+  "git_published_at_validation": false
+}

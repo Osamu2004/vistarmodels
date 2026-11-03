@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-03",
+  "source": "User-pasted terminal output in this conversation",
+  "attempt": "same seven-dataset command with CUDA_LAUNCH_BLOCKING=1",
+  "output_dir": "/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1",
+  "preflight_passed": {"loveda": 1669, "flair": 15700, "uavid": 270, "xbd_pre": 933, "chn6_cug": 903, "levircd": 128, "second": 593},
+  "gpus": [0, 1],
+  "batch_per_gpu": 16,
+  "worker_start_messages_visible": false,
+  "model_load_messages_visible": false,
+  "new_inference_progress_visible": false,
+  "summary_complete": false,
+  "worker_exit_codes": "not provided",
+  "worker_current_tracebacks": "not provided",
+  "diagnosis": "Only preflight and final merge are visible; read runtime_finished exit_codes and GPU log timestamps/tails before assigning a cause",
+  "possible_stale_summary": "merge reads same-identity existing shard metrics when a newly launched worker exits before updating them",
+  "fresh_cuda_error_confirmed": false,
+  "oom_confirmed": false,
+  "source_files_modified": false,
+  "remote_checks_executed": false
+}

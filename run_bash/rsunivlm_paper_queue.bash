@@ -7,7 +7,7 @@ export RSUNIVLM_MODEL_PATH="${RSUNIVLM_MODEL_PATH:-/root/data/weight/llava-qwen-
 export RSUNIVLM_VISION_TOWER="${RSUNIVLM_VISION_TOWER:-/root/data/weight/siglip-so400m-patch14-384}"
 GPU_IDS="${GPU_IDS:-0,1}"
 BATCH_SIZE="${BATCH_SIZE:-16}"
-CMD=("${PYTHON_BIN:-python}" "${ROOT_DIR}/tools/eval_rsunivlm_paper_queue.py"
+CMD=("${PYTHON_BIN:-python}" "${ROOT_DIR}/tools/eval_rsunivlm_guarded.py"
   --datasets "${DATASETS:-loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second}"
   --semantic_mode "${SEMANTIC_MODE:-native_classwise}"
   --gpu_ids "${GPU_IDS}" --batch_size "${BATCH_SIZE}"

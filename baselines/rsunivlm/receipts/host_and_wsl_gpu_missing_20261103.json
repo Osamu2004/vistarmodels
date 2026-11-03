@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-03",
+  "source": "Direct user reply to clarification in this conversation",
+  "user_report": "Windows PowerShell and WSL nvidia-smi both show only one GPU",
+  "previously_expected_gpu_count": 2,
+  "current_nvidia_smi_output_independently_observed": false,
+  "windows_pnp_or_event_logs_received": false,
+  "initial_illegal_address_cause": "unresolved",
+  "hardware_damage_or_power_cause_confirmed": false,
+  "confirmed_code_defects": [
+    "Original worker catches fatal CUDA RuntimeError and continues other datasets on the same Engine",
+    "Original parent does not immediately stop its own peer when a worker signals or reports a fatal CUDA failure",
+    "Original GPU log files append across launches without a launch boundary"
+  ],
+  "local_fix": "Independent guarded controller around unchanged numerical source; only installed locally, not pushed or WSL validated",
+  "gpu_work_or_tests_executed_locally": false,
+  "wsl_or_windows_reset_executed": false,
+  "next_action": "Read Windows PnP/CIM device status and nvlddmkm/Display/WHEA/Kernel-PnP events before further GPU load"
+}
