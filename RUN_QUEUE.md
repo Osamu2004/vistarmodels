@@ -4,6 +4,22 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-03 DataLoader离线更新包
+
+用户要求制作离线包。固定已提交的DataLoader实现（代码提交f29b995）并附完整main Git历史、路径保护导入器、SHA256校验和安装说明；不需要旧增量包前置提交，不包含权重/数据/已有预测或其他未提交基线改动。外层工作区产物：output/offline/rsunivlm_dataloader_20261103.zip；实际bundle tip与归档SHA记录在同名receipt。只做归档/Git传输校验，不运行本机pytest、DataLoader worker、模型或CUDA。
+
+先等原队列退出并回到shell，将ZIP复制到WSL的/root/code/vistarmodels。安装器校验包内文件SHA并调用标准库导入器：仅临时恢复已知路径JSON的HEAD字节、ff-only导入bundle，然后无论成功失败均恢复用户JSON并保留临时备份；其他本地修改受Git正常保护，不reset/stash/强行覆盖。该步骤不联网、不自动测试或启动模型：
+
+~~~bash
+cd /root/code/vistarmodels
+python -m zipfile -e ./rsunivlm_dataloader_20261103.zip ./rsunivlm_dataloader_update_20261103
+bash ./rsunivlm_dataloader_update_20261103/install_update.bash /root/code/vistarmodels
+~~~
+
+通过条件：SHA校验与Git bundle verify/快进导入成功，并显示DataLoader发布记录；若Git拒绝其他本地修改，停止并保留错误，不覆盖。归档安装不代表推理已通过。
+
+随后沿用下一节的WSL合成测试，但跳过其中联网git pull那一行。测试通过且两卡恢复后，运行该节原OUTPUT_DIR的完整七集命令。包内README也附相同测试与运行命令，默认每卡2个CPU worker、prefetch2、模型batch16、CUDA_LAUNCH_BLOCKING=0；既有有效掩码/原文按原规则续跑，旧格式失败预算不增加。宿主缺卡/实际吞吐/真实恢复仍以WSL回执为准。
+
 ### 2026-11-03 当前：DataLoader并行RGB读取，保持原目录与原组批续跑
 
 按用户要求参考相邻Vistar验证加载器，新增每卡2个CPU worker、每worker预取2个原图/时相对；GPU batch仍每卡16条裁块查询。spawn、有序返回、独立CPU generator，无随机变换或GT预读；原15个数值源码不变，原缓存判定/查询批次/分片保持。详见baselines/rsunivlm/DATALOADER.md。用户曾报告两平台缺第二张卡，当前尚无恢复回执；缺卡保护保留，本次不自动启动实验。

@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-03：按用户要求制作DataLoader离线交付
+
+用户要求离线包。以已提交DataLoader代码f29b995及本段安装文档为固定Git快照，制作含完整main历史的bundle和ZIP，随附原路径保护导入器、SHA校验安装脚本、中文README与静态验证记录；不包含任何未提交基线改动或模型/数据/预测。RUN_QUEUE新增离线解压/安装命令，安装不启动测试/GPU；WSL测试与原七集续跑单独由用户执行。
+
+归档校验只验证传输：bundle可导入空bare仓库、对象fsck、ZIP CRC/文件SHA，以及合成Git旧版本的快进导入和用户路径JSON字节保留。不运行本机pytest、读取DataLoader样本或模型/CUDA。实际tip、SHA和验证回执存外层output/offline，不能把离线导入校验记为WSL分割/速度测试通过。
+
 ## 2026-11-03：参考Vistar验证DataLoader，保留原七集缓存续跑
 
 用户指出同步读图过慢，要求使用DataLoader且与当前一样续跑，随后明确参考自己的Vistar代码。只读核对相邻vistar的LoveDA/SECOND验证shuffle=False、drop_last=False及基类prefetch=2/pin_memory=False；未修改Vistar文件或引入训练随机增强。
