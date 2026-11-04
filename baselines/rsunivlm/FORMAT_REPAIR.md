@@ -28,6 +28,8 @@
 
 CPU阶段返回0表示离线阶段完成，不表示全部原始样本均已修好；以format_repair_report.offline_complete与paper_summary.complete/num_failed/deferred_queries判定覆盖。
 
+2026-11-04追加：用户报告LEVIR-CD在读取test_18/test_68的GT时中断。新版只要选择了LEVIR，就在派生策略中记录并安装精确二值颜色兼容器；先审计所有标签，通过后复用预测CPU重算。原15个数值源码与旧运行不改，具体规则见LEVIR_LABELS.md。旧_formatfix目录不混用新政策，实际可能选_p后缀。其他数据集GT规则不改。
+
 ## 可选模型补跑
 
 显式增加--run_remaining才允许调用模型：先做同样的离线修复/重建，再对仍缺失或不可修复的查询启用既有最多两个固定备用提示。保持原卡数/分片/batch16上限，新目录默认`<源目录>_formatfix_v1_retry2`，新identity明确记录重试策略。已耗尽原三次模板的回答不无限重试。

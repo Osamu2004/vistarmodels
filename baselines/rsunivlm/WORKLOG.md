@@ -1,5 +1,13 @@
 # RSUniVLM 接入记录
 
+## 2026-11-04：LEVIR GT格式校验中断，保留预测CPU恢复
+
+记录用户真实WSL回执：LEVIR已评分64、格式失败1、63张未计入；两分片分别在test_18.png/test_68.png的load_targets校验失败，实际mode/像素仍未知。原finish先保存掩码/receipt再读GT，所以未评分不等于未推理。
+
+新增独立rsunivlm_levir_labels兼容器与纯CPU审计CLI，原二维0/1/255逐像素不改，只追加精确同通道二值RGB、不透明RGBA/LA及旧索引不合法时的精确二值调色板读取；中间灰度/彩色/透明或尺寸异常仍拒绝。不改GT文件、原15个数值源码、A/B查询/裁块/batch。政策/helper SHA进入派生plan，接入格式修复CPU重算与显式guarded GPU补推理，普通旧主队列仍保留旧策略。
+
+补充WSL回归代码、来源错误receipt与RUN_QUEUE审计/恢复命令，并制作新的levirgt离线包。仅本机AST/Bash/源码字节及Git/ZIP传输检查，未运行测试、解码/模型/CUDA或真实GT审计，尚无恢复数量/新评分。细节见LEVIR_LABELS.md。
+
 ## 2026-11-04：显式RLE分隔符离线修复与CPU重建
 
 用户明确要求实现road**2/building:1→road*2/building*1并用原解码器完整校验。新增rsunivlm_format_repair.py，只替换完整类别/整数间的ASCII冒号或重复星号；只有所有原尝试非法时才取首个规范后合法候选。任何已有合法尝试、类别词/计数/换行/EOS均不改；ragged/缺计数/显式未结束/未知原映射等不放宽，不填背景。每个接受修复的attempt保存精确原文、前后SHA和编辑列表。

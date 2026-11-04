@@ -24,6 +24,7 @@ from tools import rsunivlm_paper_protocol as protocol
 from tools import rsunivlm_paper_worker as worker
 from tools import rsunivlm_native_semantic as native
 from tools import rsunivlm_format_repair as normalization
+from tools import rsunivlm_levir_labels as levir_labels
 from tools.rsunivlm_data_loading import LoaderOptions, bind_ordered_reader
 
 
@@ -63,6 +64,9 @@ def prepare(source, requested, run_remaining=False):
         value['second_query'] = None
     if 'levircd' not in value['datasets']:
         value['levircd_query'] = None
+        value.pop('levircd_gt_reader', None)
+    else:
+        value['levircd_gt_reader'] = levir_labels.settings()
     if run_remaining:
         value['format_retries'] = 2
         for name in value['datasets']:
@@ -162,7 +166,11 @@ def score_offline(plan, output, options):
         for rank in range(len(plan['gpu_ids'])):
             engine = OfflineEngine(plan, rank, len(plan['gpu_ids']))
             with bind_ordered_reader(engine, entry, str(output), options):
-                result = engine.evaluate(entry, str(output))
+                if dataset == 'levircd':
+                    with levir_labels.bind_targets(plan, rank, output):
+                        result = engine.evaluate(entry, str(output))
+                else:
+                    result = engine.evaluate(entry, str(output))
             deferred_total += len(engine.deferred_queries)
             shard = output/dataset/'shards'/f'rank{rank:03d}'
             for failure in result.get('failed_samples', []):

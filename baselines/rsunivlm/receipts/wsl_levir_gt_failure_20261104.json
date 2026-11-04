@@ -1,0 +1,21 @@
+{
+  "source": "user_pasted_WSL_output",
+  "source_run": "/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1",
+  "dataset": "levircd",
+  "selected_samples": 128,
+  "processed_samples": 64,
+  "num_failed": 1,
+  "exhausted_population": false,
+  "complete": false,
+  "unaccounted_in_success_or_failure": 63,
+  "shard_errors": {
+    "rank000": "Expected binary native LEVIR-CD GT: /root/data/LEVIR-CD/test/label/test_18.png",
+    "rank001": "Expected binary native LEVIR-CD GT: /root/data/LEVIR-CD/test/label/test_68.png"
+  },
+  "trace_location": "worker.finish -> protocol.load_targets",
+  "confirmed_predicate_failure": "raw.ndim != 2 OR some raw value outside {0,1,255}",
+  "actual_label_mode_or_values_verified": false,
+  "label_corruption_confirmed": false,
+  "new_reader_WSL_validated": false,
+  "recovered_samples_verified": false
+}

@@ -128,6 +128,8 @@ def run_worker(plan_path, rank):
     from tools import eval_rsunivlm_paper_queue as legacy
     from tools.rsunivlm_paper_worker import Engine
     from tools.rsunivlm_data_loading import LoaderOptions, install_data_loading
+    from tools.rsunivlm_levir_labels import install_reader
+    install_reader(Engine, plan)
     install_data_loading(Engine, LoaderOptions.from_env())
     install_engine_guard(Engine, plan, rank)
     print(f'[guard {rank}] Original identity/CUDA initialization checks begin', flush=True)

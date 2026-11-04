@@ -1,0 +1,33 @@
+{
+  "time_utc": "2026-11-04T01:43:19.232850+00:00",
+  "validation": "static_only",
+  "ast_checked": [
+    "tools/rsunivlm_levir_labels.py",
+    "tools/repair_rsunivlm_format.py",
+    "tools/eval_rsunivlm_guarded.py",
+    "tests/test_rsunivlm_levir_labels.py"
+  ],
+  "bash_command_blocks_checked": 4,
+  "scoped_diff_check": true,
+  "protected_numerical_file_count": 15,
+  "protected_files_unchanged_vs": "7c1c6913d93880aca1f8f01cc4557bdcda52afe3",
+  "runtime_code_sha256": {
+    "tools/rsunivlm_levir_labels.py": "6b7df114445dc7b02b4779db6fff161be32e438d48ac3694052034c3b0df2d09",
+    "tools/repair_rsunivlm_format.py": "b755704fed6f0bfbbf5edebded5517c597f33ddb74676b0a27940f92922ea9a1",
+    "tools/eval_rsunivlm_guarded.py": "4537458ff23be0545e8fdd58481fce520a4932bf1ca14ad2cc7f96d0b7fc652b"
+  },
+  "label_rule_references": {
+    "/Users/zhouziyu/code/vistar/vistar/gencore/data_provider/levir_cd.py": "7ae1f901d5689c222cb7d054accb102deeb28595fb129b6fbe34b06db9c7d03d",
+    "/Users/zhouziyu/code/vistar/vistar/tools/compute_saved_levircd_opendpr_metrics.py": "c7876c5183c3985d95f492e55b22489deee7e444c8564ba0cb5e752df835bebf",
+    "/Users/zhouziyu/code/vistar/vistarmodels/baselines/levircd_common.py": "f40e3ca5c7d33caab1ca63421b63c74484075dfe7fddc6937d0518ebafbbeb84"
+  },
+  "failure_evidence": "baselines/rsunivlm/receipts/wsl_levir_gt_failure_20261104.json",
+  "tests_executed": false,
+  "decoder_executed": false,
+  "actual_label_pixels_read_locally": false,
+  "model_or_cuda_executed": false,
+  "wsl_run": false,
+  "actual_failure_encoding_verified": false,
+  "actual_recovered_count": null,
+  "scores_computed": false
+}

@@ -4,6 +4,49 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-04 当前：LEVIR真实标签格式中断的CPU审计与恢复
+
+用户回执两分片在test_18.png/test_68.png的GT读取校验中断。只确认raw非二维或包含0/1/255以外值，实际mode/值尚未核实，不能直接认定坏数据。LEVIR 128张中64成功、1格式失败、63未计入；原finish在读取GT前已保存完整预测/receipt，可复用已存在且校验有效的预测重算。新兼容规则及边界见baselines/rsunivlm/LEVIR_LABELS.md。
+
+下载外层output/offline/rsunivlm_levirgt_20261104.zip并复制到WSL的/root/code/vistarmodels。它包含完整已提交main、本次GT兼容和此前格式修复/DataLoader/guarded，不含未提交其他基线或权重/数据/预测。原队列结束后离线安装，保留用户数据路径JSON；安装本身不测试/修复/启动GPU：
+
+~~~bash
+cd /root/code/vistarmodels
+python -m zipfile -e ./rsunivlm_levirgt_20261104.zip ./rsunivlm_levirgt_update_20261104
+bash ./rsunivlm_levirgt_update_20261104/install_update.bash /root/code/vistarmodels
+~~~
+
+通过条件：SHA、bundle verify、ff-only导入成功；其他本地冲突则停止，不覆盖。实际bundle tip/SHA以外层同名manifest/receipt为准。本机不执行合成回归，用户在WSL运行：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m pytest tests/test_rsunivlm_levir_labels.py \
+  tests/test_rsunivlm_format_repair.py tests/test_rsunivlm_format_repair_pipeline.py \
+  tests/test_rsunivlm_failed_recovery.py tests/test_rsunivlm_guarded.py -q
+~~~
+
+通过条件：全部通过，否则保留输出停止。无预训练权重、无模型/CUDA前向。随后先做只读GT审计：
+
+~~~bash
+SOURCE_RUN=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1
+python tools/rsunivlm_levir_labels.py --source_run "$SOURCE_RUN"
+~~~
+
+通过条件：selected=128、rejected=0、complete=True；报告同级_levir_label_audit.json逐份列出模式/数组形状/值预览/新旧接受情况。若出现中间灰度、彩色标签、透明/尺寸或元数据异常则停止，保留失败原因，不能强行阈值或改原GT。
+
+审计通过后先单独重算LEVIR，默认纯CPU，不加载模型，旧15个数值源码不改：
+
+~~~bash
+RSUNIVLM_NUM_WORKERS=2 RSUNIVLM_PREFETCH_FACTOR=2 \
+python tools/repair_rsunivlm_format.py --source_run "$SOURCE_RUN" --datasets levircd
+~~~
+
+Actual OUTPUT_DIR为独立派生目录；旧格式修复目录身份不同会选_p后缀，保留旧原文/掩码/评分。检查format_repair_report.offline_complete、deferred_queries以及paper_summary.results.levircd的selected/processed/num_failed；GT读取证据在shards/rankNNN/gt_reading.jsonl。CPU退出0只代表该阶段完成；格式坏或缺失回答仍partial。
+
+若要同时修复七集旧RLE并重算，去掉--datasets levircd；与单集策略不同，会自动选择另一身份输出。没有新的模型调用；仍需生成的查询后续才显式加--run_remaining走guarded/DataLoader，不自动启动。相同参数和原source_run可续跑派生目录。真实审计/修复率/评分等待WSL回执；不直接更新论文。
+
 ### 2026-11-04 当前：离线修复已保存RLE分隔符，原解码器完整校验
 
 用户要求将road**2/building:1等规范为road*2/building*1，再用原解码器完整校验。新增纯CPU格式修复与重建工具；只在原所有尝试均非法时处理明确分隔符，不改词汇/计数/换行/EOS，不修复缺数、ragged、截断或未知映射。原raw_text/预测/评分保留，派生协议在独立_formatfix_v1目录；已成功掩码/回答复用。原15个数值源码不改，后处理策略另记identity和编辑审计；详见baselines/rsunivlm/FORMAT_REPAIR.md。
