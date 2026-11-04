@@ -4,7 +4,9 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
-### 2026-11-04 固定类别顺序合并与重计mIoU/WFm（待WSL执行）
+### 2026-11-04 固定类别顺序合并与重计mIoU/WFm（已有WSL完成回执）
+
+最新状态：用户已运行a25bba8离线包，19项回归通过（3.57s）；三集17639张全部重计成功，另继承2557张/对，七集20,196张/对失败0、complete=True。新标准mIoU/WFm（%）：LoveDA41.34/11.21、FLAIR18.94/15.06、UAVid39.17/14.52。完整原精度标量与来源见receipts/wsl_fused_all7_scores_20261104.json。按论文训练清单和LEVIR影像来源链，标记LoveDA*、UAVid*、LEVIR-CD*†；其他四集仅为未列名，不承诺完全无训练影像重叠。显示表results/fused_scores_training_marked_20261104.csv/md；本次无须重跑评分。
 
 用户确认采用固定类别顺序，不使用面积优先。LoveDA/FLAIR/UAVid按原ID升序写入，后类覆盖前类；未覆盖分别用原背景0/FLAIR预测背景12/原背景0。FLAIR背景保留在混淆矩阵的额外预测列，计入真实类别FN，不以255忽略。此为参考Text2Seg逐类接口的VISTAR适配；公开Text2Seg未给出完整跨类冲突规则，不声称官方复现。协议说明见baselines/rsunivlm/MULTICLASS_FUSION.md。
 
@@ -22,7 +24,7 @@ SCORE_WORKERS=2 MAX_SAMPLES=0 \
 bash run_bash/rsunivlm_fuse_rescore.bash
 ~~~
 
-源数据根目录不变，无新依赖/权重；产物为源目录后缀_fixedorder_fusion_v1中的paper_summary.json、paper_summary.csv、各集metrics.json/rows/pred_mask。相同命令断点续算，源mask/回执/代码/GT元数据与合并mask/逐图记录hash均匹配才复用评分。通过条件：新三个数据集分别1669/15700/270张、失败0、complete=True；CSV百分比两位小数，JSON保留原值。失败返回非零，不能把部分评分更新成论文全量结果。当前为代码实现与静态检查阶段，没有新实测分数；论文数值待WSL回执后再更新。
+源数据根目录不变，无新依赖/权重；产物为源目录后缀_fixedorder_fusion_v1中的paper_summary.json、paper_summary.csv、各集metrics.json/rows/pred_mask。相同命令断点续算，源mask/回执/代码/GT元数据与合并mask/逐图记录hash均匹配才复用评分。通过条件：新三个数据集分别1669/15700/270张、失败0、complete=True；用户已提供满足这些条件的WSL回执，CSV百分比两位小数，JSON保留原值。上述命令保留为复现入口；本次只归档和标注，不再次执行评分。完整远端plan/summary文件及训练逐样本清单仍待归档，正式论文TeX未自动插入新模型行。
 
 ### 2026-11-04 已收到WSL七集全量恢复与精度回执
 

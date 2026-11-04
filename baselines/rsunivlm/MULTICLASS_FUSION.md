@@ -60,4 +60,6 @@ bash run_bash/rsunivlm_fuse_rescore.bash
 
 ## 当前状态
 
-已实现，待WSL回归与全量重计。此前用户提供的35.19/20.61/36.70是原query mIoU百分比，不能改名为合并后的标准mIoU；新数字必须由本工具运行产物确认。
+2026-11-04用户已提供完整WSL回执：19项回归通过（3.57s），LoveDA1669/FLAIR15700/UAVid270全部成功、失败0；新目录summary complete=True。三集标准mIoU为41.34/18.94/39.17%，边界WFm为11.21/15.06/14.52%。其余四项沿用源分数，全部七集20,196张/对成功。此前35.19/20.61/36.70仍为旧query mIoU，不覆盖其历史记录。完整CSV标量已归档于receipts/wsl_fused_all7_scores_20261104.json，非本机重新计分或独立读取远端原件。
+
+按一手训练来源核查，新的显示表对LoveDA/UAVid标`*`，LEVIR-CD标`*†`（经LEVIR-MCI/CC的派生影像来源），见TRAINING_DATA_AUDIT.md及results/fused_scores_training_marked_20261104.md。标记不改数值、源summary、mask、评分代码或缓存身份；不需要重新计算。

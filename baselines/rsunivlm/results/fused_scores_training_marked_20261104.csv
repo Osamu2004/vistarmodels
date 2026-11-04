@@ -1,0 +1,8 @@
+dataset,dataset_display,primary_metric,value,value_percent,wfm_3px,wfm_percent,processed,failed,complete,recomputed,training_marker,training_exposure,training_note
+loveda,LoveDA*,miou,0.4133875228233559,41.34,0.11207706057111232,11.21,1669,0,True,True,*,explicit_training_dataset,原论文表10/12明确列入分割训练
+flair,FLAIR,miou,0.18940008907388492,18.94,0.15059834051739437,15.06,15700,0,True,True,,not_named_in_disclosed_sources,公开训练清单未列名；不等于已证明无影像重叠
+uavid,UAVid*,miou,0.39168328492893173,39.17,0.14520832516227752,14.52,270,0,True,True,*,explicit_training_dataset,原论文表10/12明确列入分割训练
+xbd_pre,xBD-pre,building_iou,0.2724647049926769,27.25,0.12145118083388051,12.15,933,0,True,False,,not_named_in_disclosed_sources,公开训练清单未列名；不等于已证明无影像重叠
+chn6_cug,CHN6-CUG,road_iou,0.3105322506129475,31.05,0.09850140980841372,9.85,903,0,True,False,,not_named_in_disclosed_sources,公开训练清单未列名；不等于已证明无影像重叠
+levircd,LEVIR-CD*†,building_iou,0.27649883522673074,27.65,,,128,0,True,False,*†,related_training_source,训练LEVIR-MCI，后者扩展LEVIR-CC；LEVIR-CC影像主要源于LEVIR-CD；当前128对test的实际重叠未审计
+second,SECOND,miou_c,0.09485809016521286,9.49,,,593,0,True,False,,not_named_in_disclosed_sources,公开训练清单未列名；不等于已证明无影像重叠

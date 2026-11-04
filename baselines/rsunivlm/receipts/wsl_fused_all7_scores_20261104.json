@@ -1,0 +1,216 @@
+{
+  "schema": "rsunivlm_user_terminal_fused_scores_with_training_v1",
+  "date_local": "2026-11-04",
+  "timezone": "Asia/Shanghai",
+  "evidence_type": "user_pasted_WSL_terminal",
+  "wsl_host": "PC-20250412AZHP",
+  "code_commit": "a25bba8d5bc3e7825b7163e0ba06f4357a100ea9",
+  "source_run": "/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1_formatfix_rle_v1",
+  "output_dir": "/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1_formatfix_rle_v1_fixedorder_fusion_v1",
+  "reported_tests": {
+    "passed": 19,
+    "seconds": 3.57
+  },
+  "complete_reported": true,
+  "total_successful_samples": 20196,
+  "total_failed_samples": 0,
+  "recomputed_samples": 17639,
+  "inherited_samples": 2557,
+  "recomputed_datasets": [
+    "loveda",
+    "flair",
+    "uavid"
+  ],
+  "inherited_datasets": [
+    "xbd_pre",
+    "chn6_cug",
+    "levircd",
+    "second"
+  ],
+  "reported_scoring_times": {
+    "loveda": "03:46",
+    "flair": "07:11",
+    "uavid": "05:34"
+  },
+  "protocol": {
+    "fusion": "ascending_class_id_last_positive_wins_v1",
+    "source_tile_size": 512,
+    "exclusive_semantic_fusion_datasets": [
+      "loveda",
+      "flair",
+      "uavid"
+    ],
+    "second": "six independent undirected change categories; scores inherited",
+    "source_rle_recovery": "mixture of retained free outputs, mechanical repairs and constrained RLE fallback",
+    "official_rsunivlm_multiclass_protocol": false,
+    "metric_scale": "raw CSV floats in 0..1; printed percent rounded to 2 decimals"
+  },
+  "independently_read_from_WSL": false,
+  "raw_plan_and_summary_files_received": false,
+  "unrounded_score_scalars_received": true,
+  "training_annotation": {
+    "checked_date": "2026-11-04",
+    "marker_star": "training includes this benchmark or a dataset derived from its source imagery",
+    "marker_dagger": "related-source exposure via LEVIR-MCI -> LEVIR-CC -> mainly LEVIR-CD images; current official-test overlap unverified",
+    "unmarked": "not named in disclosed training sources; not proof of no overlap",
+    "specific_test_split_leakage_established": false,
+    "sources": {
+      "rsunivlm_training": {
+        "url": "https://arxiv.org/html/2412.05679v2#S7",
+        "location": "Tables 10 and 12; Section 4.1",
+        "finding": "LoveDA, UAVid, LEVIR-MCI explicitly included in pixel-level training; no checkpoint-level sample manifest audited"
+      },
+      "levir_mci_origin": {
+        "url": "https://arxiv.org/html/2403.19646v3#S3",
+        "location": "Section III",
+        "finding": "LEVIR-MCI extends LEVIR-CC with change masks on paired images"
+      },
+      "levir_cc_origin": {
+        "url": "https://levir.buaa.edu.cn/publications/ChangeCaptioning.pdf",
+        "location": "Section III.A Image Pairs Collection",
+        "finding": "LEVIR-CC images mainly originate from LEVIR-CD and are cropped to 256x256"
+      }
+    }
+  },
+  "results": {
+    "loveda": {
+      "display_name": "LoveDA",
+      "primary_metric": "miou",
+      "value": 0.4133875228233559,
+      "wfm_3px": 0.11207706057111232,
+      "processed_samples": 1669,
+      "selected_samples": 1669,
+      "num_failed": 0,
+      "complete": true,
+      "updated": true,
+      "scope": "exclusive_multiclass",
+      "training_exposure": {
+        "marker": "*",
+        "status": "explicit_training_dataset",
+        "reported_training_sources": [
+          "LoveDA"
+        ],
+        "note": "原论文表10/12明确列入分割训练",
+        "test_split_overlap_verified": false
+      }
+    },
+    "flair": {
+      "display_name": "FLAIR",
+      "primary_metric": "miou",
+      "value": 0.18940008907388492,
+      "wfm_3px": 0.15059834051739437,
+      "processed_samples": 15700,
+      "selected_samples": 15700,
+      "num_failed": 0,
+      "complete": true,
+      "updated": true,
+      "scope": "exclusive_multiclass",
+      "training_exposure": {
+        "marker": "",
+        "status": "not_named_in_disclosed_sources",
+        "reported_training_sources": [],
+        "note": "公开训练清单未列名；不等于已证明无影像重叠",
+        "test_split_overlap_verified": false
+      }
+    },
+    "uavid": {
+      "display_name": "UAVid",
+      "primary_metric": "miou",
+      "value": 0.39168328492893173,
+      "wfm_3px": 0.14520832516227752,
+      "processed_samples": 270,
+      "selected_samples": 270,
+      "num_failed": 0,
+      "complete": true,
+      "updated": true,
+      "scope": "exclusive_multiclass",
+      "training_exposure": {
+        "marker": "*",
+        "status": "explicit_training_dataset",
+        "reported_training_sources": [
+          "UAVid"
+        ],
+        "note": "原论文表10/12明确列入分割训练",
+        "test_split_overlap_verified": false
+      }
+    },
+    "xbd_pre": {
+      "display_name": "xBD-pre",
+      "primary_metric": "building_iou",
+      "value": 0.2724647049926769,
+      "wfm_3px": 0.12145118083388051,
+      "processed_samples": 933,
+      "selected_samples": 933,
+      "num_failed": 0,
+      "complete": true,
+      "updated": false,
+      "scope": "independent_class_queries",
+      "training_exposure": {
+        "marker": "",
+        "status": "not_named_in_disclosed_sources",
+        "reported_training_sources": [],
+        "note": "公开训练清单未列名；不等于已证明无影像重叠",
+        "test_split_overlap_verified": false
+      }
+    },
+    "chn6_cug": {
+      "display_name": "CHN6-CUG",
+      "primary_metric": "road_iou",
+      "value": 0.3105322506129475,
+      "wfm_3px": 0.09850140980841372,
+      "processed_samples": 903,
+      "selected_samples": 903,
+      "num_failed": 0,
+      "complete": true,
+      "updated": false,
+      "scope": "independent_class_queries",
+      "training_exposure": {
+        "marker": "",
+        "status": "not_named_in_disclosed_sources",
+        "reported_training_sources": [],
+        "note": "公开训练清单未列名；不等于已证明无影像重叠",
+        "test_split_overlap_verified": false
+      }
+    },
+    "levircd": {
+      "display_name": "LEVIR-CD",
+      "primary_metric": "building_iou",
+      "value": 0.27649883522673074,
+      "wfm_3px": null,
+      "processed_samples": 128,
+      "selected_samples": 128,
+      "num_failed": 0,
+      "complete": true,
+      "updated": false,
+      "scope": "original source protocol",
+      "training_exposure": {
+        "marker": "*†",
+        "status": "related_training_source",
+        "reported_training_sources": [
+          "LEVIR-MCI"
+        ],
+        "note": "训练LEVIR-MCI，后者扩展LEVIR-CC；LEVIR-CC影像主要源于LEVIR-CD；当前128对test的实际重叠未审计",
+        "test_split_overlap_verified": false
+      }
+    },
+    "second": {
+      "display_name": "SECOND",
+      "primary_metric": "miou_c",
+      "value": 0.09485809016521286,
+      "wfm_3px": null,
+      "processed_samples": 593,
+      "selected_samples": 593,
+      "num_failed": 0,
+      "complete": true,
+      "updated": false,
+      "scope": "original source protocol",
+      "training_exposure": {
+        "marker": "",
+        "status": "not_named_in_disclosed_sources",
+        "reported_training_sources": [],
+        "note": "公开训练清单未列名；不等于已证明无影像重叠",
+        "test_split_overlap_verified": false
+      }
+    }
+  }
+}

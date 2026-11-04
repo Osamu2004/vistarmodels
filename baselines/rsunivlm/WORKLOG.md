@@ -1,5 +1,13 @@
 # RSUniVLM 接入记录
 
+## 2026-11-04：收到合并后标准分割评分，核实并标记训练来源
+
+用户回执：a25bba8离线包在WSL回归19 passed/3.57s；LoveDA1669、FLAIR15700、UAVid270全部计分成功，三集失败0，七集summary complete=True。完整精度标量归档receipts/wsl_fused_all7_scores_20261104.json：标准mIoU41.338752/18.940009/39.168328%，WFm11.207706/15.059834/14.520833%；其他四集继承原分数、缺失WFm保持null。总数20,196，重计17,639、继承2,557。此为真实用户终端回执，未独立读取WSL原始plan/summary，不在Mac执行新评分。
+
+按用户要求核查训练数据并加星：原论文表10/12明确LoveDA、UAVid和LEVIR-MCI。进一步查Change-Agent第III节确认LEVIR-MCI扩展LEVIR-CC，LEVIR-CC原文III.A确认影像主要来自LEVIR-CD，因此LoveDA/UAVid标*、LEVIR-CD标*†并解释派生来源。其余四集未列名，不当作已完成影像去重；没有声称当前test被训练使用。核查更新TRAINING_DATA_AUDIT.md，保存results/fused_scores_training_marked_20261104.csv/md与论文交接副本。
+
+只改记录与显示注记，分数字段保留原精度；旧融合代码/数值依赖、缓存身份、WSL原结果及论文正式TeX未改，不需要重跑。不将旧静态未执行状态继续套在本次已完成的WSL运行上，也不将该适配分数写成官方自由解码或官方多类融合。
+
 ## 2026-11-04：固定类别顺序合并与标准mIoU/WFm重计
 
 目的：将已完成恢复的LoveDA/FLAIR/UAVid独立类别查询变成互斥标签图，得到可明确解释的标准mIoU和语义边界WFm。用户确认按固定类别顺序合并。
