@@ -1,5 +1,21 @@
 # RSUniVLM 接入记录
 
+## 2026-11-04：固定类别顺序合并与标准mIoU/WFm重计
+
+目的：将已完成恢复的LoveDA/FLAIR/UAVid独立类别查询变成互斥标签图，得到可明确解释的标准mIoU和语义边界WFm。用户确认按固定类别顺序合并。
+
+设置：核对Text2Seg原文与固定作者源码dbf6d3d，未找到完整跨类合并评测规则；新增VISTAR适配ascending_class_id_last_positive_wins_v1，ID升序、后类覆盖、无面积/置信度/GT选择。FLAIR空白背景12按FN保留，其余空白用原背景0；SECOND可重叠六类变化口径不改。独立新目录读取旧mask和回执，流式验证每类内容hash，在读取GT像素前保存合并ID图。CPU两进程有界队列、逐图hash缓存续算、池化混淆矩阵、复用原IDGBR 3px WFm及忽略处理；保留原七集结果，summary只更新三集。
+
+结果/验证：实现tools/rsunivlm_fixed_order_fusion.py、tools/score_rsunivlm_fused.py与run_bash/rsunivlm_fuse_rescore.bash，新增WSL待运行合成回归，覆盖顺序重叠、FLAIR背景FN、语义类别边界/GT忽略、缺失/篡改源mask、配置身份、源只读、断点续算、双CPU进程与继承其他指标。按用户要求不在Mac运行测试/解码/模型；当前无新实测分数。静态与来源记录见validation_fusion_static_20261104.json、MULTICLASS_FUSION.md。
+
+分析/下一步：旧35.19/20.61/36.70仍为query mIoU；不能通过改名获得标准mIoU。用户在WSL运行RUN_QUEUE中的命令后，检查三集完整性和每类IoU、重叠/未覆盖计数，再按真实新结果更新论文。
+
+## 2026-11-04：收到约束RLE恢复后七集全量精度
+
+用户贴出guard complete=True、最终recovery result Complete=True及七行评分表。七集20,196样本全部计分，失败0；原失败4,202个样本均恢复，LEVIR另补63个此前未计分样本。按终端显示原精度记录35.19/20.61/36.70/27.25/31.05/27.65/9.49，xBD/CHN6 WFm为12.15/9.85，其余显示--。
+
+归档receipts/wsl_paper_rle_all7_scores_20261104.json，显式注明百分比仅两位小数、完整原始JSON及identity尚未收到、未独立接入这台WSL。本次为native_classwise加约束RLE最后兜底的完整结果，前三项是query_mIoU，不能称所有多类预测已互斥合并；更不能写成官方原版自由解码或零样本复现。只记录证据，没有重跑模型或自动修改论文表格。
+
 ## 2026-11-04：按要求制作最新约束RLE离线包
 
 以约束代码9e677ef和本段安装文档的已提交main固定快照制作完整Git bundle/ZIP，附SHA校验、保留用户数据路径JSON的标准库导入器、中文README和静态回执。不打包未提交的其他基线、权重/数据/预测。RUN_QUEUE提供解压/安装与仓库内正式RLE恢复脚本命令；安装本身不测试或启动GPU。

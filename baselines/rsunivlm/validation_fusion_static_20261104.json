@@ -1,0 +1,54 @@
+{
+  "date_local": "2026-11-04",
+  "schema": "rsunivlm_fixed_order_fusion_static_v1",
+  "scope": "AST/Bash/source review only on macOS; no module execution/tests/decoder/model/CUDA",
+  "user_choice": "fixed dataset class order; ascending IDs; last positive wins",
+  "datasets": [
+    "loveda",
+    "flair",
+    "uavid"
+  ],
+  "source_run_recorded": "/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1_formatfix_rle_v1",
+  "formula": "pool native-resolution confusion matrices then mean class IoU; existing semantic 3px boundary WFm",
+  "new_metric_scores_available": false,
+  "checks": {
+    "python_ast_parse": true,
+    "bash_syntax": true,
+    "cpu_tests_run": false,
+    "wsl_validation_run": false,
+    "model_calls": 0,
+    "gpu_jobs": 0
+  },
+  "files_sha256": {
+    "tools/rsunivlm_fixed_order_fusion.py": "cdc570b4988d9e84b3ffc91b1e62e1ff5903b502fa6c3afd08ff3c5bb68b9022",
+    "tools/score_rsunivlm_fused.py": "760e333c3553630440bdfab4f47e7ba87d33543be5354b322dbda2973142d571",
+    "tests/test_rsunivlm_fused_scores.py": "b23da5f17fdbc32e686f2b9da6ff2cbc1e6343388ce589e8bc89b9c7774494ca",
+    "run_bash/rsunivlm_fuse_rescore.bash": "ee5f7a57e18625d9467ae1b30b557ea071c8e0da23a8374ae9c2e777bfda833b"
+  },
+  "text2seg_evidence": {
+    "paper": "https://arxiv.org/abs/2304.10597",
+    "paper_pdf_sha256": "e7d4bc81d92e34f38d1746c84addfcff94b8c31981bbc68b2a55f9c2a94a0afe",
+    "official_repository": "https://github.com/zhangjielu321/Text2Seg",
+    "commit": "dbf6d3df026b5865517defec56decd47ce95226b",
+    "inspected": [
+      "text2seg/text2seg.py",
+      "utils.py",
+      "paper sections 3 and 4.3"
+    ],
+    "finding": "Per-class prediction supported; complete cross-class overlap/uncovered resolution not found. Fixed-order fusion is a separate VISTAR adaptation, not asserted official Text2Seg fusion."
+  },
+  "wsl_pending_command": "python -m pytest tests/test_rsunivlm_fused_scores.py -q",
+  "regressions_authored": [
+    "last-positive overlap order",
+    "FLAIR background stays FN",
+    "semantic boundary includes foreground transitions",
+    "GT ignore support",
+    "source mask corruption/missing never filled",
+    "source input/protocol identity",
+    "read-only original",
+    "resume artifact/row hashes",
+    "serial versus spawn-worker sufficient statistics",
+    "original SECOND/binary metric inheritance",
+    "active queue/nested output refusal"
+  ]
+}

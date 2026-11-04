@@ -1,0 +1,41 @@
+{
+  "schema": "rsunivlm_user_terminal_scores_v1",
+  "date_local": "2026-11-04",
+  "timezone": "Asia/Shanghai",
+  "evidence_type": "user_pasted_WSL_terminal",
+  "wsl_host": "PC-20250412AZHP",
+  "run_root": "/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1_formatfix_rle_v1",
+  "summary_complete_reported": true,
+  "total_selected_samples": 20196,
+  "total_successful_samples": 20196,
+  "total_failed_samples": 0,
+  "original_failed_recovered": 4202,
+  "newly_scored_prior_unaccounted": 63,
+  "metric_scale": "percent as displayed, two decimal places",
+  "unrounded_scores_received": false,
+  "raw_summary_and_plan_files_received": false,
+  "independently_read_from_WSL": false,
+  "model_execution_started_locally": false,
+  "protocol": {
+    "semantic_mode": "native_classwise",
+    "multi_class_semantic_metric": "independent per-category binary query mIoU",
+    "exclusive_multiclass_fusion": false,
+    "decoding": "reuse valid free outputs, mechanical format repair and opt-in constrained RLE fallback",
+    "original_official_decoding_protocol": false,
+    "source_tile_size": 512,
+    "constrained_fallback_grid": [24, 24],
+    "levircd_query": "one ordered binary building-change query",
+    "levircd_gt_mode": "vistar_positive",
+    "second_query": "six independent undirected category-aware change queries, one image order"
+  },
+  "results": {
+    "loveda": {"metric": "query_miou", "score_percent_displayed": "35.19", "wfm_percent_displayed": null, "processed": 1669, "selected": 1669, "failed": 0},
+    "flair": {"metric": "query_miou", "score_percent_displayed": "20.61", "wfm_percent_displayed": null, "processed": 15700, "selected": 15700, "failed": 0},
+    "uavid": {"metric": "query_miou", "score_percent_displayed": "36.70", "wfm_percent_displayed": null, "processed": 270, "selected": 270, "failed": 0},
+    "xbd_pre": {"metric": "building_iou", "score_percent_displayed": "27.25", "wfm_percent_displayed": "12.15", "processed": 933, "selected": 933, "failed": 0},
+    "chn6_cug": {"metric": "road_iou", "score_percent_displayed": "31.05", "wfm_percent_displayed": "9.85", "processed": 903, "selected": 903, "failed": 0},
+    "levircd": {"metric": "building_iou", "score_percent_displayed": "27.65", "wfm_percent_displayed": null, "processed": 128, "selected": 128, "failed": 0},
+    "second": {"metric": "miou_c", "score_percent_displayed": "9.49", "wfm_percent_displayed": null, "processed": 593, "selected": 593, "failed": 0}
+  },
+  "paper_use": "Archive with protocol tags; no automatic exclusive-multiclass comparison or replacement of missing WFm with zero. Raw JSON, identity and constrained-query counts remain to be archived."
+}

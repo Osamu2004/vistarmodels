@@ -4,6 +4,32 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-04 固定类别顺序合并与重计mIoU/WFm（待WSL执行）
+
+用户确认采用固定类别顺序，不使用面积优先。LoveDA/FLAIR/UAVid按原ID升序写入，后类覆盖前类；未覆盖分别用原背景0/FLAIR预测背景12/原背景0。FLAIR背景保留在混淆矩阵的额外预测列，计入真实类别FN，不以255忽略。此为参考Text2Seg逐类接口的VISTAR适配；公开Text2Seg未给出完整跨类冲突规则，不声称官方复现。协议说明见baselines/rsunivlm/MULTICLASS_FUSION.md。
+
+使用已恢复的完整二值mask，不跑Qwen/模型，不占GPU；默认两个CPU评分进程、最多4张在途，保存每图一张合并ID掩码，进度显示scored/cached/failed。复用原原图GT/scorer，先池化混淆矩阵再算mIoU，重算语义类别边界的3px WFm。SECOND及其他二值数据集保留原结果、标注继承；原缺失WFm保持空值。本机只检查AST/bash/文档，不执行回归、解码或模型。
+
+WSL同一终端，原队列退出后；先更新代码。测试失败停止，测试成功再全量评分：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m pytest tests/test_rsunivlm_fused_scores.py -q && \
+SOURCE_RUN=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1_formatfix_rle_v1 \
+SCORE_WORKERS=2 MAX_SAMPLES=0 \
+bash run_bash/rsunivlm_fuse_rescore.bash
+~~~
+
+源数据根目录不变，无新依赖/权重；产物为源目录后缀_fixedorder_fusion_v1中的paper_summary.json、paper_summary.csv、各集metrics.json/rows/pred_mask。相同命令断点续算，源mask/回执/代码/GT元数据与合并mask/逐图记录hash均匹配才复用评分。通过条件：新三个数据集分别1669/15700/270张、失败0、complete=True；CSV百分比两位小数，JSON保留原值。失败返回非零，不能把部分评分更新成论文全量结果。当前为代码实现与静态检查阶段，没有新实测分数；论文数值待WSL回执后再更新。
+
+### 2026-11-04 已收到WSL七集全量恢复与精度回执
+
+用户终端报告_formatfix_rle_v1的Complete=True；七集20,196个样本全部计分、失败0，恢复原格式失败4,202张并补计LEVIR此前未计分63对。终端打印分数（百分比、两位小数）：LoveDA query_mIoU35.19、FLAIR query_mIoU20.61、UAVid query_mIoU36.70、xBD-pre building IoU27.25/WFm12.15、CHN6-CUG road IoU31.05/WFm9.85、LEVIR building IoU27.65、SECOND mIoU_c9.49。完整回执见baselines/rsunivlm/receipts/wsl_paper_rle_all7_scores_20261104.json。
+
+状态为用户真实WSL回执，非本机运行；尚未取得完整paper_summary/plan/identity、未舍入原始分数或约束样本数量。不再将本次列为等待全量执行，也不把旧静态/旧自由解码失败状态当本次现状。前三集保留独立类别二值查询口径，不能默认为互斥多类合并。WFm缺失保留null，不写0；论文TeX数值未自动更新。
+
 ### 2026-11-04 约束RLE离线更新包
 
 用户要求最新约束RLE离线包。外层工作区产物output/offline/rsunivlm_constrained_rle_20261104.zip，固定RLE代码9e677ef及此安装记录的已提交main完整历史，无旧增量包前置依赖。不包含其他未提交基线改动、模型权重、数据集或已有预测。实际bundle tip、SHA、ZIP CRC与传输验证回执在外层同名manifest/receipt。
