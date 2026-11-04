@@ -4,6 +4,45 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-04 当前执行入口：七集失败样本先修复，再补推理
+
+用户明确要求“现在开始处理失败样本，能修复的修复，不能修复的重跑”。现有6ea3329代码已支持组合入口，使用原始七集运行作为source：先复用通过哈希校验的完整掩码/合法回答，原历史均非法时机械规范允许的分隔符并完整解码；CPU重建/重计数；仅仍缺失/不合法的查询经--run_remaining进入guarded模型补推理。旧GT/原文/成功预测/metrics保留，结果使用独立_formatfix_v1_retry2派生身份目录（冲突时打印_p后缀）。
+
+执行机器为用户PC-20250412AZHP的WSL。本对话没有该机器SSH入口，未在本机或其他服务器启动本任务；当前状态为待用户执行，不能把本地准备/命令视作运行回执。用户此前63项WSL测试通过的是554e906旧版；6ea3329正值规则尚无新测试或实际审计回执。
+
+先在WSL当前环境更新并运行新增规则回归，失败则停止并保留输出：
+
+~~~bash
+cd /root/code/vistarmodels
+git pull --ff-only
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m pytest tests/test_rsunivlm_levir_labels.py \
+  tests/test_rsunivlm_format_repair.py tests/test_rsunivlm_format_repair_pipeline.py \
+  tests/test_rsunivlm_failed_recovery.py tests/test_rsunivlm_guarded.py -q
+~~~
+
+通过条件：全部通过。随后同一WSL终端执行；正值GT审计必须通过才进入修复/补推理：
+
+~~~bash
+SOURCE_RUN=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1
+python tools/rsunivlm_levir_labels.py --source_run "$SOURCE_RUN" --gt_mode vistar_positive &&
+CUDA_LAUNCH_BLOCKING=0 PYTHONFAULTHANDLER=1 TOKENIZERS_PARALLELISM=false \
+RSUNIVLM_NUM_WORKERS=2 RSUNIVLM_PREFETCH_FACTOR=2 \
+python tools/repair_rsunivlm_format.py \
+  --source_run "$SOURCE_RUN" \
+  --datasets loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second \
+  --levircd_gt_mode vistar_positive --run_remaining
+~~~
+
+数据规模/分片/模型设置来自原plan：七集合计20,196张，GPU0/1各一进程，batch/GPU=16，512源裁块，原32k token上限；不要用不被此CLI读取的GPU_IDS/BATCH_SIZE环境变量冒充修改这些参数。每卡CPU DataLoader=2、prefetch=2。若缺卡或出现CUDA致命错误，guarded停止本次自建进程；不使用其他SSH机器或校园GPU代跑。
+
+原来源format_retries=0，本次派生预算明确为最多两个既有备用提示（总计最多三次真实回答），选择首个完整合法候选，不按GT挑结果。已有成功图片不会再次模型前向；GPU阶段仍会遍历缓存并评分。原先未计入成功/失败但已有有效预测的LEVIR样本同样可复用；真正尚未生成的查询也会补齐。GT对全体LEVIR标签统一convert(L)→uint8→>0，原文件不改。
+
+续跑：中断后重新执行同一source_run、同一参数命令，Actual OUTPUT_DIR应恢复同一派生目录，保留成功掩码/回答与已用重试次数。新模型回答若再出现允许的分隔符错误，可用相同命令进入下一轮离线规范；当前代码不会在GPU每次回答后自动做新的机械修复，也不会为耗尽三次模板的查询无限重试。仍不合法的整图继续保留失败，不填背景。
+
+完成判定：以实际输出目录paper_summary.complete及七集selected/processed/num_failed为准；format_repair_report记录CPU修复与GPU分支调用，guarded_runtime_finished记录实际worker/exit_codes。CPU扫描修复量不等于模型补跑成功量；目前没有这轮修复数量、新分数或GPU启动回执，不更新论文结果。详细编辑审计保留在attempt.format_repair和format_repair_scan.jsonl。
+
 ### 2026-11-04 当前：已确认L标签含156/254，按Vistar灰度正值规则恢复
 
 真实WSL回执：旧版63项测试通过（7.36s），但严格审计128张只接受123张。test_18为0/254/255，test_68/70/73/74为0/156/255，均L/uint8/1024×1024；不是RGB。&&链已在审计停止，CPU重算未启动。既有Vistar/模型仓库的LEVIR评分均convert(L)→uint8→gray>0，因此新增显式vistar_positive选项统一读取全部标签；GT原文件与模型输入不改，0未变化，1..255变化，政策/helper SHA隔离到派生身份。默认exact_binary仍拒绝这些中间灰度。详见baselines/rsunivlm/LEVIR_LABELS.md。
