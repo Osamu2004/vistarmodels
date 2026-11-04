@@ -4,6 +4,57 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-04 当前：保留协议的一次调用恢复与自动收尾
+
+用户选择保留当前自由输出协议，自动修复、补跑并汇总剩余失败。新增在线机械修复：每个新回答先按既有分隔符规则规范并用原解码器完整校验，合法则直接复用；仍坏才消耗原固定提示重试。GPU正常退出后自动终检并只重算新修好的数据集，输出逐集整图恢复数量。不增加约束解码或改变网格/模型/提示词/原三次总回答预算。用尽预算仍坏则保留失败，不能保证全部20,196张成功；详见baselines/rsunivlm/RECOVERY_ONCE.md。
+
+保留用户当前已恢复工作：--reuse_run指向当前_formatfix_v1_retry2，先导入这个已结束的派生目录，再让原source填空；原文、合法掩码、已用重试次数都保留。默认新输出为_formatfix_once_v2（冲突选_p），不覆写两份来源。旧队列尚在运行时不要git pull或启动迁移；活动锁拒绝导入。当前本对话无WSL连接，未实际启动恢复，状态待用户执行。
+
+新增仓库内正式单命令入口run_bash/rsunivlm_recover_once.bash（随Git发布，不依赖离线包解压路径）。等旧队列退出，更新代码并激活环境后执行一次即可：
+
+~~~bash
+cd /root/code/vistarmodels
+git pull --ff-only
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+bash run_bash/rsunivlm_recover_once.bash
+~~~
+
+该脚本默认先运行本节回归（RUN_TESTS=1），再审计GT、导入旧恢复目录、机械修复/补推理并自动终检汇总；任一步失败停止。SOURCE_RUN/REUSE_RUN默认就是用户当前两份目录，实际旧目录有_p后缀时必须显式设REUSE_RUN，不能猜测。RUN_TESTS=0仅用于已经在WSL验证同一版本后的重复续跑，不能把静态检查当作已通过。下面展开命令与单脚本等价，供逐步定位使用。
+
+等旧队列正常结束后在WSL更新并跑新增合成回归。本机不运行测试/解码/模型/CUDA：
+
+~~~bash
+cd /root/code/vistarmodels
+git pull --ff-only
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m pytest tests/test_rsunivlm_recovery_once.py \
+  tests/test_rsunivlm_levir_labels.py tests/test_rsunivlm_format_repair.py \
+  tests/test_rsunivlm_format_repair_pipeline.py tests/test_rsunivlm_failed_recovery.py \
+  tests/test_rsunivlm_guarded.py -q
+~~~
+
+通过条件：全部通过，否则保留输出停止。随后同一WSL终端只需一次调用完成审计、旧/新文本修复、补推理、最终汇总：
+
+~~~bash
+SOURCE_RUN=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1
+REUSE_RUN=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1_formatfix_v1_retry2
+python tools/rsunivlm_levir_labels.py --source_run "$SOURCE_RUN" --gt_mode vistar_positive &&
+CUDA_LAUNCH_BLOCKING=0 PYTHONFAULTHANDLER=1 TOKENIZERS_PARALLELISM=false \
+RSUNIVLM_NUM_WORKERS=2 RSUNIVLM_PREFETCH_FACTOR=2 \
+python tools/repair_rsunivlm_format.py \
+  --source_run "$SOURCE_RUN" --reuse_run "$REUSE_RUN" \
+  --datasets loveda,flair,uavid,xbd_pre,chn6_cug,levircd,second \
+  --levircd_gt_mode vistar_positive --run_remaining
+~~~
+
+沿用来源原GPU0/1分片、每卡batch16、CPU workers2/prefetch2、512裁块与32k token上限，不用GPU_IDS/BATCH_SIZE环境变量冒充改参。若CPU即可完成，或剩余历史全已耗尽三次预算，没有缺失/待生成查询，不启动GPU。未用完预算/缺失查询才调用原模型；不强行重置先前失败历史。
+
+收尾依据guarded的identity/launch_id/PID/退出码判断worker确实结束；异常GPU退出保留失败并停止，不因旧缓存complete而伪报成功。正常结束后末尾检查有新修复才CPU重算相应集，避免无变化重复评分。相同source/reuse/参数命令可续跑新目录，不再要求手工做另一轮规范/汇总。
+
+查看Actual OUTPUT_DIR下format_repair_report.recovery_counts与final_complete、paper_summary.complete/七集processed/failed；终端[recovery result]直接显示已恢复原失败整图、剩余未恢复和补齐原未计分。runtime_format_repair_rankNNN为每卡查询级在线修复数，不能当作图片数。最新用户快照是运行中统计，不是新入口的完成回执；目前无本轮恢复数量/新分数，不更新论文。
+
 ### 2026-11-04 当前执行入口：七集失败样本先修复，再补推理
 
 用户明确要求“现在开始处理失败样本，能修复的修复，不能修复的重跑”。现有6ea3329代码已支持组合入口，使用原始七集运行作为source：先复用通过哈希校验的完整掩码/合法回答，原历史均非法时机械规范允许的分隔符并完整解码；CPU重建/重计数；仅仍缺失/不合法的查询经--run_remaining进入guarded模型补推理。旧GT/原文/成功预测/metrics保留，结果使用独立_formatfix_v1_retry2派生身份目录（冲突时打印_p后缀）。

@@ -1,0 +1,34 @@
+{
+  "time_utc": "2026-11-04T05:57:07.714923+00:00",
+  "validation": "static_only",
+  "ast_checked": [
+    "tools/rsunivlm_recovery_runtime.py",
+    "tools/rsunivlm_recovery_reuse.py",
+    "tools/repair_rsunivlm_format.py",
+    "tools/eval_rsunivlm_guarded.py",
+    "tests/test_rsunivlm_recovery_once.py"
+  ],
+  "bash_script_checked": "run_bash/rsunivlm_recover_once.bash",
+  "bash_command_blocks_checked": 3,
+  "scoped_diff_check": true,
+  "protected_numerical_file_count": 15,
+  "protected_files_unchanged_vs": "c11852635f9892f766349facab252301c5f1593b",
+  "runtime_code_sha256": {
+    "tools/rsunivlm_recovery_runtime.py": "d672bbf0d36d366c11c94b4612c4b49c394fe8121aad107ade0b783702e323e2",
+    "tools/rsunivlm_recovery_reuse.py": "4c375320a9e74294d3c5878b451dfbe40c8d9b03929ce8268819f1ecdb7e642b",
+    "tools/repair_rsunivlm_format.py": "c9f83943c9abf690daec937ac57b5ca46a9013b7122e1f0d32513c751a9027b4",
+    "tools/eval_rsunivlm_guarded.py": "6fdc78888ef1fdb9da71794d7ad6559730d858f2e9bc003839663bcbf47db23e"
+  },
+  "user_selected_protocol": "retain existing free generation, repair and fixed retries; report remaining failures",
+  "original_total_attempt_budget": 3,
+  "additional_generation_attempts_introduced": 0,
+  "changes_model_forward": false,
+  "changes_prompts": false,
+  "changes_geometry": false,
+  "tests_executed_locally": false,
+  "decoder_executed_locally": false,
+  "model_or_cuda_executed": false,
+  "wsl_run_started": false,
+  "real_one_call_recovery_verified": false,
+  "reuse_runtime_verified": false
+}

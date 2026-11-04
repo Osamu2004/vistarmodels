@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from contextlib import ExitStack
 import copy
 import fcntl
 import hashlib
@@ -25,6 +26,8 @@ from tools import rsunivlm_paper_worker as worker
 from tools import rsunivlm_native_semantic as native
 from tools import rsunivlm_format_repair as normalization
 from tools import rsunivlm_levir_labels as levir_labels
+from tools import rsunivlm_recovery_runtime as online_repair
+from tools import rsunivlm_recovery_reuse as reuse
 from tools.rsunivlm_data_loading import LoaderOptions, bind_ordered_reader
 
 
@@ -68,6 +71,7 @@ def prepare(source, requested, run_remaining=False, levircd_gt_mode='exact_binar
     else:
         value['levircd_gt_reader'] = levir_labels.settings(levircd_gt_mode)
     if run_remaining:
+        value['runtime_format_repair'] = online_repair.settings()
         value['format_retries'] = 2
         for name in value['datasets']:
             value['prompts'][name] = ({key: [recovery.instruction(new, name, key, variant) for variant in range(3)]
@@ -105,9 +109,10 @@ def query_context(plan, entry, path, record, sample_ids):
     return key
 
 
-def normalize_cache(plan, output):
+def normalize_cache(plan, output, audit_name='format_repair_scan.jsonl'):
     counts = Counter()
-    audit_path = output/'format_repair_scan.jsonl'
+    repaired_datasets = set()
+    audit_path = output/audit_name
     temporary = audit_path.with_suffix('.jsonl.tmp')
     with temporary.open('w', encoding='utf-8') as audit:
         for entry in plan['entries']:
@@ -132,6 +137,7 @@ def normalize_cache(plan, output):
                     else:
                         counts[status+'_records'] += 1
                     if status == 'repaired':
+                        repaired_datasets.add(dataset)
                         fixed['format_repair']['record_before_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
                         io.write_json(path, fixed)
                     if status != 'already_valid':
@@ -140,7 +146,7 @@ def normalize_cache(plan, output):
     counts['total_repaired_records'] = counts['repaired_records']+counts['previously_repaired_records']
     for field in ('repaired_records', 'previously_repaired_records', 'already_valid_records', 'unrepairable_records'):
         counts.setdefault(field, 0)
-    return dict(counts)
+    return dict(counts, repaired_datasets=sorted(repaired_datasets))
 
 
 class OfflineEngine(worker.Engine):
@@ -159,10 +165,12 @@ class OfflineEngine(worker.Engine):
             yield
 
 
-def score_offline(plan, output, options):
+def score_offline(plan, output, options, datasets=None):
     deferred_total = 0
     for entry in plan['entries']:
         dataset = entry['dataset']
+        if datasets is not None and dataset not in datasets:
+            continue
         for rank in range(len(plan['gpu_ids'])):
             engine = OfflineEngine(plan, rank, len(plan['gpu_ids']))
             with bind_ordered_reader(engine, entry, str(output), options):
@@ -190,7 +198,8 @@ def score_offline(plan, output, options):
                           deferred_queries=len(engine.deferred_queries))
             io.write_json(shard/'status.json', status)
     summary = queue.merge(plan)
-    summary.update(offline_only=True, model_forward_calls_this_process=0, deferred_queries=deferred_total,
+    summary.update(offline_only=datasets is None, model_forward_calls_this_process=0, deferred_queries=deferred_total,
+                   scoring_phase='initial_offline_cpu' if datasets is None else 'post_gpu_cpu_rescore',
                    format_repair_policy=normalization.POLICY)
     io.write_json(output/'paper_summary.json', summary)
     io.write_json(output/'offline_runtime_finished.json', dict(identity=plan['identity'], owned_pids=[], exit_codes=[],
@@ -198,11 +207,68 @@ def score_offline(plan, output, options):
     return summary
 
 
+def recovery_counts(source, output, plan):
+    result = {}
+    for entry in plan['entries']:
+        name = entry['dataset']
+        failed, old_ok, now_ok = set(), set(), set()
+        for root, old in ((Path(source), True), (Path(output), False)):
+            for path in (root/name/'shards').glob('rank*/metrics.json'):
+                value = io.read_json(path) or {}
+                names = {row['sample'] for row in value.get('rows', [])}
+                if old:
+                    old_ok.update(names)
+                    failed.update(row['sample'] for row in value.get('failed_samples', []))
+                else:
+                    now_ok.update(names)
+        result[name] = dict(original_failed=len(failed), recovered_original_failed=len(failed & now_ok),
+            original_failed_not_yet_recovered=len(failed-now_ok),
+            newly_scored_prior_unaccounted=len(now_ok-failed-old_ok), successful_images=len(now_ok))
+    return result
+
+
+def finalize_gpu(plan, output, source, report, code, options):
+    runtime = io.read_json(output/'guarded_runtime_finished.json') or {}
+    current = io.read_json(output/'guarded_runtime.json') or {}
+    report['gpu_continuation_exit_code'] = code
+    report['gpu_workers_started'] = bool(runtime.get('workers_started'))
+    codes = runtime.get('exit_codes', [])
+    clean = (code in (0, 1) and runtime.get('identity') == plan['identity'] and
+             runtime.get('launch_id') == current.get('launch_id') and runtime.get('launch_id') is not None and
+             runtime.get('owned_pids') == current.get('owned_pids') and
+             len(codes) == len(plan['gpu_ids']) and all(value in (0, 1) for value in codes) and
+             not runtime.get('failure') and not runtime.get('surviving_owned_pids'))
+    if not clean:
+        report.update(final_complete=False, finalization_skipped='GPU exit/identity receipt is missing, interrupted or fatal')
+        io.write_json(output/'format_repair_report.json', report)
+        return code if code else 1
+    repaired = normalize_cache(plan, output, audit_name='format_repair_scan_post_gpu.jsonl')
+    report['post_gpu_normalization'] = repaired
+    if repaired['repaired_records']:
+        summary = score_offline(plan, output, options, datasets=set(repaired['repaired_datasets']))
+        report['post_gpu_rescored_datasets'] = repaired['repaired_datasets']
+    else:
+        summary = io.read_json(output/'paper_summary.json')
+        if not summary:
+            raise ValueError('GPU workers exited without a scoring summary')
+        report['post_gpu_rescored_datasets'] = []
+    report['recovery_counts'] = recovery_counts(source, output, plan)
+    report['runtime_format_repair'] = [io.read_json(output/f'runtime_format_repair_rank{rank:03d}.json')
+                                     for rank in range(len(plan['gpu_ids']))]
+    report.update(finalization_complete=True, final_complete=bool(summary['complete']))
+    io.write_json(output/'format_repair_report.json', report)
+    for name, counts in report['recovery_counts'].items():
+        print(f'[recovery result] {name}: {counts}', flush=True)
+    print(f'[recovery result] Complete={report["final_complete"]}; report={output/"format_repair_report.json"}', flush=True)
+    return 0 if report['final_complete'] else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source_run', required=True)
     parser.add_argument('--datasets', default='')
     parser.add_argument('--output_dir', default='')
+    parser.add_argument('--reuse_run', default='', help='Import a finished previous derived run before the original source, preserving successful work and used retries')
     parser.add_argument('--plan_only', action='store_true')
     parser.add_argument('--run_remaining', action='store_true', help='Explicitly enable guarded GPU inference with at most two existing fixed retry templates')
     parser.add_argument('--levircd_gt_mode', choices=levir_labels.GT_MODES, default='exact_binary',
@@ -212,16 +278,33 @@ def main():
     if not source.is_dir():
         raise FileNotFoundError(source)
     requested = [name.strip() for name in args.datasets.split(',')] if args.datasets else []
-    with (source/'.queue.lock').open('a') as lock:
+    with ExitStack() as stack:
+        lock = stack.enter_context((source/'.queue.lock').open('a'))
         try:
             fcntl.flock(lock, fcntl.LOCK_SH|fcntl.LOCK_NB)
         except BlockingIOError:
             raise SystemExit('The original queue is still running; wait for it to exit')
         old, new = prepare(source, requested, args.run_remaining, levircd_gt_mode=args.levircd_gt_mode)
-        suffix = '_formatfix_v1_retry2' if args.run_remaining else '_formatfix_v1'
+        reused = None
+        if args.reuse_run:
+            reused_root = Path(args.reuse_run).expanduser().resolve()
+            if not reused_root.is_dir():
+                raise FileNotFoundError(reused_root)
+            reused_lock = stack.enter_context((reused_root/'.queue.lock').open('a'))
+            try:
+                fcntl.flock(reused_lock, fcntl.LOCK_SH|fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise SystemExit('The previous recovery queue is still running; wait for it to exit before reuse')
+            reused_root, reused_plan, reused_record = reuse.prepare_reuse(source, old, new, reused_root)
+            new['protocol']['format_repair']['reuse_run'] = reused_record
+            new['identity'] = fingerprint(new['protocol'])
+            reused = (reused_root, reused_plan, reused_record)
+        suffix = '_formatfix_once_v2' if reused else '_formatfix_v1_retry2' if args.run_remaining else '_formatfix_v1'
         requested_output = Path(args.output_dir).expanduser().resolve() if args.output_dir else source.with_name(source.name+suffix)
         if requested_output == source or source in requested_output.parents or requested_output in source.parents:
             raise ValueError('Repair output must be separate from, and not contain, the original run')
+        if reused and (requested_output == reused[0] or reused[0] in requested_output.parents or requested_output in reused[0].parents):
+            raise ValueError('New output must be separate from the reused recovery run')
         output, resolution = queue.resolve_output_root(requested_output, new['protocol'])
         new['output_dir'] = str(output)
         print(f'[formatfix] Actual OUTPUT_DIR={output}; datasets={new["protocol"]["datasets"]}; GPU continuation={args.run_remaining}', flush=True)
@@ -235,33 +318,41 @@ def main():
             io.write_json(output/'plan.json', new)
             if resolution:
                 io.write_json(output/'output_resolution.json', resolution)
+            reuse_import = None
+            if reused:
+                reuse_target = copy.deepcopy(new)
+                reuse_target['entries'] = [entry for entry in new['entries'] if entry['dataset'] in reused[2]['datasets']]
+                reuse_import = recovery.import_predictions(reused[0], output, reused[1], reuse_target)
             imported = recovery.import_predictions(source, output, old, new)
             repaired = normalize_cache(new, output)
             print(f'[formatfix] Raw-text normalization: {repaired}; CPU reconstruction/scoring begins', flush=True)
             summary = score_offline(new, output, LoaderOptions.from_env())
             report = dict(source_run=str(source),
                 source_identity=old['identity'], identity=new['identity'], imported=imported,
+                reused_derived_run=str(reused[0]) if reused else None, reuse_import=reuse_import,
                 levircd_gt_reader=new['protocol'].get('levircd_gt_reader'),
                 normalization=repaired, offline_complete=summary['complete'],
                 deferred_queries=summary['deferred_queries'], offline_model_forward_calls=0,
                 gpu_continuation_requested=args.run_remaining, gpu_continuation_invoked=False,
                 gpu_workers_started=False,
-                final_complete=summary['complete'])
+                final_complete=summary['complete'], recovery_counts=recovery_counts(source, output, new))
             io.write_json(output/'format_repair_report.json', report)
             print(f'[formatfix] CPU phase complete; selected population complete={summary["complete"]}; deferred queries={summary["deferred_queries"]}', flush=True)
             if args.run_remaining and not summary['complete']:
+                if not summary['deferred_queries']:
+                    report.update(finalization_complete=True,
+                        gpu_continuation_skipped='All remaining invalid histories exhausted the existing fixed retry budget')
+                    io.write_json(output/'format_repair_report.json', report)
+                    for name, counts in report['recovery_counts'].items():
+                        print(f'[recovery result] {name}: {counts}', flush=True)
+                    print(f'[recovery result] Complete=False; fixed retry budget exhausted; report={output/"format_repair_report.json"}', flush=True)
+                    return 1
                 recovery.verify_runtime_assets(old)
                 (output/'logs').mkdir(exist_ok=True)
                 report['gpu_continuation_invoked'] = True
                 io.write_json(output/'format_repair_report.json', report)
                 code = guarded.launch(new, legacy=queue)
-                report['gpu_continuation_exit_code'] = code
-                runtime = io.read_json(output/'guarded_runtime_finished.json') or {}
-                report['gpu_workers_started'] = bool(runtime.get('workers_started'))
-                latest = io.read_json(output/'paper_summary.json') or summary
-                report['final_complete'] = bool(latest.get('complete'))
-                io.write_json(output/'format_repair_report.json', report)
-                return code
+                return finalize_gpu(new, output, source, report, code, LoaderOptions.from_env())
             return 0
 
 
