@@ -4,6 +4,21 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-04 LEVIR-CD/SECOND补齐LoveDA同口径边界WFm（待WSL）
+
+用户明确使用LoveDA的整体语义边界方式。LEVIR二值0/1直接调用原semantic boundary scorer；SECOND六查询与GT六类归属均按固定ID升序、后类覆盖合并成0..6边界视图，再调用同一scorer，不使用六类WFm平均或单前景并集。原六类可重叠mIoU_c/GT归属保持，IoU和原全局计数必须重建一致才能发布WFm。具体规则/重叠优先级见baselines/rsunivlm/CHANGE_BOUNDARY.md。
+
+原来源为_formatfix_rle_v1（含plan和逐类mask），最新summary为其_fixedorder_fusion_v1；新输出其_cd_boundary_v1。仅对128＋593对变化样本计分，继承其余五集已完成结果和训练标记，无新预测图片，无模型/Qwen/GPU，CPU两进程，支持同命令续算。旧数值代码/缓存身份不改。先退出原队列，更新代码后在WSL执行：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+SCORE_WORKERS=2 bash run_bash/rsunivlm_change_boundary.bash
+~~~
+
+入口默认先执行新增WSL回归再评分；失败即停。通过条件：两集边界128/593全部成功，原IoU/计数匹配，complete=True。新数值当前待WSL回执，不能填0；本机不执行测试/评分，只做静态检查。产物为新版paper_summary.json/CSV及各集boundary_report.json、rows/metrics.json。
+
 ### 2026-11-04 固定类别顺序合并与重计mIoU/WFm（已有WSL完成回执）
 
 最新状态：用户已运行a25bba8离线包，19项回归通过（3.57s）；三集17639张全部重计成功，另继承2557张/对，七集20,196张/对失败0、complete=True。新标准mIoU/WFm（%）：LoveDA41.34/11.21、FLAIR18.94/15.06、UAVid39.17/14.52。完整原精度标量与来源见receipts/wsl_fused_all7_scores_20261104.json。按论文训练清单和LEVIR影像来源链，标记LoveDA*、UAVid*、LEVIR-CD*†；其他四集仅为未列名，不承诺完全无训练影像重叠。显示表results/fused_scores_training_marked_20261104.csv/md；本次无须重跑评分。

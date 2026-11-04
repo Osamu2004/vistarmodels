@@ -1,0 +1,27 @@
+{
+  "schema": "rsunivlm_change_boundary_static_v1",
+  "date_local": "2026-11-04",
+  "policy": "native_change_semantic_boundary_3px_fixed_order_v1",
+  "user_requirement": "same LoveDA whole-semantic boundary WFm; no six-class WFm macro",
+  "populations": {
+    "levircd": 128,
+    "second": 593
+  },
+  "new_boundary_scores_available": false,
+  "tests_run_locally": false,
+  "model_or_decoder_or_scoring_executed_locally": false,
+  "checks": {
+    "python_ast": true,
+    "bash_syntax": true,
+    "prior_fusion_and_inference_numerical_sources_unchanged": true
+  },
+  "source_sha256": {
+    "tools/score_rsunivlm_change_boundary.py": "fb17505397639b1fece7aea7c35001863861787a13132365bff31462d4450c64",
+    "tests/test_rsunivlm_change_boundary.py": "d25b52abfb4bcec9d63f379056eb1e33a8df36b2795f7e8687c8e87cedea8141",
+    "run_bash/rsunivlm_change_boundary.bash": "f2d945d411c7927ad6a193e0f4fe61d7720cca1c0cfd1200f7f64301e6275a8d"
+  },
+  "wsl_pending_command": "SCORE_WORKERS=2 bash run_bash/rsunivlm_change_boundary.bash",
+  "protocol": "SECOND original multilabel IoU counts retained; prediction and GT class memberships both fixed-ID last-positive merge for boundary only; existing semantic scorer and IDGBR aggregation",
+  "new_images_saved": false,
+  "gpu_required": false
+}

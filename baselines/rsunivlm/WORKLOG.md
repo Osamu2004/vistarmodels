@@ -1,5 +1,13 @@
 # RSUniVLM 接入记录
 
+## 2026-11-04：补两个变化集的整体语义边界WFm
+
+用户要求LEVIR-CD/SECOND补边界，随后明确使用LoveDA的方式。新增独立保存掩码后处理score_rsunivlm_change_boundary.py和bash入口；两集统一复用原semantic scorer/IDGBR聚合，SECOND的六类预测及原GT类别归属按固定ID升序后类覆盖合成0..6边界视图，保留类间边界；没有采用六类边界分数平均或把所有变化合成单前景。单标签GT视图只用于边界，原六类可重叠IoU保持并校验全局原计数/IoU一致。
+
+复用原source plan/PNG/receipt及最新fusion summary，独立_cd_boundary_v1输出、CPU有界双进程、逐图hash缓存续算，不保存新图片。LEVIR严格绑定原显式vistar_positive GT reader，保护已恢复的非规范正灰度语义。导出七集表继承前三集41.34/18.94/39.17等结果与训练来源标记，仅补两个变化集WFm；失败/IoU漂移不发布边界分数。WSL回归覆盖类间边界、重叠优先、原指标/其他数据保留、非规范LEVIR GT、缺失预测、源只读/断点续算与双CPU统计等。
+
+当前仅AST/Bash/源文件保护静态检查，未在Mac执行回归、解码、模型或评分；新增两项WFm尚无实测值。命令在RUN_QUEUE，协议在CHANGE_BOUNDARY.md；原三集融合数值代码及旧缓存身份不修改。
+
 ## 2026-11-04：收到合并后标准分割评分，核实并标记训练来源
 
 用户回执：a25bba8离线包在WSL回归19 passed/3.57s；LoveDA1669、FLAIR15700、UAVid270全部计分成功，三集失败0，七集summary complete=True。完整精度标量归档receipts/wsl_fused_all7_scores_20261104.json：标准mIoU41.338752/18.940009/39.168328%，WFm11.207706/15.059834/14.520833%；其他四集继承原分数、缺失WFm保持null。总数20,196，重计17,639、继承2,557。此为真实用户终端回执，未独立读取WSL原始plan/summary，不在Mac执行新评分。
