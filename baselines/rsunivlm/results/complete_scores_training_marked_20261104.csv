@@ -1,0 +1,8 @@
+dataset,dataset_display,primary_metric,value,value_percent,boundary_metric,wfm_3px,wfm_percent,processed,selected,failed,complete,boundary_updated,training_exposure
+loveda,LoveDA*,miou,0.4133875228233559,41.34,wfm_3px,0.11207706057111232,11.21,1669,1669,0,True,False,explicit_training_dataset
+flair,FLAIR,miou,0.18940008907388492,18.94,wfm_3px,0.15059834051739437,15.06,15700,15700,0,True,False,not_named_in_disclosed_sources
+uavid,UAVid*,miou,0.39168328492893173,39.17,wfm_3px,0.14520832516227752,14.52,270,270,0,True,False,explicit_training_dataset
+xbd_pre,xBD-pre,building_iou,0.2724647049926769,27.25,wfm_3px,0.12145118083388051,12.15,933,933,0,True,False,not_named_in_disclosed_sources
+chn6_cug,CHN6-CUG,road_iou,0.3105322506129475,31.05,wfm_3px,0.09850140980841372,9.85,903,903,0,True,False,not_named_in_disclosed_sources
+levircd,LEVIR-CD*†,building_iou,0.27649883522673074,27.65,wfm_3px,0.1208252242700772,12.08,128,128,0,True,True,related_training_source
+second,SECOND,miou_c,0.09485809016521286,9.49,wfm_3px,0.0797504020771827,7.98,593,593,0,True,True,not_named_in_disclosed_sources

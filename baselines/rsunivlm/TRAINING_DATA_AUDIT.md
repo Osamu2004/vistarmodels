@@ -36,10 +36,12 @@
 
 ## 当前开发状态
 
+后续边界补齐也已收到WSL完成回执：7822e5d的6项回归通过，LEVIR-CD WFm12.08%、SECOND WFm7.98%，721对失败0、原IoU核对一致、七集complete=True。当前完整显示表改用results/complete_scores_training_marked_20261104.csv/md；原始全精度标量见receipts/wsl_complete_all7_boundary_scores_20261104.json。训练来源结论和星号定义保持。
+
 用户已提供七集完整评分终端回执，LoveDA/FLAIR/UAVid本次固定类别顺序合并后为标准mIoU41.34/18.94/39.17和WFm11.21/15.06/14.52；其余四项继承源评分。19项WSL回归通过，全部20,196张/对计分、失败0。本机没有执行模型或重新评分，也未独立读取WSL原始plan/summary；完整精度标量已从用户CSV归档，不再将这次结果称作只有静态检查。
 
 ## 星号标注规则
 
 `*`表示训练使用该基准或其源影像派生数据；因此LoveDA、UAVid标`*`，LEVIR-CD标`*†`。`†`专指LEVIR-MCI→LEVIR-CC→主要LEVIR-CD影像的派生来源，避免误写成明确直接用原LEVIR-CD划分训练。FLAIR、xBD-pre、CHN6-CUG、SECOND在明列来源中未出现，不加星，但不能将其视为已经完成全预训练/聚合指令影像排重。星号按数据集暴露定义，不声称任何当前评测test已经被训练使用。
 
-标记表和完整标量：results/fused_scores_training_marked_20261104.csv/md；结构化来源：receipts/wsl_fused_all7_scores_20261104.json。数值字段保留原完整精度，星号只放在显示/metadata中。
+当前完整标记表和标量：results/complete_scores_training_marked_20261104.csv/md；结构化来源：receipts/wsl_complete_all7_boundary_scores_20261104.json。此前仅三集重计的fused_scores表和wsl_fused回执保留作为历史版本。数值字段保留原完整精度，星号只放在显示/metadata中。

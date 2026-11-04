@@ -36,4 +36,10 @@ SCORE_WORKERS=2 bash run_bash/rsunivlm_change_boundary.bash
 
 默认先执行`tests/test_rsunivlm_change_boundary.py`，失败就停止；成功才进行保存掩码的CPU评分。已完成检查后重试可使用`RUN_TESTS=0`跳过WSL回归。路径不同时显式给SOURCE_RUN（原mask/plan）、SUMMARY_RUN（最新融合结果）和OUTPUT_DIR；不要把缺少plan.json的融合结果目录填成SOURCE_RUN。
 
-通过条件：LEVIR128/128、SECOND593/593边界全部成功，原IoU/计数核对通过、无失败、七集summary complete=True。两项新边界数值待用户WSL完成回执后归档；本机只做AST/Bash/源代码保护等静态检查，不执行回归、解码或评分。
+通过条件：LEVIR128/128、SECOND593/593边界全部成功，原IoU/计数核对通过、无失败、七集summary complete=True。
+
+## 最新WSL完成回执
+
+2026-11-04用户已完成7822e5d：6项回归通过（1.74s），LEVIR128/128、SECOND593/593均失败0；原IoU/计数核对通过，七集complete=True。新增LEVIR WFm为0.1208252242700772（12.08%），SECOND为0.0797504020771827（7.98%）；原IoU27.65%和mIoU_c9.49%保持。记录为用户WSL终端实际回执，不是本机评分或远端原始JSON的独立读取。
+
+最新七集原精度与显示表分别为receipts/wsl_complete_all7_boundary_scores_20261104.json、results/complete_scores_training_marked_20261104.csv/md，保留LoveDA/UAVid/LEVIR的训练来源星号。旧融合回执及其边界空值不覆盖，本次新目录作为当前完整版本；无需重新推理或再次评分。本机只做转录/记录校验，没有执行回归、解码或模型。

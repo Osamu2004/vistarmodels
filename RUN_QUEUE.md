@@ -4,7 +4,9 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
-### 2026-11-04 LEVIR-CD/SECOND补齐LoveDA同口径边界WFm（待WSL）
+### 2026-11-04 LEVIR-CD/SECOND补齐LoveDA同口径边界WFm（已收到WSL完成回执）
+
+用户回执7822e5d：新增边界回归6 passed/1.74s；LEVIR128/128（15s）、SECOND593/593（41s），两集失败0，七集summary complete=True。新增WFm原值为0.1208252242700772（12.08%）和0.0797504020771827（7.98%），原IoU27.65%/mIoU_c9.49%保持，原计数/IoU一致性检查由完成评分入口通过。最新全七集指标/训练星号表为results/complete_scores_training_marked_20261104.csv/md；原精度与运行来源在receipts/wsl_complete_all7_boundary_scores_20261104.json。新增结果目录为_fixedorder_fusion_v1_cd_boundary_v1，不再列为等待执行；未从本机独立读取远端原始plan/summary或重算指标。
 
 用户明确使用LoveDA的整体语义边界方式。LEVIR二值0/1直接调用原semantic boundary scorer；SECOND六查询与GT六类归属均按固定ID升序、后类覆盖合并成0..6边界视图，再调用同一scorer，不使用六类WFm平均或单前景并集。原六类可重叠mIoU_c/GT归属保持，IoU和原全局计数必须重建一致才能发布WFm。具体规则/重叠优先级见baselines/rsunivlm/CHANGE_BOUNDARY.md。
 
@@ -17,7 +19,7 @@ conda activate vistar_rsunivlm
 SCORE_WORKERS=2 bash run_bash/rsunivlm_change_boundary.bash
 ~~~
 
-入口默认先执行新增WSL回归再评分；失败即停。通过条件：两集边界128/593全部成功，原IoU/计数匹配，complete=True。新数值当前待WSL回执，不能填0；本机不执行测试/评分，只做静态检查。产物为新版paper_summary.json/CSV及各集boundary_report.json、rows/metrics.json。
+入口默认先执行新增WSL回归再评分；失败即停。通过条件：两集边界128/593全部成功，原IoU/计数匹配，complete=True；本次用户已提供满足该条件的完整终端回执。上述命令保留为复现/恢复入口，无需因归档再次运行。本机本轮只转录和核对用户CSV，产物为新版paper_summary.json/CSV及各集boundary_report.json、rows/metrics.json。
 
 ### 2026-11-04 固定类别顺序合并与重计mIoU/WFm（已有WSL完成回执）
 

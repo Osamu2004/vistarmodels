@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-04：两个变化集整体语义边界评分全部完成
+
+用户终端确认7822e5d安装、数据路径原字节恢复、6 passed/1.74s；LEVIR128/128用时15s、SECOND593/593用时41s，两集失败0。最终七集summary complete=True，新增WFm为LEVIR0.1208252242700772（12.08%）、SECOND0.0797504020771827（7.98%）；IoU仍0.27649883522673074和0.09485809016521286。依评分入口的发布条件，原计数/IoU一致性检查已通过。本次CPU保存掩码重评无模型/Qwen/GPU/新图片。
+
+归档receipts/wsl_complete_all7_boundary_scores_20261104.json及results/complete_scores_training_marked_20261104.csv/md，其他五集完整精度与训练星号保持，旧融合和静态回执不覆盖。同步RUN_QUEUE、边界文档、训练来源核对与paper/docs交接副本。标明来源为用户WSL完整CSV；本机只转录和核对，未独立读取远端原始plan/summary/逐图边界报告，未执行测试、解码或评分，也不自动修改正式论文TeX/PDF。
+
 ## 2026-11-04：补两个变化集的整体语义边界WFm
 
 用户要求LEVIR-CD/SECOND补边界，随后明确使用LoveDA的方式。新增独立保存掩码后处理score_rsunivlm_change_boundary.py和bash入口；两集统一复用原semantic scorer/IDGBR聚合，SECOND的六类预测及原GT类别归属按固定ID升序后类覆盖合成0..6边界视图，保留类间边界；没有采用六类边界分数平均或把所有变化合成单前景。单标签GT视图只用于边界，原六类可重叠IoU保持并校验全局原计数/IoU一致。
