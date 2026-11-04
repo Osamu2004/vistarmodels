@@ -1,5 +1,13 @@
 # RSUniVLM 接入记录
 
+## 2026-11-04：WSL确认5张L标签含156/254，显式对齐Vistar正值规则
+
+用户完成旧版63项回归（7.36s）；严格GT审计128张，123通过、5拒绝：test_18值0/254/255，test_68/70/73/74值0/156/255，均L/uint8/1024×1024。因此并非RGB问题；原&&链在审计停止，尚无新重算分数。完整回执归档receipts/wsl_levir_grayscale_audit_20261104.json。
+
+再次核对现有Vistar compute_saved_levircd_opendpr_metrics._load_binary与模型仓库levircd_common.load_binary，二者都PIL convert(L)→uint8→>0。增加显式vistar_positive模式，审计--gt_mode、修复--levircd_gt_mode统一指定；严格模式默认不变，不将5张GT文件重写或逐张特判。mode/policy/helper SHA进新identity，正值审计另存不覆盖严格审计，记录非标准正灰度值/像素数；保存预测照原哈希复用并CPU重算。
+
+补充与现有参考读法逐像素一致、严格默认仍拒绝、正值分片CPU恢复/续跑、模式身份分离及审计保留的WSL回归。本机不执行测试/解码/模型/CUDA，仅静态校验。旧63 passed不是新模式已验证；新正值审计结果、恢复数量/分数待用户运行。用户现已Git更新，RUN_QUEUE新节使用Python入口，不要求离线包脚本。
+
 ## 2026-11-04：LEVIR GT格式校验中断，保留预测CPU恢复
 
 记录用户真实WSL回执：LEVIR已评分64、格式失败1、63张未计入；两分片分别在test_18.png/test_68.png的load_targets校验失败，实际mode/像素仍未知。原finish先保存掩码/receipt再读GT，所以未评分不等于未推理。

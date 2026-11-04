@@ -4,6 +4,36 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-04 当前：已确认L标签含156/254，按Vistar灰度正值规则恢复
+
+真实WSL回执：旧版63项测试通过（7.36s），但严格审计128张只接受123张。test_18为0/254/255，test_68/70/73/74为0/156/255，均L/uint8/1024×1024；不是RGB。&&链已在审计停止，CPU重算未启动。既有Vistar/模型仓库的LEVIR评分均convert(L)→uint8→gray>0，因此新增显式vistar_positive选项统一读取全部标签；GT原文件与模型输入不改，0未变化，1..255变化，政策/helper SHA隔离到派生身份。默认exact_binary仍拒绝这些中间灰度。详见baselines/rsunivlm/LEVIR_LABELS.md。
+
+用户已能Git更新，当前命令直接用仓库Python文件；旧ZIP内audit_and_repair.bash没有这个新选项，不再依赖那个包内路径。先等原队列结束后更新，再跑新增模式的WSL合成回归。本机未执行测试/解码/模型/CUDA，用户此前63 passed仅验证上一版：
+
+~~~bash
+cd /root/code/vistarmodels
+git pull --ff-only
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+python -m pytest tests/test_rsunivlm_levir_labels.py \
+  tests/test_rsunivlm_format_repair.py tests/test_rsunivlm_format_repair_pipeline.py \
+  tests/test_rsunivlm_failed_recovery.py tests/test_rsunivlm_guarded.py -q
+~~~
+
+通过条件：全部通过；失败则停止并保留输出。然后在相同WSL终端执行正值审计，审计通过才进行单独LEVIR CPU修复/重算：
+
+~~~bash
+SOURCE_RUN=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1
+python tools/rsunivlm_levir_labels.py --source_run "$SOURCE_RUN" --gt_mode vistar_positive &&
+RSUNIVLM_NUM_WORKERS=2 RSUNIVLM_PREFETCH_FACTOR=2 \
+python tools/repair_rsunivlm_format.py --source_run "$SOURCE_RUN" \
+  --datasets levircd --levircd_gt_mode vistar_positive
+~~~
+
+审计通过条件：selected=128、rejected=0、complete=True；报告为同级_levir_label_audit_vistar_positive.json，保留旧严格审计，并逐文件记录noncanonical_positive_values/pixels、原模式/值和掩码SHA。原输入元数据变化、尺寸异常或文件读取失败仍停止，不能改原数据来绕过。修复输出看Actual OUTPUT_DIR，模式或工具身份与旧目录不同会保留旧输出并选_p后缀。
+
+检查format_repair_report.offline_complete/deferred_queries与paper_summary.results.levircd的processed/num_failed。GT规则记录在plan.protocol.levircd_gt_reader及report中；各分片gt_reading.jsonl记录实际GT读取。本次没有模型调用；旧成功和未评分但已有有效receipt的预测均复用。缺失/无法机械修复的RLE仍保持partial，不能承诺128张全部成功。若需同时处理七集，去掉--datasets levircd，保留--levircd_gt_mode vistar_positive。仍需生成的查询只在后续显式--run_remaining时经guarded入口执行；不自动启动GPU或更新论文。
+
 ### 2026-11-04 当前：LEVIR真实标签格式中断的CPU审计与恢复
 
 用户回执两分片在test_18.png/test_68.png的GT读取校验中断。只确认raw非二维或包含0/1/255以外值，实际mode/值尚未核实，不能直接认定坏数据。LEVIR 128张中64成功、1格式失败、63未计入；原finish在读取GT前已保存完整预测/receipt，可复用已存在且校验有效的预测重算。新兼容规则及边界见baselines/rsunivlm/LEVIR_LABELS.md。

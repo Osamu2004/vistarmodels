@@ -12,6 +12,7 @@ import torch
 
 from baselines.rsunivlm import evaluate as io
 from baselines.rsunivlm.protocols import fingerprint
+from baselines.levircd_common import load_binary as reference_binary
 from tools import eval_rsunivlm_guarded as guarded
 from tools import eval_rsunivlm_paper_queue as queue
 from tools import repair_rsunivlm_format as repair
@@ -85,7 +86,7 @@ def test_ambiguous_values_colors_or_alpha_are_not_thresholded(tmp_path, kind):
         labels.read_binary(path)
 
 
-def saved_levir_run(tmp_path, monkeypatch):
+def saved_levir_run(tmp_path, monkeypatch, noncanonical=False):
     source = tmp_path/'original'; source.mkdir()
     samples = []
     target = np.zeros((32, 40), np.uint8); target[:, 30:] = 1
@@ -94,7 +95,9 @@ def saved_levir_run(tmp_path, monkeypatch):
         Image.new('RGB', (40, 32), (index, 0, 0)).save(a)
         Image.new('RGB', (40, 32), (index+100, 0, 0)).save(b)
         raw = target*255
-        if index in (1, 2):
+        if noncanonical and index in (1, 2):
+            raw[raw > 0] = 254 if index == 1 else 156
+        elif index in (1, 2):
             raw = np.repeat(raw[..., None], 3, axis=2)
         Image.fromarray(raw).save(gt)
         samples.append(protocol.Sample(f's{index}', (str(a), str(b)), (str(gt),)))
@@ -129,12 +132,13 @@ def saved_levir_run(tmp_path, monkeypatch):
     return source, plan, entry, samples
 
 
-def test_interrupted_gt_scoring_reuses_all_saved_masks_and_resumes_cpu_only(tmp_path, monkeypatch):
-    source, plan, entry, samples = saved_levir_run(tmp_path, monkeypatch)
+@pytest.mark.parametrize('gt_mode', labels.GT_MODES)
+def test_interrupted_gt_scoring_reuses_all_saved_masks_and_resumes_cpu_only(tmp_path, monkeypatch, gt_mode):
+    source, plan, entry, samples = saved_levir_run(tmp_path, monkeypatch, noncanonical=gt_mode == 'vistar_positive')
     original = {str(path.relative_to(source)):path.read_bytes() for path in source.rglob('*') if path.is_file()}
     output = tmp_path/'fixed'
     monkeypatch.setenv('RSUNIVLM_NUM_WORKERS', '0')
-    monkeypatch.setattr(sys, 'argv', ['repair', '--source_run', str(source), '--output_dir', str(output)])
+    monkeypatch.setattr(sys, 'argv', ['repair', '--source_run', str(source), '--output_dir', str(output), '--levircd_gt_mode', gt_mode])
     assert repair.main() == 0
     report = io.read_json(output/'format_repair_report.json')
     assert report['offline_complete'] and report['imported']['reused_complete_samples'] == 4
@@ -142,10 +146,12 @@ def test_interrupted_gt_scoring_reuses_all_saved_masks_and_resumes_cpu_only(tmp_
     summary = io.read_json(output/'paper_summary.json')
     assert summary['results']['levircd']['processed_samples'] == 4
     assert summary['results']['levircd']['scores']['building_iou'] == pytest.approx(1.)
-    assert io.read_json(output/'plan.json')['protocol']['levircd_gt_reader'] == labels.settings()
+    assert io.read_json(output/'plan.json')['protocol']['levircd_gt_reader'] == labels.settings(gt_mode)
+    assert report['levircd_gt_reader'] == labels.settings(gt_mode)
     for rank in range(2):
         rows = [json.loads(line) for line in (output/'levircd/shards'/f'rank{rank:03d}'/'gt_reading.jsonl').read_text().splitlines()]
         assert len(rows) == 2 and sum(not row['legacy_accepted'] for row in rows) == 1
+        assert all(row['gt_mode'] == gt_mode for row in rows)
     assert {str(path.relative_to(source)):path.read_bytes() for path in source.rglob('*') if path.is_file()} == original
     assert repair.main() == 0 and io.read_json(output/'paper_summary.json')['complete']
     with pytest.raises(ValueError, match='Expected binary native'):
@@ -166,3 +172,42 @@ def test_label_audit_covers_manifest_without_modifying_gt_or_source(tmp_path, mo
         with labels.bind_targets(bad, 0, tmp_path/'bad'):
             pass
     assert worker.protocol is before
+
+
+@pytest.mark.parametrize('value', [1, 127, 156, 254, 255])
+def test_explicit_positive_mode_matches_existing_vistar_reader(tmp_path, value):
+    raw = np.asarray([[0, value], [value, 0]], np.uint8)
+    path = tmp_path/'label.png'; Image.fromarray(raw).save(path)
+    before = path.read_bytes()
+    result, details = labels.read_binary(path, gt_mode='vistar_positive')
+    np.testing.assert_array_equal(result, reference_binary(path))
+    np.testing.assert_array_equal(result, [[0, 1], [1, 0]])
+    assert details['noncanonical_positive_values'] == ([value] if value not in (1, 255) else [])
+    assert details['noncanonical_positive_pixels'] == (2 if value not in (1, 255) else 0)
+    assert path.read_bytes() == before
+    if value not in (1, 255):
+        with pytest.raises(ValueError, match='encoding'):
+            labels.read_binary(path)
+
+
+def test_positive_audit_and_identity_do_not_replace_strict_diagnostics(tmp_path, monkeypatch):
+    source, plan, entry, samples = saved_levir_run(tmp_path, monkeypatch, noncanonical=True)
+    strict = labels.audit_run(source)
+    strict_path = source.with_name(source.name+'_levir_label_audit.json')
+    strict_bytes = strict_path.read_bytes()
+    positive = labels.audit_run(source, gt_mode='vistar_positive')
+    assert strict['rejected'] == 2 and not strict['complete']
+    assert positive['complete'] and positive['additional_positive_accepted'] == 2
+    assert positive['additional_lossless_accepted'] == 0 and positive['noncanonical_positive_pixels'] == 640
+    assert strict_path.read_bytes() == strict_bytes
+    _, exact_plan = repair.prepare(source, ['levircd'])
+    _, positive_plan = repair.prepare(source, ['levircd'], levircd_gt_mode='vistar_positive')
+    assert exact_plan['identity'] != positive_plan['identity']
+    assert positive_plan['protocol']['levircd_gt_reader']['policy'] == labels.POSITIVE_POLICY
+    with pytest.raises(ValueError, match='differs'):
+        bad = copy.deepcopy(positive_plan)
+        bad['protocol']['levircd_gt_reader'] = labels.settings('exact_binary')
+        # A stale helper hash must fail even if a valid mode name is present.
+        bad['protocol']['levircd_gt_reader']['helper_sha256'] = 'old'
+        with labels.bind_targets(bad, 0, tmp_path/'stale'):
+            pass

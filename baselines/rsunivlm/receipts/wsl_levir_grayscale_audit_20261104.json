@@ -1,0 +1,33 @@
+{
+  "source": "user_pasted_WSL_output",
+  "source_run": "/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1",
+  "reported_prior_git_tip": "554e906",
+  "prior_version_tests": {
+    "passed": 63,
+    "seconds": 7.36,
+    "scope": "levir_labels, format_repair, format_repair_pipeline, failed_recovery, guarded",
+    "new_vistar_positive_mode_included": false
+  },
+  "strict_audit": {
+    "selected": 128,
+    "legacy_accepted": 123,
+    "additional_lossless_accepted": 0,
+    "rejected": 5,
+    "complete": false,
+    "mode": "L",
+    "raw_shape": [1024, 1024],
+    "dtype": "uint8",
+    "noncanonical_labels": {
+      "test_18": [0, 254, 255],
+      "test_68": [0, 156, 255],
+      "test_70": [0, 156, 255],
+      "test_73": [0, 156, 255],
+      "test_74": [0, 156, 255]
+    }
+  },
+  "confirmed_cause": "Single-channel grayscale labels contain positive values outside {0,1,255}; the previous strict reader rejects them",
+  "RGB_encoding_was_the_cause": false,
+  "GT_corruption_cause_known": false,
+  "audit_blocked_cpu_repair_via_shell_and_chain": true,
+  "new_positive_audit_or_scores_available": false
+}

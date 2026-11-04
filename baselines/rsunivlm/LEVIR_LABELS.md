@@ -1,8 +1,20 @@
 # LEVIR-CD真实标签读取中断（2026-11-04）
 
+## 后续WSL审计已确认：L标签含156/254
+
+用户运行554e906版本的五组WSL回归：63 passed in 7.36s。随后严格审计128张标签，123张通过、5张拒绝；test_18为L/uint8/1024×1024且值为0/254/255，test_68/70/73/74为0/156/255。因此这次原因不是RGB编码，不能归因于损坏；这些正灰度值的来源尚未知。&&链在审计处停止，尚未进入CPU修复/重算。
+
+依据现有Vistar与模型仓库共同使用的PIL convert(L)→uint8→gray>0规则，追加显式vistar_positive模式：audit CLI传--gt_mode vistar_positive，修复CLI传--levircd_gt_mode vistar_positive。该模式对所有标签统一采用同一参考读取过程，0为未变化、1..255为变化，不只为这5张特判；156/254自然成为前景。GT原文件、尺寸和模型输入不改。不以修复后分数选择阈值或提示词。
+
+exact_binary仍为默认模式，保留严格拒绝中间灰度的行为。两种模式的policy、helper SHA和gt_mode进入派生identity，输出不能混用。正值审计另存同级_levir_label_audit_vistar_positive.json，保留旧严格审计；逐图记录noncanonical_positive_values/pixels以及mask SHA。format_repair_report和gt_reading也注明实际规则。
+
+新增WSL回归覆盖156/254/127等正值与既有baselines.levircd_common.load_binary逐像素一致、默认严格模式仍拒绝、两卡分片中断后的保存掩码CPU重算与续跑、两种模式身份隔离、严格审计不被覆盖。用户此前63 passed仅对应旧版，不能作为这些新增检查已通过的证据。新增代码本机只静态检查，正值模式真实128张审计、评分恢复数和新测试等待WSL回执。
+
+当前用户已能通过Git更新，直接调用仓库Python入口；旧离线包里的audit_and_repair.bash仍是默认严格规则，不能把它当作新正值入口。最新完整命令在RUN_QUEUE顶部。
+
 ## 已确认的证据
 
-用户WSL回执：rank000在test_18.png、rank001在test_68.png处抛出Expected binary native LEVIR-CD GT。来源为rsunivlm_native_classwise_tile512_bs16_2gpu_v1，LEVIR总128张，已评分64、格式失败1、exhausted_population=False，另63张尚未计入成功/失败；这63张不等于没有生成过预测。
+最初用户WSL回执：rank000在test_18.png、rank001在test_68.png处抛出Expected binary native LEVIR-CD GT。来源为rsunivlm_native_classwise_tile512_bs16_2gpu_v1，LEVIR总128张，已评分64、格式失败1、exhausted_population=False，另63张尚未计入成功/失败；这63张不等于没有生成过预测。
 
 源码tools/rsunivlm_paper_protocol.py的原条件只接受二维数组且每个值属于0、1、255。仅凭异常无法区分RGB/alpha/调色板编码与实际非二值像素；还没有这两份真实文件的像素回执，不能断言数据损坏或断言是RGB。worker.finish在load_targets前已写入完整预测及receipt，已保存且哈希有效的掩码可直接复用重算，无需再次模型推理。
 

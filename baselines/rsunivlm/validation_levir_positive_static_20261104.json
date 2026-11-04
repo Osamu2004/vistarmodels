@@ -1,0 +1,32 @@
+{
+  "time_utc": "2026-11-04T01:55:53.735060+00:00",
+  "validation": "static_only",
+  "ast_checked": [
+    "tools/rsunivlm_levir_labels.py",
+    "tools/repair_rsunivlm_format.py",
+    "tests/test_rsunivlm_levir_labels.py"
+  ],
+  "bash_command_blocks_checked": 2,
+  "scoped_diff_check": true,
+  "protected_numerical_file_count": 15,
+  "protected_files_unchanged_vs": "554e906fe725cd9005f9466f7f9517a52aafc7c6",
+  "runtime_code_sha256": {
+    "tools/rsunivlm_levir_labels.py": "44fa2281faa72a4d218ebf77a8f04dd610a626a360efd15515d40f3648875a2f",
+    "tools/repair_rsunivlm_format.py": "b00fc7a13e3b3aa0820d78aebc7055d66df8d163d8a2c4e7dd47ff2b2d0ac9b7"
+  },
+  "reference_sources_sha256": {
+    "/Users/zhouziyu/code/vistar/vistar/tools/compute_saved_levircd_opendpr_metrics.py": "c7876c5183c3985d95f492e55b22489deee7e444c8564ba0cb5e752df835bebf",
+    "/Users/zhouziyu/code/vistar/vistarmodels/baselines/levircd_common.py": "f40e3ca5c7d33caab1ca63421b63c74484075dfe7fddc6937d0518ebafbbeb84"
+  },
+  "prior_version_WSL_tests_passed": 63,
+  "new_positive_mode_WSL_tested": false,
+  "source_receipt": "baselines/rsunivlm/receipts/wsl_levir_grayscale_audit_20261104.json",
+  "tests_executed_locally": false,
+  "decoder_executed_locally": false,
+  "model_or_cuda_executed": false,
+  "actual_label_pixels_read_locally": false,
+  "scores_computed": false,
+  "mode_default": "exact_binary",
+  "explicit_new_mode": "vistar_positive",
+  "changes_GT_files": false
+}

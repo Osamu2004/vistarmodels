@@ -28,7 +28,7 @@ from tools import rsunivlm_levir_labels as levir_labels
 from tools.rsunivlm_data_loading import LoaderOptions, bind_ordered_reader
 
 
-def prepare(source, requested, run_remaining=False):
+def prepare(source, requested, run_remaining=False, levircd_gt_mode='exact_binary'):
     old = io.read_json(source/'plan.json')
     config = io.read_json(source/'run_config.json')
     if not old or not config or old.get('identity') != fingerprint(old.get('protocol')) or config.get('protocol') != old['protocol'] or config.get('identity') != old['identity']:
@@ -66,7 +66,7 @@ def prepare(source, requested, run_remaining=False):
         value['levircd_query'] = None
         value.pop('levircd_gt_reader', None)
     else:
-        value['levircd_gt_reader'] = levir_labels.settings()
+        value['levircd_gt_reader'] = levir_labels.settings(levircd_gt_mode)
     if run_remaining:
         value['format_retries'] = 2
         for name in value['datasets']:
@@ -205,6 +205,8 @@ def main():
     parser.add_argument('--output_dir', default='')
     parser.add_argument('--plan_only', action='store_true')
     parser.add_argument('--run_remaining', action='store_true', help='Explicitly enable guarded GPU inference with at most two existing fixed retry templates')
+    parser.add_argument('--levircd_gt_mode', choices=levir_labels.GT_MODES, default='exact_binary',
+                        help='Explicit LEVIR GT reader; vistar_positive matches the existing Vistar grayscale >0 evaluation rule')
     args = parser.parse_args()
     source = Path(args.source_run).expanduser().resolve()
     if not source.is_dir():
@@ -215,7 +217,7 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_SH|fcntl.LOCK_NB)
         except BlockingIOError:
             raise SystemExit('The original queue is still running; wait for it to exit')
-        old, new = prepare(source, requested, args.run_remaining)
+        old, new = prepare(source, requested, args.run_remaining, levircd_gt_mode=args.levircd_gt_mode)
         suffix = '_formatfix_v1_retry2' if args.run_remaining else '_formatfix_v1'
         requested_output = Path(args.output_dir).expanduser().resolve() if args.output_dir else source.with_name(source.name+suffix)
         if requested_output == source or source in requested_output.parents or requested_output in source.parents:
@@ -239,6 +241,7 @@ def main():
             summary = score_offline(new, output, LoaderOptions.from_env())
             report = dict(source_run=str(source),
                 source_identity=old['identity'], identity=new['identity'], imported=imported,
+                levircd_gt_reader=new['protocol'].get('levircd_gt_reader'),
                 normalization=repaired, offline_complete=summary['complete'],
                 deferred_queries=summary['deferred_queries'], offline_model_forward_calls=0,
                 gpu_continuation_requested=args.run_remaining, gpu_continuation_invoked=False,

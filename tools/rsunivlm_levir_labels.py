@@ -1,8 +1,9 @@
-"""Lossless binary LEVIR label representations, with a CPU-only audit CLI.
+"""Explicit LEVIR GT policies and a CPU-only audit CLI.
 
-Previously accepted 2-D IDs keep the original interpretation. Additional
-representations require equal RGB channels, explicit binary values and opaque
-alpha; arbitrary colors/intermediate grays are never thresholded or resized.
+The default exact_binary policy preserves the original accepted 2-D IDs and
+allows only lossless binary color representations. The explicit vistar_positive
+policy matches Vistar's PIL convert('L') -> uint8 -> >0 evaluation rule.
+Neither policy resizes or rewrites the source label file.
 """
 from __future__ import annotations
 
@@ -16,29 +17,49 @@ import numpy as np
 from PIL import Image
 
 POLICY = 'preserve_2d_ids_and_lossless_binary_color_v1'
+POSITIVE_POLICY = 'vistar_pil_grayscale_positive_v1'
+GT_MODES = ('exact_binary', 'vistar_positive')
 
 
-def settings():
-    return dict(policy=POLICY, helper_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+def settings(gt_mode='exact_binary'):
+    if gt_mode not in GT_MODES:
+        raise ValueError(f'Unknown LEVIR GT mode: {gt_mode}')
+    common = dict(gt_mode=gt_mode, helper_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                  spatial='native extent; no resize', gt_files_modified=False, changes_model_inputs=False)
+    if gt_mode == 'vistar_positive':
+        return dict(common, policy=POSITIVE_POLICY,
+            decode="PIL.Image.convert('L') -> np.uint8 -> (gray > 0)",
+            background=0, foreground='every grayscale value from 1 through 255',
+            reference='Vistar compute_saved_levircd_opendpr_metrics._load_binary; baselines.levircd_common.load_binary',
+            alpha='PIL L conversion, identical to the referenced Vistar reader',
+            intermediate_values='accepted as foreground; recorded in per-file diagnostics')
+    return dict(common, policy=POLICY,
         legacy='2-D IDs in {0,1,255}: identical original >0 interpretation, including palette indices',
         additional='equal-channel RGB, opaque RGBA/LA, or binary rendered palette when legacy IDs were invalid',
-        values=[0, 1, 255], alpha='255 only', spatial='native extent; no resize',
-        gt_files_modified=False, changes_model_inputs=False)
+        values=[0, 1, 255], alpha='255 only')
 
 
-def read_binary(path, shape=None):
-    """Return exact 0/1 labels and diagnostics; reject ambiguous encodings."""
+def read_binary(path, shape=None, gt_mode='exact_binary'):
+    """Return 0/1 labels using the selected, recorded GT rule."""
+    if gt_mode not in GT_MODES:
+        raise ValueError(f'Unknown LEVIR GT mode: {gt_mode}')
     path = Path(path)
     before = path.stat()
     with Image.open(path) as opened:
         raw = np.array(opened)
         mode = opened.mode
         values = np.unique(raw)
-        details = dict(path=str(path), mode=mode, raw_shape=list(raw.shape), dtype=str(raw.dtype),
+        details = dict(path=str(path), mode=mode, gt_mode=gt_mode, raw_shape=list(raw.shape), dtype=str(raw.dtype),
             distinct_values=int(len(values)), values_preview=values[:24].tolist())
         legacy = raw.ndim == 2 and bool(np.all(np.isin(raw, (0, 1, 255))))
         details['legacy_accepted'] = legacy
-        if legacy:
+        if gt_mode == 'vistar_positive':
+            gray = np.asarray(opened.convert('L'), dtype=np.uint8)
+            encoding = 'vistar_grayscale_positive'
+            noncanonical = ~np.isin(gray, (0, 1, 255))
+            details.update(noncanonical_positive_values=np.unique(gray[noncanonical]).tolist(),
+                           noncanonical_positive_pixels=int(np.count_nonzero(noncanonical)))
+        elif legacy:
             gray, encoding = raw, 'legacy_2d_ids'
         else:
             if mode == 'P':
@@ -72,8 +93,8 @@ def read_binary(path, shape=None):
 
 
 class _TargetProxy:
-    def __init__(self, original, stream):
-        self.original, self.stream = original, stream
+    def __init__(self, original, stream, gt_mode):
+        self.original, self.stream, self.gt_mode = original, stream, gt_mode
 
     def __getattr__(self, name):
         return getattr(self.original, name)
@@ -81,7 +102,7 @@ class _TargetProxy:
     def load_targets(self, sample, dataset, shape):
         if dataset != 'levircd':
             return self.original.load_targets(sample, dataset, shape)
-        target, details = read_binary(sample.labels[0], shape)
+        target, details = read_binary(sample.labels[0], shape, gt_mode=self.gt_mode)
         self.stream.write(json.dumps(dict(sample=sample.name, **details), ensure_ascii=False)+'\n')
         self.stream.flush()
         return [target]
@@ -93,14 +114,15 @@ def bind_targets(plan, rank, output):
     if not configured:
         yield
         return
-    if configured != settings():
+    gt_mode = configured.get('gt_mode', 'exact_binary')
+    if configured != settings(gt_mode):
         raise ValueError('LEVIR GT reader policy/source differs from the saved plan')
     from tools import rsunivlm_paper_worker as worker
     path = Path(output)/'levircd'/'shards'/f'rank{rank:03d}'/'gt_reading.jsonl'
     path.parent.mkdir(parents=True, exist_ok=True)
     original = worker.protocol
     with path.open('w', encoding='utf-8') as stream:
-        worker.protocol = _TargetProxy(original, stream)
+        worker.protocol = _TargetProxy(original, stream, gt_mode)
         try:
             yield
         finally:
@@ -121,7 +143,8 @@ def install_reader(engine_class, plan):
     engine_class.evaluate = evaluate
 
 
-def audit_run(source, output=None):
+def audit_run(source, output=None, gt_mode='exact_binary'):
+    policy = settings(gt_mode)
     source = Path(source).expanduser().resolve()
     plan = json.loads((source/'plan.json').read_text())
     entry = next((entry for entry in plan['entries'] if entry['dataset'] == 'levircd'), None)
@@ -138,21 +161,26 @@ def audit_run(source, output=None):
                     raise ValueError(f'Source input metadata changed: {path}')
             with Image.open(sample['images'][0]) as image:
                 shape = (image.height, image.width)
-            _, details = read_binary(sample['labels'][0], shape)
+            _, details = read_binary(sample['labels'][0], shape, gt_mode=gt_mode)
             records.append(dict(sample=sample['name'], **details))
         except (OSError, ValueError) as error:
             failures.append(dict(sample=sample['name'], path=sample['labels'][0], error=str(error)))
-    report = dict(source_run=str(source), source_identity=plan['identity'], policy=settings(),
+    additional = sum(not row['legacy_accepted'] for row in records)
+    report = dict(source_run=str(source), source_identity=plan['identity'], policy=policy, gt_mode=gt_mode,
         selected=len(selected), legacy_accepted=sum(row['legacy_accepted'] for row in records),
-        additional_lossless_accepted=sum(not row['legacy_accepted'] for row in records),
+        additional_accepted=additional,
+        additional_lossless_accepted=additional if gt_mode == 'exact_binary' else 0,
+        additional_positive_accepted=additional if gt_mode == 'vistar_positive' else 0,
+        noncanonical_positive_pixels=sum(row.get('noncanonical_positive_pixels', 0) for row in records),
         rejected=len(failures), complete=not failures, records=records, failures=failures,
         model_or_cuda_called=False, gt_files_modified=False)
-    output = Path(output).expanduser().resolve() if output else source.with_name(source.name+'_levir_label_audit.json')
+    suffix = '_levir_label_audit.json' if gt_mode == 'exact_binary' else '_levir_label_audit_vistar_positive.json'
+    output = Path(output).expanduser().resolve() if output else source.with_name(source.name+suffix)
     if output == source or source in output.parents:
         raise ValueError('Audit output must be outside the original run directory')
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')
-    print(json.dumps({key:report[key] for key in ('selected', 'legacy_accepted', 'additional_lossless_accepted', 'rejected', 'complete')}, ensure_ascii=False), flush=True)
+    print(json.dumps({key:report[key] for key in ('gt_mode', 'selected', 'legacy_accepted', 'additional_lossless_accepted', 'additional_positive_accepted', 'rejected', 'complete')}, ensure_ascii=False), flush=True)
     for failure in failures[:8]:
         print(json.dumps(failure, ensure_ascii=False), flush=True)
     print(f'Label audit: {output}', flush=True)
@@ -163,8 +191,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source_run', required=True)
     parser.add_argument('--output', default='')
+    parser.add_argument('--gt_mode', choices=GT_MODES, default='exact_binary',
+                        help="vistar_positive matches the existing Vistar grayscale >0 rule; exact_binary keeps strict validation")
     args = parser.parse_args()
-    return 0 if audit_run(args.source_run, args.output or None)['complete'] else 2
+    return 0 if audit_run(args.source_run, args.output or None, gt_mode=args.gt_mode)['complete'] else 2
 
 
 if __name__ == '__main__':
