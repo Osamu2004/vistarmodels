@@ -4,6 +4,35 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-04 当前：新增约束RLE最后兜底，保留已有恢复结果
+
+用户明确要求添加约束RLE生成。新入口仅对剩余失败查询启用：前两次自由输出，最后retry采用有限RLE语法；旧缓存已耗尽三次自由回答的查询允许额外一次标记的约束回答。网格默认24×24，类仅others/固定查询前景，计数总和/行数/EOS受约束；词汇/计数仍由原模型logits选择，不补GT/背景/缺行。原decoder完整验收后再查声明网格/类别/EOS，失败保持partial。独立policy与helper SHA/网格身份，不声称是原论文同一解码方式。细节见baselines/rsunivlm/CONSTRAINED_RLE.md。
+
+先让当前任务退出并回到shell，再更新；不能在旧队列运行中修改其源码。本对话无WSL连接，不在Mac执行测试/解码/模型或CUDA。新增仓库脚本自动运行WSL回归、真实本地Qwen tokenizer预检、GT正值审计、旧结果复用、普通修复/补跑、约束兜底与终检汇总：
+
+~~~bash
+cd /root/code/vistarmodels
+git pull --ff-only
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+bash run_bash/rsunivlm_recover_rle.bash
+~~~
+
+通过条件：回归全通过；tokenizer预检complete=True且原32k token预算不低于语法最坏上界；LEVIR正值审计128张无拒绝。任一步失败停止，保留原文/错误，不继续GPU。RUN_TESTS默认1，不能以本机静态结果替代WSL测试。CPU tokenizer预检只读取本地tokenizer，不下载模型或读取GT；实际core tokenizer在GPU首次兜底时也会逐片段校验。
+
+默认SOURCE_RUN为原七集目录；REUSE_RUN优先选存在的_formatfix_once_v2，否则_formatfix_v1_retry2，原两份目录不改。你此前实际补跑目录若有_p后缀，显式传入它，例如：
+
+~~~bash
+REUSE_RUN=/root/data/experiment/rsunivlm_native_classwise_tile512_bs16_2gpu_v1_formatfix_v1_retry2 \
+bash run_bash/rsunivlm_recover_rle.bash
+~~~
+
+新Actual OUTPUT_DIR默认为原source同级_formatfix_rle_v1，冲突时_p后缀；相同source/reuse/网格命令可续跑。模型/原两卡分片/每卡batch16、CPU workers2/prefetch2、512裁块/黑padding、原查询与评分不改；仅兜底生成策略/固定24×24网格另记。RLE_ROWS/RLE_COLS可显式改为1..64，预检要求预算足够；旧已经合法的自由输出网格不重绘。含RLE结果的旧运行只允许保留相同声明网格/策略导入。
+
+新增--constrained_rle对应Python入口，也保留--run_remaining和--levircd_gt_mode vistar_positive；不启用新flag的旧入口仍按原自由协议运行。已有成功样本/查询继续复用，三次旧自由历史只加一次真实约束回答；已经用过约束但仍异常不无限生成。缺卡/CUDA致命错继续guarded停止，不能伪报完整。
+
+实际覆盖看新目录paper_summary.complete与七集selected/processed/failed；每卡constrained_rle_rankNNN、attempt.generation.rle_constraints和format_repair_report记录哪些查询使用了新策略，终端[RLE constrained]/[recovery result]记录实际batch/恢复数。当前只有源码/AST/Bash静态验证，没有新增WSL测试/推理回执，不更新论文分数；语法合法不等于分割准确。
+
 ### 2026-11-04 当前：保留协议的一次调用恢复与自动收尾
 
 用户选择保留当前自由输出协议，自动修复、补跑并汇总剩余失败。新增在线机械修复：每个新回答先按既有分隔符规则规范并用原解码器完整校验，合法则直接复用；仍坏才消耗原固定提示重试。GPU正常退出后自动终检并只重算新修好的数据集，输出逐集整图恢复数量。不增加约束解码或改变网格/模型/提示词/原三次总回答预算。用尽预算仍坏则保留失败，不能保证全部20,196张成功；详见baselines/rsunivlm/RECOVERY_ONCE.md。

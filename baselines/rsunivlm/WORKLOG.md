@@ -1,5 +1,13 @@
 # RSUniVLM 接入记录
 
+## 2026-11-04：用户授权添加约束RLE生成，独立兜底策略
+
+在说明自由输出无法保证合法格式后，用户要求添加RLE。实现finite token-trie约束，固定网格默认24×24、只允许others/查询前景、正计数行和固定、完整后EOS；模型仍选择预测内容，原decoder后追加网格/类别/EOS校验。通过官方HF4.45.2 logits_processor接入原GMoE generate；核对上游固定提交inputs_embeds路径转发kwargs/初始空生成前缀，避开该版内置PrefixConstrainedLogitsProcessor的零长度view问题，不添加BOS或猜测提示词切片；验证tokenizer片段往返和最坏token预算。
+
+前两次自由输出/机械修复不变，最后retry启用约束；旧三次已耗尽的查询在CPU失败名单中分组补一条真实约束回答，不重跑成功查询。缓存导入支持明确tagged第四条历史，模型条件/人口/分片验证保留；新策略/helper SHA/网格入独立_formatfix_rle_v1身份。旧mask/原文/重试次数复用，不强改原15个数值源码或GT/时相顺序/评分。仍异常保留失败，不声称预测准确或无硬件故障。
+
+新增受版本记录的生成hook、runtime、tokenizer CPU预检与run_bash/rsunivlm_recover_rle.bash，WSL回归覆盖有限语法/HF logits屏蔽/实际hook恢复/旧第四次兜底及最后retry/失败不补掩码/不重放。当前无WSL连接，本机仅AST/Bash/JSON与原15源码字节检查，不运行任何测试/解码/tokenizer/模型/CUDA；真实可运行性和恢复率待WSL回执。命令、来源和新旧协议区别见RUN_QUEUE及CONSTRAINED_RLE.md，旧队列结束后再更新。
+
 ## 2026-11-04：用户选择保留协议，一次调用自动修复/补跑/终检/汇总
 
 用户希望不再手工多轮调用，明确选择保留当前推理协议，不增加约束RLE解码。新增recovery_runtime包装器，对每个真实新回答先用原两条分隔符规则及原解码器规范；不改前向、提示词、网格或三次总预算。GPU正常结束后自动末尾检查，只有新增修复的集才做CPU重计数，输出逐集原失败整图恢复数量；GPU致命/未封口回执不伪装成功。

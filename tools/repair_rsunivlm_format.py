@@ -28,10 +28,13 @@ from tools import rsunivlm_format_repair as normalization
 from tools import rsunivlm_levir_labels as levir_labels
 from tools import rsunivlm_recovery_runtime as online_repair
 from tools import rsunivlm_recovery_reuse as reuse
+from tools import rsunivlm_constrained_rle as constrained
 from tools.rsunivlm_data_loading import LoaderOptions, bind_ordered_reader
 
 
-def prepare(source, requested, run_remaining=False, levircd_gt_mode='exact_binary'):
+def prepare(source, requested, run_remaining=False, levircd_gt_mode='exact_binary', constrained_rle=False, rle_rows=24, rle_cols=24):
+    if constrained_rle and not run_remaining:
+        raise ValueError('--constrained_rle requires --run_remaining')
     old = io.read_json(source/'plan.json')
     config = io.read_json(source/'run_config.json')
     if not old or not config or old.get('identity') != fingerprint(old.get('protocol')) or config.get('protocol') != old['protocol'] or config.get('identity') != old['identity']:
@@ -79,6 +82,10 @@ def prepare(source, requested, run_remaining=False, levircd_gt_mode='exact_binar
                 else [protocol.prompt(name, variant) for variant in range(3)])
             if native.enabled(value.get('semantic_mode'), name):
                 value['native_semantic'][name] = native.settings(name, 2)
+    if constrained_rle:
+        if value.get('semantic_mode') != native.MODE and any(name not in ('levircd', 'second') for name in value['datasets']):
+            raise ValueError('Constrained semantic fallback requires native_classwise queries')
+        value['constrained_rle'] = constrained.settings(rle_rows, rle_cols)
     value['format_repair'] = dict(policy=normalization.POLICY, rules=list(normalization.RULES),
         source_run=str(source), source_identity=old['identity'],
         source_plan_sha256=hashlib.sha256((source/'plan.json').read_bytes()).hexdigest(),
@@ -142,9 +149,13 @@ def normalize_cache(plan, output, audit_name='format_repair_scan.jsonl'):
                         io.write_json(path, fixed)
                     if status != 'already_valid':
                         audit.write(json.dumps(dict(path=str(path), dataset=dataset, rank=rank, **result), ensure_ascii=False)+'\n')
+                    if (plan['protocol'].get('constrained_rle') and status == 'unrepairable' and
+                            len(record.get('attempts', [])) == plan['protocol']['format_retries']+1 and
+                            not any(attempt.get('generation', {}).get('rle_constraints') for attempt in record.get('attempts', []))):
+                        counts['eligible_constrained_legacy_queries'] += 1
     temporary.replace(audit_path)
     counts['total_repaired_records'] = counts['repaired_records']+counts['previously_repaired_records']
-    for field in ('repaired_records', 'previously_repaired_records', 'already_valid_records', 'unrepairable_records'):
+    for field in ('repaired_records', 'previously_repaired_records', 'already_valid_records', 'unrepairable_records', 'eligible_constrained_legacy_queries'):
         counts.setdefault(field, 0)
     return dict(counts, repaired_datasets=sorted(repaired_datasets))
 
@@ -173,7 +184,7 @@ def score_offline(plan, output, options, datasets=None):
             continue
         for rank in range(len(plan['gpu_ids'])):
             engine = OfflineEngine(plan, rank, len(plan['gpu_ids']))
-            with bind_ordered_reader(engine, entry, str(output), options):
+            with constrained.bind_decoders(plan), bind_ordered_reader(engine, entry, str(output), options):
                 if dataset == 'levircd':
                     with levir_labels.bind_targets(plan, rank, output):
                         result = engine.evaluate(entry, str(output))
@@ -189,6 +200,7 @@ def score_offline(plan, output, options, datasets=None):
                     io.write_json(shard/'errors'/f'{failure["sample"]}.json', failure)
             result.update(offline_only=True, model_forward_calls_this_process=0,
                           deferred_queries=engine.deferred_queries)
+            constrained.annotate_scored_samples(plan, dataset, rank, output, result)
             if engine.deferred_queries:
                 result['exhausted_population'] = False
             io.write_json(shard/'metrics.json', result)
@@ -201,6 +213,8 @@ def score_offline(plan, output, options, datasets=None):
     summary.update(offline_only=datasets is None, model_forward_calls_this_process=0, deferred_queries=deferred_total,
                    scoring_phase='initial_offline_cpu' if datasets is None else 'post_gpu_cpu_rescore',
                    format_repair_policy=normalization.POLICY)
+    if plan['protocol'].get('constrained_rle'):
+        summary.update(constrained_rle_policy=plan['protocol']['constrained_rle'], official_original_decoding_protocol=False)
     io.write_json(output/'paper_summary.json', summary)
     io.write_json(output/'offline_runtime_finished.json', dict(identity=plan['identity'], owned_pids=[], exit_codes=[],
         mode='offline_format_repair', complete=summary['complete'], model_forward_calls=0))
@@ -225,6 +239,14 @@ def recovery_counts(source, output, plan):
             original_failed_not_yet_recovered=len(failed-now_ok),
             newly_scored_prior_unaccounted=len(now_ok-failed-old_ok), successful_images=len(now_ok))
     return result
+
+
+def constrained_sample_counts(plan, output):
+    if not plan['protocol'].get('constrained_rle'):
+        return {}
+    return {entry['dataset']:sum(
+        (io.read_json(output/entry['dataset']/'shards'/f'rank{rank:03d}'/'constrained_samples.json') or {}).get('successfully_scored_constrained_samples', 0)
+        for rank in range(len(plan['gpu_ids']))) for entry in plan['entries']}
 
 
 def finalize_gpu(plan, output, source, report, code, options):
@@ -255,6 +277,12 @@ def finalize_gpu(plan, output, source, report, code, options):
     report['recovery_counts'] = recovery_counts(source, output, plan)
     report['runtime_format_repair'] = [io.read_json(output/f'runtime_format_repair_rank{rank:03d}.json')
                                      for rank in range(len(plan['gpu_ids']))]
+    if plan['protocol'].get('constrained_rle'):
+        report['constrained_rle_workers'] = [io.read_json(output/f'constrained_rle_rank{rank:03d}.json')
+                                            for rank in range(len(plan['gpu_ids']))]
+        summary.update(constrained_rle_policy=plan['protocol']['constrained_rle'], official_original_decoding_protocol=False)
+        io.write_json(output/'paper_summary.json', summary)
+        report['constrained_samples'] = constrained_sample_counts(plan, output)
     report.update(finalization_complete=True, final_complete=bool(summary['complete']))
     io.write_json(output/'format_repair_report.json', report)
     for name, counts in report['recovery_counts'].items():
@@ -273,6 +301,9 @@ def main():
     parser.add_argument('--run_remaining', action='store_true', help='Explicitly enable guarded GPU inference with at most two existing fixed retry templates')
     parser.add_argument('--levircd_gt_mode', choices=levir_labels.GT_MODES, default='exact_binary',
                         help='Explicit LEVIR GT reader; vistar_positive matches the existing Vistar grayscale >0 evaluation rule')
+    parser.add_argument('--constrained_rle', action='store_true', help='Opt-in grammar-constrained last retry and one fallback for exhausted legacy queries; a separately recorded decoding protocol')
+    parser.add_argument('--rle_rows', type=int, default=24)
+    parser.add_argument('--rle_cols', type=int, default=24)
     args = parser.parse_args()
     source = Path(args.source_run).expanduser().resolve()
     if not source.is_dir():
@@ -284,7 +315,8 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_SH|fcntl.LOCK_NB)
         except BlockingIOError:
             raise SystemExit('The original queue is still running; wait for it to exit')
-        old, new = prepare(source, requested, args.run_remaining, levircd_gt_mode=args.levircd_gt_mode)
+        old, new = prepare(source, requested, args.run_remaining, levircd_gt_mode=args.levircd_gt_mode,
+                           constrained_rle=args.constrained_rle, rle_rows=args.rle_rows, rle_cols=args.rle_cols)
         reused = None
         if args.reuse_run:
             reused_root = Path(args.reuse_run).expanduser().resolve()
@@ -299,7 +331,7 @@ def main():
             new['protocol']['format_repair']['reuse_run'] = reused_record
             new['identity'] = fingerprint(new['protocol'])
             reused = (reused_root, reused_plan, reused_record)
-        suffix = '_formatfix_once_v2' if reused else '_formatfix_v1_retry2' if args.run_remaining else '_formatfix_v1'
+        suffix = '_formatfix_rle_v1' if args.constrained_rle else '_formatfix_once_v2' if reused else '_formatfix_v1_retry2' if args.run_remaining else '_formatfix_v1'
         requested_output = Path(args.output_dir).expanduser().resolve() if args.output_dir else source.with_name(source.name+suffix)
         if requested_output == source or source in requested_output.parents or requested_output in source.parents:
             raise ValueError('Repair output must be separate from, and not contain, the original run')
@@ -331,6 +363,8 @@ def main():
                 source_identity=old['identity'], identity=new['identity'], imported=imported,
                 reused_derived_run=str(reused[0]) if reused else None, reuse_import=reuse_import,
                 levircd_gt_reader=new['protocol'].get('levircd_gt_reader'),
+                constrained_rle=new['protocol'].get('constrained_rle'),
+                constrained_samples=constrained_sample_counts(new, output),
                 normalization=repaired, offline_complete=summary['complete'],
                 deferred_queries=summary['deferred_queries'], offline_model_forward_calls=0,
                 gpu_continuation_requested=args.run_remaining, gpu_continuation_invoked=False,
@@ -339,7 +373,7 @@ def main():
             io.write_json(output/'format_repair_report.json', report)
             print(f'[formatfix] CPU phase complete; selected population complete={summary["complete"]}; deferred queries={summary["deferred_queries"]}', flush=True)
             if args.run_remaining and not summary['complete']:
-                if not summary['deferred_queries']:
+                if not summary['deferred_queries'] and not repaired['eligible_constrained_legacy_queries']:
                     report.update(finalization_complete=True,
                         gpu_continuation_skipped='All remaining invalid histories exhausted the existing fixed retry budget')
                     io.write_json(output/'format_repair_report.json', report)

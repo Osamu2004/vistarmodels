@@ -1,0 +1,52 @@
+{
+  "time_utc": "2026-11-04T07:00:02.993734+00:00",
+  "validation": "static_only",
+  "ast_checked": [
+    "tools/rsunivlm_rle_grammar.py",
+    "tools/rsunivlm_constrained_rle.py",
+    "tools/rsunivlm_constrained_runtime.py",
+    "tools/check_rsunivlm_rle_tokenizer.py",
+    "tools/repair_rsunivlm_format.py",
+    "tools/retry_rsunivlm_failed.py",
+    "tools/rsunivlm_recovery_reuse.py",
+    "tools/eval_rsunivlm_guarded.py",
+    "tests/test_rsunivlm_constrained_rle.py"
+  ],
+  "bash_script_checked": "run_bash/rsunivlm_recover_rle.bash",
+  "bash_command_blocks_checked": 2,
+  "scoped_diff_check": true,
+  "protected_numerical_file_count": 15,
+  "protected_files_unchanged_vs": "3940f4b56d4f8800208b9060ca0710413314d2af",
+  "runtime_code_sha256": {
+    "tools/rsunivlm_rle_grammar.py": "53b162f64861f4d5d62af5694aa7fd9591c1df3d62c6d6af0001f216578926fb",
+    "tools/rsunivlm_constrained_rle.py": "c086b5f46b1c575b9a473857799e652a6b0e922b18c0f28476477357c92b8b8d",
+    "tools/rsunivlm_constrained_runtime.py": "34740d53858572253c6371768ef9e39c985045a2a44e42977b4550ba11ac46e9",
+    "tools/check_rsunivlm_rle_tokenizer.py": "b0a8fc2bfbb289f885c534bcd5b7ea0603db451293a842d9e736e2bc37fd4c8a",
+    "tools/repair_rsunivlm_format.py": "655010f493d277ba29a2857b13640cc685e142f1a0b674fb795b580e0296ce31",
+    "tools/retry_rsunivlm_failed.py": "ac51c46df1bd50a5ccff3e6e67c4bacb1e0ddacebfcffb62bf4729778d9de152",
+    "tools/rsunivlm_recovery_reuse.py": "e0cfe1df0b3ae95efb2033e8e0d51fdb727aaab4bd09c056d793497c281b6c33",
+    "tools/eval_rsunivlm_guarded.py": "e13449d55d4e9a8bcbab0c6bff013017d5395a0de92a02bf0fb63b5fd7c0e553"
+  },
+  "reference_transformers": "4.45.2",
+  "reference_upstream_commit": "66dce1dc68b81a6c62f02fb8e5b306571092a864",
+  "reference_api": "logits_processor; empty-prefix-safe row iteration; fixed greedy RLE token trie",
+  "stock_prefix_processor_empty_view_avoided": true,
+  "tests_executed_locally": false,
+  "tokenizer_or_decoder_executed_locally": false,
+  "model_or_cuda_executed": false,
+  "WSL_run_started": false,
+  "real_constrained_recovery_verified": false,
+  "changes_decoding_protocol": true,
+  "official_original_protocol": false,
+  "default_grid": [
+    24,
+    24
+  ],
+  "last_retry_constrained": true,
+  "exhausted_legacy_extra_answer_limit": 1,
+  "references": [
+    "https://huggingface.co/docs/transformers/v4.45.2/en/main_classes/text_generation",
+    "https://raw.githubusercontent.com/huggingface/transformers/v4.45.2/src/transformers/generation/logits_process.py",
+    "https://raw.githubusercontent.com/xuliu-cyber/RSUniVLM/66dce1dc68b81a6c62f02fb8e5b306571092a864/llava/model/language_model/llava_qwen_gmoe.py"
+  ]
+}

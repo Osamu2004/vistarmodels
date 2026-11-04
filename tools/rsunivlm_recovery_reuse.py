@@ -31,6 +31,10 @@ def prepare_reuse(original_root, original, target, reuse_root):
         raise ValueError('Unknown reuse retry budget')
     if aux['format_retries'] > target['protocol']['format_retries']:
         raise ValueError('Reuse has already consumed a larger retry budget; retain --run_remaining instead of resetting it')
+    if aux.get('constrained_rle'):
+        required = target['protocol'].get('constrained_rle')
+        if not required or any(aux['constrained_rle'].get(key) != required.get(key) for key in ('policy', 'rows', 'cols')):
+            raise ValueError('Reuse contains constrained outputs; explicitly retain the same RLE fallback/grid')
     finished = io.read_json(root/'runtime_finished.json')
     current = io.read_json(root/'runtime.json')
     offline = io.read_json(root/'offline_runtime_finished.json')

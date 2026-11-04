@@ -43,8 +43,12 @@ def instruction(plan, dataset, key, variant):
 
 def decoded(plan, dataset, key, attempt):
     if native.enabled(plan["protocol"].get("semantic_mode"),dataset):
-        return native.decode_binary(attempt)[0]
-    return protocol.decode(attempt,dataset,query_key=key if dataset=="second" else None)
+        grid=native.decode_binary(attempt)[0]
+    else:
+        grid=protocol.decode(attempt,dataset,query_key=key if dataset=="second" else None)
+    from tools.rsunivlm_constrained_rle import validate_grid
+    validate_grid(attempt,grid)
+    return grid
 
 
 def sample_id(plan, dataset, item):
@@ -160,7 +164,7 @@ def verify_runtime_assets(plan):
 def import_predictions(source, output, old, new):
     counters=dict(reused_complete_samples=0,reused_valid_query_answers=0,imported_failed_query_histories=0,missing_queries=0,
         hardlinked_masks=0,copied_masks=0,already_present_masks=0)
-    size=old["protocol"]["tile_size"]; old_budget=old["protocol"]["format_retries"]
+    size=old["protocol"]["tile_size"]
     for entry in new["entries"]:
         dataset=entry["dataset"]; expected_keys=keys(new,dataset)
         selected=entry["samples"][:new["max_samples"]] if new["max_samples"] else entry["samples"]
@@ -205,11 +209,11 @@ def import_predictions(source, output, old, new):
                         if record.get("identity")!=expected or record.get("spatial")!=spatial:
                             raise ValueError(f"Source query identity differs: {path}")
                         attempts=record.get("attempts",[])
-                        if not attempts or len(attempts)>old_budget+1: raise ValueError(f"Invalid source attempt history: {path}")
+                        from tools.rsunivlm_constrained_rle import validate_history
+                        try: validate_history(old,dataset,key,attempts,instruction)
+                        except ValueError as error: raise ValueError(f"{error}: {path}") from error
                         is_valid=False
                         for index,attempt in enumerate(attempts):
-                            if attempt.get("prompt")!=instruction(old,dataset,key,index) or attempt.get("prompt_variant")!=index:
-                                raise ValueError(f"Source prompt differs: {path}")
                             try: decoded(old,dataset,key,attempt); is_valid=True
                             except (ValueError,KeyError): pass
                         imported=copy.deepcopy(record); imported["identity"]=target_id
