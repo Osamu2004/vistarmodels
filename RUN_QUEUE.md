@@ -4,6 +4,31 @@
 
 ## RSUniVLM：论文七数据集分割与变化检测
 
+### 2026-11-04 约束RLE离线更新包
+
+用户要求最新约束RLE离线包。外层工作区产物output/offline/rsunivlm_constrained_rle_20261104.zip，固定RLE代码9e677ef及此安装记录的已提交main完整历史，无旧增量包前置依赖。不包含其他未提交基线改动、模型权重、数据集或已有预测。实际bundle tip、SHA、ZIP CRC与传输验证回执在外层同名manifest/receipt。
+
+先让旧队列正常退出并回到shell，再把ZIP复制到WSL的/root/code/vistarmodels，离线安装：
+
+~~~bash
+cd /root/code/vistarmodels
+python -m zipfile -e ./rsunivlm_constrained_rle_20261104.zip ./rsunivlm_rle_update_20261104
+bash ./rsunivlm_rle_update_20261104/install_update.bash /root/code/vistarmodels
+~~~
+
+通过条件：包内SHA校验、bundle verify、ff-only导入成功。已知数据路径JSON先备份、成功或失败均原字节恢复；其他本地修改受Git正常保护，有冲突就停止，不reset/stash/强制覆盖。安装不联网、不自动运行回归或GPU，不读取旧预测/GT。
+
+安装后在原WSL环境启动仓库内正式入口（此脚本随Git bundle交付，不依赖包内同名推理脚本）：
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda activate vistar_rsunivlm
+bash run_bash/rsunivlm_recover_rle.bash
+~~~
+
+入口默认先执行合成回归、真实本地Qwen tokenizer预检和LEVIR正值审计，再进行七集恢复/约束兜底/最终汇总；任一步失败即停。默认复用_once_v2或_retry2，实际有_p后缀时显式REUSE_RUN；不覆写旧结果。详细协议/24×24网格/最多一条旧耗尽历史的约束额外回答/字段证据见下一节及CONSTRAINED_RLE.md。安装包在本机仅做归档/Git传输检查，不运行测试、tokenizer/解码、模型或CUDA；不能把安装校验当作WSL推理验证。
+
 ### 2026-11-04 当前：新增约束RLE最后兜底，保留已有恢复结果
 
 用户明确要求添加约束RLE生成。新入口仅对剩余失败查询启用：前两次自由输出，最后retry采用有限RLE语法；旧缓存已耗尽三次自由回答的查询允许额外一次标记的约束回答。网格默认24×24，类仅others/固定查询前景，计数总和/行数/EOS受约束；词汇/计数仍由原模型logits选择，不补GT/背景/缺行。原decoder完整验收后再查声明网格/类别/EOS，失败保持partial。独立policy与helper SHA/网格身份，不声称是原论文同一解码方式。细节见baselines/rsunivlm/CONSTRAINED_RLE.md。

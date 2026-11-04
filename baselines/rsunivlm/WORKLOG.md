@@ -1,5 +1,11 @@
 # RSUniVLM 接入记录
 
+## 2026-11-04：按要求制作最新约束RLE离线包
+
+以约束代码9e677ef和本段安装文档的已提交main固定快照制作完整Git bundle/ZIP，附SHA校验、保留用户数据路径JSON的标准库导入器、中文README和静态回执。不打包未提交的其他基线、权重/数据/预测。RUN_QUEUE提供解压/安装与仓库内正式RLE恢复脚本命令；安装本身不测试或启动GPU。
+
+本机仅归档/Git传输校验：空bare仓库导入、对象fsck、旧提交快进、用户路径JSON原字节保留和本地冲突拒绝后的恢复、ZIP CRC/成员SHA及Bash/AST/JSON静态验证。不运行pytest、tokenizer、原解码器、模型或CUDA，不实际接入WSL。包tip/SHA/大小与传输回执记录外层output/offline；实际推理完整性仍待用户运行。
+
 ## 2026-11-04：用户授权添加约束RLE生成，独立兜底策略
 
 在说明自由输出无法保证合法格式后，用户要求添加RLE。实现finite token-trie约束，固定网格默认24×24、只允许others/查询前景、正计数行和固定、完整后EOS；模型仍选择预测内容，原decoder后追加网格/类别/EOS校验。通过官方HF4.45.2 logits_processor接入原GMoE generate；核对上游固定提交inputs_embeds路径转发kwargs/初始空生成前缀，避开该版内置PrefixConstrainedLogitsProcessor的零长度view问题，不添加BOS或猜测提示词切片；验证tokenizer片段往返和最坏token预算。
