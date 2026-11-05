@@ -1,5 +1,73 @@
 # 待执行队列
 
+## OVCD-PAPER-VAL593 — DynamicEarth / OpenDPR统一变化检测（2026-11-05）
+
+- 任务：实现论文里的两个公开OVCD方法，LEVIR test128、SECOND与Alters同一canonical val593（SHA eed4dc3956022e18f426ba9efd30fd0927cd4fa0c065b7058e86e439624ed346）。不把生成Test1694混入检测。来源/变体和限制在`baselines/ovcd/README.md`。
+- 状态：本机代码、AST/Bash/JSON及官方接口静态核对；按用户要求未运行测试/模型或CUDA，未在WSL安装/下载/评分，尚无真实前向回执。旧论文数值不是本次新代码的结果。
+- 先完成上面的LongCat双卡任务或释放两卡，再运行此队列。方法各一张卡，SAM/DINO模型逐对前向；CPU RGB DataLoader默认2workers/prefetch1，batch不伪称16。只保存预测ID掩码及必要JSON，默认原图tile512，边界与LoveDA/Alters/RSUniVLM相同。
+
+### WSL环境准备（各只需一次，保留当前支持5090的Torch/torchvision）
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda create -n vistar_opendpr --clone vistar_longcat -y
+conda activate vistar_opendpr
+METHOD=opendpr bash scripts/bootstrap_ovcd_paper.sh
+GPU_IDS=1 CUDA_VISIBLE_DEVICES=1 python tools/check_ovcd_paper_deps.py --method opendpr --cuda
+~~~
+
+~~~bash
+cd /root/code/vistarmodels
+source /root/anaconda3/etc/profile.d/conda.sh
+conda create -n vistar_dynamicearth --clone vistar_longcat -y
+conda activate vistar_dynamicearth
+METHOD=dynamicearth bash scripts/bootstrap_ovcd_paper.sh
+CUDA_VISIBLE_DEVICES=0 python tools/check_ovcd_paper_deps.py --method dynamicearth --cuda
+~~~
+
+- 已有目标环境时直接activate，勿重复clone。bootstrap固定官方commit，使用作者OpenDPR支持集和原型；DynamicEarth沿用已有SAM/SegEarth/SimFeatUp/OpenMMLab安装器并追加本地DINO。上游扩展与Torch/CUDA不匹配时必须先修复并通过导入/真实smoke，不能关闭SimFeatUp后宣称正式结果。源码/权重使用现有完整文件；不删除旧缓存或配置代理。
+
+### WSL合同测试和全数据预检
+
+~~~bash
+cd /root/code/vistarmodels
+conda activate vistar_opendpr
+python -m pytest tests/test_ovcd_paper_protocols.py -q
+GPU_IDS=0,1 PLAN_ONLY=1 MAX_SAMPLES=0 \
+DYNAMIC_ENV=vistar_dynamicearth OPENDPR_ENV=vistar_opendpr \
+OUTPUT_ROOT=/root/data/experiment/ovcd_paper_levir128_second_val593_tile512_v1 \
+bash run_bash/ovcd_paper_queue.bash
+~~~
+
+- 预检须两种方法均发现LEVIR128和SECOND593，所有权重、支持图/掩码匹配；不加载模型。源commit、实际源码/支持数据/权重SHA进入协议，不以只读元数据预检冒充前向成功。
+
+### 两种方法各2对真实CUDA前向（独立smoke目录）
+
+~~~bash
+GPU_IDS=0,1 MAX_SAMPLES=2 NUM_WORKERS=2 \
+DYNAMIC_ENV=vistar_dynamicearth OPENDPR_ENV=vistar_opendpr \
+OUTPUT_ROOT=/root/data/experiment/ovcd_paper_levir_second_smoke2_v1 \
+bash run_bash/ovcd_paper_queue.bash
+~~~
+
+- 通过条件：真实严格加载SAM+DINO/CLIP或DINOv2，原型每类完整，预测PNG有效，无前向异常，两个方法的每个集合2/2且complete=true、is_full_benchmark=false。测试/预检通过不能替代此步骤；失败保留日志和现场，不用全零掩码顶替异常。
+
+### 正式128+593两卡队列（同命令断点续跑）
+
+~~~bash
+GPU_IDS=0,1 MAX_SAMPLES=0 NUM_WORKERS=2 \
+DYNAMIC_ENV=vistar_dynamicearth OPENDPR_ENV=vistar_opendpr \
+OUTPUT_ROOT=/root/data/experiment/ovcd_paper_levir128_second_val593_tile512_v1 \
+bash run_bash/ovcd_paper_queue.bash
+~~~
+
+- 正式每个方法先LEVIR后SECOND；GPU0 DynamicEarth、GPU1 OpenDPR。输出`<root>/<method>/<dataset>/pred_mask`、rows/scores/metrics以及各方法paper_summary。正式汇报须每方法128/128和593/593，失败0、is_full_benchmark=true、summary.complete=true，IoU/mF1/WFm全量。中断原命令续跑，相同身份PNG复用并重新评分；参数/源码/输入变化要求独立目录，不强制覆盖旧结果。当前未启动。
+
+- 仅一个方法或一个数据集可用`METHOD=opendpr DATASETS=second GPU_IDS=1 bash run_bash/ovcd_paper.bash`；设置OUTPUT_DIR到独立正式或smoke目录。作者LEVIR整图对照可`TILE_SIZE=0`，必须独立OUTPUT_DIR并明确不是tile512结果。
+
+2026-11-01用户规则：以后新训练实验统一20,000个optimizer updates，默认保存10k/20k，具体规则见AGENTS.md。旧训练入口用于新实验前先适配20k并核对实际预算；下方RSUniVLM是公开权重推理，不新增训练。
+
 2026-11-01用户规则：以后新训练实验统一20,000个optimizer updates，默认保存10k/20k，具体规则见AGENTS.md。旧训练入口用于新实验前先适配20k并核对实际预算；下方RSUniVLM是公开权重推理，不新增训练。
 
 ## RSUniVLM：论文七数据集分割与变化检测

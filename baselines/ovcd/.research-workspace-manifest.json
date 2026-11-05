@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "categories": {
+    "sources": [
+      "backends.py",
+      "evaluate.py"
+    ],
+    "status": [
+      "validation_static_20261105.json"
+    ],
+    "results": []
+  },
+  "ignored": [
+    "__pycache__"
+  ],
+  "allowed_root_files": [
+    "README.md",
+    "WORKLOG.md",
+    "SUMMARY.md",
+    ".research-workspace-node",
+    ".research-workspace-manifest.json"
+  ],
+  "aliases": {}
+}

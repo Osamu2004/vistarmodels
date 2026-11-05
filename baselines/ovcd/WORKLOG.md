@@ -1,0 +1,11 @@
+# OVCD适配工作记录
+
+## 2026-11-05：统一检测人口并补齐两个公开方法
+
+用户要求检查SECOND所有划分、LongCat统一Alters593并补WFm，同时把两个OVCD方法实现进vistarmodels。已核对原稿和代码：变化生成Test1694/双向3388、变化检测canonical val593；LongCat旧自动评估和20k队列误用Test检测。训练暴露与FDr⁶真实参考属于不同证据层，未修改已有分数或模板。
+
+本节点只负责DynamicEarth/OpenDPR的LEVIR/SECOND直接检测。已有DynamicEarth只支持LEVIR整图；OpenDPR此前无接入。本次读取两个官方固定commit源码和OpenDPR提供的支持集接口，逐类提取DynamicEarth SECOND参数，新增共享数据/掩码恢复/评分前端及独立后端、bootstrap、依赖检查和双环境双卡队列。原有模型/RSUniVLM数值源码保持；新增保存预测掩码，无输入/GT图片副本。
+
+静态审查重点：不能把DynamicEarth每类参数抹平；不能缺OpenDPR原型仍打分；不能从来源不同的`dynamic_earth`包混合导入；SECOND必须保留六类成员IoU而只在边界使用固定顺序；不能因文件数相同冒称同一593清单。LEVIR tiling显式记为适配，原整图入口仍保留。
+
+研究工作树只读审计提示旧仓库根文件多、旧DynamicEarth节点没有语义manifest；这些是已有源代码组织，不据此移动/清理文件。新节点用README/WORKLOG区分代码、状态与真实结果，不建立伪benchmark结果目录。用户此前要求本机不测试，因此只执行AST/Bash/JSON/官方源码接口核对；新增CPU合同测试留在WSL，未启动Torch/模型/下载权重/训练/评分。下一步以用户WSL导入检查及2对真实前向完成运行验证，再跑128/593完整指标。

@@ -174,3 +174,5 @@ DATASET_TAG=loveda_val TODSYNTH_CHECKPOINT=/path/to/checkpoint bash run_bash/tod
 DATASET_TAG=loveda_val MMSeg_CONFIG=/path/to/config.py MMSeg_CKPT=/path/to/model.pth \
   TODSYNTH_CHECKPOINT=/path/to/checkpoint bash run_bash/todsynth_loveda_crfm_gen.bash
 ```
+
+- [论文变化检测：DynamicEarth / OpenDPR](baselines/ovcd/README.md)：新增统一LEVIR128/SECOND val593入口、掩码续跑和IoU/WFm；真实WSL前向待验证，命令见RUN_QUEUE的OVCD-PAPER-VAL593。

@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-05",
+  "validation_scope": "AST Python3.10, Bash syntax, JSON only",
+  "torch_imported": false,
+  "tests_run": false,
+  "model_forward_calls": 0,
+  "WSL_accessed": false,
+  "files": [
+    {
+      "path": "baselines/ovcd/backends.py",
+      "sha256": "cbd6810c15b6a68a5db98e0d4af605e3774083593ff4ce93f109b162f265bc36",
+      "lines": 188
+    },
+    {
+      "path": "baselines/ovcd/evaluate.py",
+      "sha256": "f98022526c296f51ea47c19a7543867981ad8055a9c0b792c16c0fbb358d373a",
+      "lines": 335
+    },
+    {
+      "path": "tools/check_ovcd_paper_deps.py",
+      "sha256": "141bdc9205a4ffb4bc59ce16f17490c6611c61a9b4017a0d404ea34a43372411",
+      "lines": 43
+    },
+    {
+      "path": "tools/prepare_ovcd_weights.py",
+      "sha256": "eadb9a673c123dff9ab7e23163bdc0a67382eddc3ee4f15e03548b4ecf99e2cc",
+      "lines": 45
+    },
+    {
+      "path": "tests/test_ovcd_paper_protocols.py",
+      "sha256": "158b347251fa15c9a92f6721328ca266e48f266ac4a7334d6c0aa2fe55478333",
+      "lines": 72
+    },
+    {
+      "path": "scripts/bootstrap_ovcd_paper.sh",
+      "sha256": "64e4c3486315d992b4fc0439f1dbf3034db67f4198c6f08a5ce5256ac70bc863",
+      "lines": 33
+    },
+    {
+      "path": "run_bash/ovcd_paper.bash",
+      "sha256": "e01f89c4c9827f4718caf3dfb40b166b78676910fd8010a178465a19da98febe",
+      "lines": 28
+    },
+    {
+      "path": "run_bash/ovcd_paper_queue.bash",
+      "sha256": "09fde414cf7dafcbb560cfb49c27631e553a15a53cb3d0c84df63dc57960de93",
+      "lines": 25
+    },
+    {
+      "path": "configs/ovcd/dynamicearth_second_mci.json",
+      "sha256": "b1c210db43902ee1f2c7fe9ca0df59787d5b67d6fb05f3b4a7b9192defdf638d",
+      "lines": 179
+    }
+  ]
+}
