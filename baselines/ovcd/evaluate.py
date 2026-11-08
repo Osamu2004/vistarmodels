@@ -57,6 +57,9 @@ def sources(args, dataset):
     required += [root / ("dynamic_earth/identifier/prototype_retrieval.py" if args.method == "opendpr"
                          else "dynamic_earth/identifier/segearth_ov_ext.py")]
     files = {str(path): sha(path) for path in required}
+    archive_receipt = root / ".ovcd_upstream_source.json"
+    if archive_receipt.is_file():
+        files[str(archive_receipt)] = sha(archive_receipt)
     folders = [root / "dynamic_earth", root / "third_party/segment_anything"]
     if args.method == "dynamicearth":
         folders += [root / "third_party/SegEarth_OV", root / "third_party/SimFeatUp"]
@@ -116,7 +119,9 @@ def plan(args, dataset):
         revision = subprocess.run(["git","-C",str(Path(args.source_root).resolve()),"rev-parse","HEAD"],
             check=True,capture_output=True,text=True).stdout.strip()
     except (OSError,subprocess.CalledProcessError):
-        revision = "unavailable; actual source files are content-hashed"
+        receipt = Path(args.source_root).resolve() / ".ovcd_upstream_source.json"
+        revision = (json.loads(receipt.read_text())["revision"] if receipt.is_file()
+                    else "unavailable; actual source files are content-hashed")
     if revision != REVISIONS[args.method] and not revision.startswith("unavailable"):
         raise ValueError("Upstream revision differs; use the pinned bootstrap or a separate explicitly audited adapter")
     versions = {}
