@@ -88,6 +88,9 @@ def sources(args, dataset):
             raise ValueError("OpenDPR requires the published DINOv2-B/14 encoder")
     else:
         files[args.dynamic_config] = sha(args.dynamic_config)
+        if getattr(args, "clip_cache_dir", None):
+            clip = Path(args.clip_cache_dir) / "ViT-B-16.pt"
+            files[str(clip)] = sha(clip)
         for name in (args.dino_checkpoint, args.segearth_weight):
             files[name] = sha(name)
         repo = Path(args.dino_repo)
@@ -304,6 +307,7 @@ def parser():
     p.add_argument("--dino_repo",default=str(ROOT/"third_party/DINO"))
     p.add_argument("--dino_checkpoint",default="/root/data/weight/dynamicearth/dino_vitbase16_pretrain.pth")
     p.add_argument("--segearth_weight",default="/root/data/weight/dynamicearth/xclip_jbu_one_million_aid.ckpt")
+    p.add_argument("--clip_cache_dir",help="Existing official CLIP cache; same OpenAI ViT-B/16 weights")
     p.add_argument("--dynamic_config",default=str(ROOT/"configs/ovcd/dynamicearth_second_mci.json"))
     p.add_argument("--output_dir",required=True)
     p.add_argument("--tile_size",type=int,choices=(0,512),default=512)

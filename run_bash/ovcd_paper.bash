@@ -21,6 +21,7 @@ args=(--method "$method" --datasets "${datasets[@]}" --source_root "$source_root
   --dino_checkpoint "${DINO_CHECKPOINT:-/root/data/weight/dynamicearth/dino_vitbase16_pretrain.pth}"
   --segearth_weight "${SEGEARTH_WEIGHT:-/root/data/weight/dynamicearth/xclip_jbu_one_million_aid.ckpt}"
   --tile_size "${TILE_SIZE:-512}" --num_workers "${NUM_WORKERS:-2}" --max_samples "${MAX_SAMPLES:-0}")
+if [[ -n "${OVCD_CLIP_CACHE:-}" ]]; then args+=(--clip_cache_dir "$OVCD_CLIP_CACHE"); fi
 if [[ "${PLAN_ONLY:-0}" == 1 ]]; then
   exec "${PYTHON_BIN:-python}" -u baselines/ovcd/evaluate.py "${args[@]}" --plan_only "$@"
 fi

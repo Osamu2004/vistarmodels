@@ -127,13 +127,21 @@ class DynamicEarth:
         # This published Lightning checkpoint predates Torch's weights_only
         # default. Scope the trusted-file compatibility to that exact path.
         from unittest.mock import patch
+        from functools import partial
+        from contextlib import nullcontext
         original_load = torch.load
         def load_checkpoint(path, *positional, **kwargs):
             if isinstance(path, (str, Path)) and Path(path).resolve() == Path(args.segearth_weight).resolve():
                 kwargs.setdefault("map_location", "cpu")
                 kwargs.setdefault("weights_only", False)
             return original_load(path, *positional, **kwargs)
-        with patch.object(torch, "load", load_checkpoint):
+        # Keep the official OpenAI checkpoint while allowing shared campus
+        # storage instead of writing a second copy under the SSH home folder.
+        clip_cache = getattr(args, "clip_cache_dir", None)
+        cache_context = (patch.object(segmentation, "create_model",
+                         partial(segmentation.create_model, cache_dir=clip_cache))
+                         if clip_cache else nullcontext())
+        with patch.object(torch, "load", load_checkpoint), cache_context:
             self.identifier = segmentation.SegEarth_OV(clip_type="CLIP", vit_type="ViT-B/16",
                 model_type="SegEarth", name_path=str(names), device=torch.device(args.device),
                 ignore_residual=True, feature_up=True,
