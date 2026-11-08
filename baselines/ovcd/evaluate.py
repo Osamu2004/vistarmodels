@@ -214,7 +214,7 @@ def score_masks(dataset, sample, masks):
         memberships = [target]
         counts = {"1":binary_counts(masks[0],target)}
     boundary = score_semantic_boundary_wfm(dense(masks),dense(memberships),
-        num_classes=7 if dataset=="second" else 2,ignore_index=255,ignore_margin=2,edge_size=3,beta=1.0)
+        num_classes=7 if dataset=="second" else 2,ignore_index=255,ignore_margin=2)
     return dict(name=sample.name,class_counts=counts,**boundary)
 
 
