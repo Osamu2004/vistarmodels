@@ -116,6 +116,8 @@ def plan(args, dataset):
     local = ("baselines/ovcd/evaluate.py", "baselines/ovcd/backends.py",
              "baselines/levircd_common.py", "baselines/binary_boundary_wfm.py", "tools/rsunivlm_paper_protocol.py")
     try:
+        if not (Path(args.source_root).resolve() / ".git").exists():
+            raise OSError("Archive source has no own Git repository")
         revision = subprocess.run(["git","-C",str(Path(args.source_root).resolve()),"rev-parse","HEAD"],
             check=True,capture_output=True,text=True).stdout.strip()
     except (OSError,subprocess.CalledProcessError):
