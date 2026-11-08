@@ -17,3 +17,10 @@ WSL用户回执表明`vistar_dynamicearth`不存在，且OVCD Bash未导入。�
 静态审查重点：不能把DynamicEarth每类参数抹平；不能缺OpenDPR原型仍打分；不能从来源不同的`dynamic_earth`包混合导入；SECOND必须保留六类成员IoU而只在边界使用固定顺序；不能因文件数相同冒称同一593清单。LEVIR tiling显式记为适配，原整图入口仍保留。
 
 研究工作树只读审计提示旧仓库根文件多、旧DynamicEarth节点没有语义manifest；这些是已有源代码组织，不据此移动/清理文件。新节点用README/WORKLOG区分代码、状态与真实结果，不建立伪benchmark结果目录。用户此前要求本机不测试，因此只执行AST/Bash/JSON/官方源码接口核对；新增CPU合同测试留在WSL，未启动Torch/模型/下载权重/训练/评分。下一步以用户WSL导入检查及2对真实前向完成运行验证，再跑128/593完整指标。
+
+
+## 2026-11-08：正式纳入vistarmodels/main并通过Git离线同步
+
+用户要求目标为vistarmodels，采用Git离线同步。本次将已审查OVCD树按范围纳入主仓库main，并保留此前OVCD交付历史祖先，以兼容旧main/b11/aa5恢复包的fast-forward。根README/RUN_QUEUE仅按OVCD段落分块提交；InstructPix2Pix、SyntheticGen、RCDGen等其他工作区改动保持原样。新的直接Git bundle入口和用户命令见根RUN_QUEUE的OVCD-GIT-OFFLINE-SYNC。
+
+本次仅Git集成、AST/Bash、标准库导入验证及本地隔离仓库的bundle重放；没有新数值实现、WSL环境安装、CUDA模型前向或指标。代码离线同步与后续环境/权重联网准备分开，WSL是否完成仍需实际回执。

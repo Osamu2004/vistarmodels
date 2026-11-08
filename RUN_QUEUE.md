@@ -1,5 +1,26 @@
 # 待执行队列
 
+## OVCD-GIT-OFFLINE-SYNC（2026-11-08，目标仓库vistarmodels/main）
+
+- 按用户澄清，DynamicEarth/OpenDPR及双环境准备已正式纳入当前vistarmodels主分支；其他未提交基线保持。主分支保留此前OVCD交付分支祖先，因此旧main、旧OVCD包和上轮恢复包均可走Git fast-forward。
+- 交付为`vistarmodels_ovcd_main_20261108.bundle`，仅提交的Git历史/代码，不含未提交改动、环境、第三方源码、权重或结果。把bundle放到WSL的/root/code后导入；Git导入不装环境、不启动模型。
+
+~~~bash
+cd /root/code/vistarmodels
+git bundle verify /root/code/vistarmodels_ovcd_main_20261108.bundle
+git fetch /root/code/vistarmodels_ovcd_main_20261108.bundle main
+git merge --ff-only FETCH_HEAD
+~~~
+
+- 导入成功后显式准备环境并运行两模型：
+
+~~~bash
+BASE_ENV=vistar_longcat GPU_IDS=0,1 NUM_WORKERS=2 \
+bash run_bash/ovcd_paper_ready.bash
+~~~
+
+- 首次依赖/上游源码/权重准备仍需联网，现有基础Torch环境不安装包；GPU0 DynamicEarth、GPU1 OpenDPR，LEVIR128/SECOND593，预检→独立2例CUDA→完整评分，失败即停。此处仅准备用户命令，没有连接WSL或启动推理。若Git分叉或本地冲突，保留现场停止，不强制回退/覆盖。
+
 ## OVCD-MISSING-ENV-ENTRY-RECOVERY（2026-11-08，待用户WSL执行）
 
 - 用户回执：`conda activate vistar_dynamicearth`报环境不存在，随后`run_bash/ovcd_paper.bash`不存在。原因是此前本地/分支交付状态不能当作WSL已导入，尚未执行任何OVCD模型前向。此次仅准备可验证代码包与创建环境入口，不更新论文分数。
