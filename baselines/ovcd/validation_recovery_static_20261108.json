@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-08",
+  "ast_check": "passed for OVCD modules and three setup/check tools",
+  "bash_syntax": "passed for setup/bootstrap/ready/single-method/two-method queue",
+  "metadata_guard_checks": ["capture exact installed distribution versions", "verify unchanged stack", "reject changed CUDA build/version without overwriting the original state"],
+  "metadata_guard_checks_passed": true,
+  "torch_imported_on_authoring_host": false,
+  "pytest_run_on_authoring_host": false,
+  "model_weights_loaded": false,
+  "conda_or_pip_run_on_authoring_host": false,
+  "upstream_source_or_model_downloaded": false,
+  "gpu_inference_verified": false,
+  "metric_math_or_model_prediction_changed": false,
+  "actual_wsl_install_and_cuda_smoke": "pending user execution"
+}

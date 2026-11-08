@@ -1,5 +1,21 @@
 # 待执行队列
 
+## OVCD-MISSING-ENV-ENTRY-RECOVERY（2026-11-08，待用户WSL执行）
+
+- 用户回执：`conda activate vistar_dynamicearth`报环境不存在，随后`run_bash/ovcd_paper.bash`不存在。原因是此前本地/分支交付状态不能当作WSL已导入，尚未执行任何OVCD模型前向。此次仅准备可验证代码包与创建环境入口，不更新论文分数。
+- 先导入`vistarmodels_ovcd_recovery_20261108.zip`，只对`/root/code/vistarmodels`进行Git fast-forward与源码SHA核对，不修改vistar、不装依赖、不启动GPU。冲突或前置版本不满足时保留现场并停止。
+- 然后从已在5090D工作的`vistar_longcat`克隆两个不同的新环境，保存并约束Torch/torchvision/可选torchaudio的原版本，安装到各自环境。原`vistar_longcat`不安装任何包。首次准备仍需联网；SAM/DINO/DINOv2/SimFeatUp沿用`/root/data/weight`默认根并复用完整文件。扩展导入或pip兼容失败即停，不跳过mmcv/SimFeatUp，不把导入通过当真实前向。
+
+~~~bash
+cd /root/code/vistarmodels
+BASE_ENV=vistar_longcat GPU_IDS=0,1 NUM_WORKERS=2 \
+OUTPUT_ROOT=/root/data/experiment/ovcd_paper_levir128_second_val593_tile512_v1 \
+bash run_bash/ovcd_paper_ready.bash
+~~~
+
+- 该用户运行入口按顺序准备环境、PLAN_ONLY全人口预检、独立smoke目录每方法/集2对前向、正式LEVIR128/SECOND593；GPU0 DynamicEarth，GPU1 OpenDPR。全量产物在`<OUTPUT_ROOT>/<method>/paper_summary.json`，每集保留可复用预测掩码和指标。任一阶段失败不继续；相同身份掩码支持续跑，两方法分卡并行。
+- 只准备环境使用`SETUP_ONLY=1`；完整环境准备成功后续跑可以`SKIP_SETUP=1`。当前仅AST/Bash/标准库安装器隔离回放检查；作者机未导入Torch或运行pytest/模型/数据评分，未连接WSL、下载模型或启动GPU。通过须现场严格权重加载及四项完整population、失败0、原指标/3px WFm齐全。
+
 ## OVCD-PAPER-VAL593 — DynamicEarth / OpenDPR统一变化检测（2026-11-05）
 
 - 任务：实现论文里的两个公开OVCD方法，LEVIR test128、SECOND与Alters同一canonical val593（SHA eed4dc3956022e18f426ba9efd30fd0927cd4fa0c065b7058e86e439624ed346）。不把生成Test1694混入检测。来源/变体和限制在`baselines/ovcd/README.md`。

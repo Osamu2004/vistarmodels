@@ -19,11 +19,11 @@ case "$method" in
   opendpr)
     root="${OPENDPR_ROOT:-third_party/OpenDPR}"
     clone_pinned https://github.com/guoqi2002/OpenDPR.git "$root" bdf12a3d3e5adccd4e2c166a0c3a5d9f5a19c313
-    "$python_bin" -m pip install -r requirements-opendpr.txt
+    "$python_bin" -m pip install --no-build-isolation -r requirements-opendpr.txt
     "$python_bin" -m pip install --no-build-isolation -e "$root/third_party/segment_anything"
     ;;
   dynamicearth)
-    "$python_bin" -m pip install -r requirements-dynamicearth.txt 'huggingface_hub<1'
+    "$python_bin" -m pip install --no-build-isolation -r requirements-dynamicearth.txt 'huggingface_hub<1'
     PYTHON_BIN="$python_bin" bash scripts/bootstrap_dynamicearth.sh
     clone_pinned https://github.com/facebookresearch/dino.git "${DINO_REPO:-third_party/DINO}" 7c446df5b9f45747937fb0d72314eb9f7b66930a
     ;;

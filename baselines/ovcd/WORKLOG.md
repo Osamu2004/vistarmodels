@@ -1,5 +1,13 @@
 # OVCD适配工作记录
 
+## 2026-11-08：缺环境与入口的实际交付恢复
+
+WSL用户回执表明`vistar_dynamicearth`不存在，且OVCD Bash未导入。此前只给本地待交付路径不构成可运行命令，不能从本地文件存在推断WSL状态。此次沿原隔离OVCD分支补环境准备及ready队列，不改原数值实现、SAM/DINO/CLIP参数、数据人口、tile512或IoU/WFm函数。
+
+准备两个独立环境（默认从vistar_longcat克隆），在安装前以distribution metadata封存Torch/torchvision/可选torchaudio，向嵌套pip传播精确constraints，安装后逐项核对；复用已存在目标环境与完整公开权重。动态依赖源码构建显式关闭build isolation以使用当前CUDA Torch，未声称已在2.11/cu130上编译成功。单入口按setup、全人口plan、每方法/集2例真实CUDA、正式128/593执行，失败停止。离线安装器只更新vistarmodels，不触碰已完成FLUX2的vistar源码或结果，不安装依赖或启动模型；第一次环境/上游源码/权重准备需要联网。
+
+本机不运行pytest/Torch/模型或下载权重；AST、Bash、标准库元数据守卫隔离检查及Git导入/冲突/篡改回放写入交付回执。环境安装、扩展加载和实际CUDA指标待用户WSL回执。
+
 ## 2026-11-05：统一检测人口并补齐两个公开方法
 
 用户要求检查SECOND所有划分、LongCat统一Alters593并补WFm，同时把两个OVCD方法实现进vistarmodels。已核对原稿和代码：变化生成Test1694/双向3388、变化检测canonical val593；LongCat旧自动评估和20k队列误用Test检测。训练暴露与FDr⁶真实参考属于不同证据层，未修改已有分数或模板。
