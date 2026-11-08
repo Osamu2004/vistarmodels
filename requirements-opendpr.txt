@@ -1,0 +1,12 @@
+# Keep the installed CUDA-enabled Torch/torchvision (RTX5090 needs a recent build).
+numpy==1.26.4
+transformers==4.44.2
+huggingface_hub>=0.25,<1
+scikit-learn==1.3.2
+scikit-image>=0.22
+opencv-python-headless==4.11.0.86
+scipy>=1.11
+pillow>=10
+tqdm>=4.65
+matplotlib>=3.7
+PyYAML>=6

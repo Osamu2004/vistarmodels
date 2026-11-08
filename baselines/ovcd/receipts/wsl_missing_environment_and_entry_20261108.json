@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-08",
+  "source": "user-pasted WSL terminal output",
+  "host": "PC-20250412AZHP",
+  "working_directory": "/root/code/vistarmodels",
+  "shell_environment_after_activation_failure": "vistar_flux2",
+  "requested_environment": "vistar_dynamicearth",
+  "activation_error": "EnvironmentNameNotFound: Could not find conda environment: vistar_dynamicearth",
+  "entry_error": "bash: run_bash/ovcd_paper.bash: No such file or directory",
+  "ovcd_model_started": false,
+  "diagnosis": "Local branch/package preparation was not imported into this WSL checkout; conda environment setup also remains incomplete.",
+  "recovery": "Import the verified vistarmodels-only bundle, then explicitly run ovcd_paper_ready.bash to prepare isolated environments and execute the validation/full-scoring stages."
+}
