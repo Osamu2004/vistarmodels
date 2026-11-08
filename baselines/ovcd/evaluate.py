@@ -64,8 +64,9 @@ def sources(args, dataset):
     if args.method == "dynamicearth":
         folders += [root / "third_party/SegEarth_OV", root / "third_party/SimFeatUp"]
     for folder in folders:
-        for path in sorted(folder.rglob("*.py")):
-            files[str(path)] = sha(path)
+        for path in sorted(folder.rglob("*")):
+            if path.is_file() and path.suffix in {".py", ".cpp", ".cu", ".h", ".so"}:
+                files[str(path)] = sha(path)
     if args.method == "opendpr":
         support = root / "support_set" / ("SECOND" if dataset == "second" else "LEVIR-CD")
         classes = NAMES if dataset == "second" else ("background", "building")
