@@ -16,6 +16,18 @@ REVISIONS = dict(dynamicearth="c9ffd90cafbd791cd75a48a5717a902966c2436c",
 NAMES = ("water", "ground", "low vegetation", "tree", "building", "playground")
 
 
+def official_support_pairs(support, category):
+    """Match the official collector: skip images without a supplied mask."""
+    support = Path(support)
+    folder, masks = support / category, Path(str(support) + "_mask") / category
+    pairs = [(path, masks / (path.stem + ".png")) for path in sorted(folder.iterdir())
+             if path.suffix.lower() in {".png", ".jpg", ".jpeg"}
+             and (masks / (path.stem + ".png")).is_file()] if folder.is_dir() else []
+    if len(pairs) < 3:
+        raise ValueError(f"Fewer than three official OpenDPR support pairs: {category}")
+    return pairs
+
+
 def union_masks(masks, shape):
     result = np.zeros(shape, np.uint8)
     for mask in masks:

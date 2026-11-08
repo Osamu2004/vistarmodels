@@ -26,7 +26,7 @@ from tqdm import tqdm
 from baselines.levircd_common import binary_counts, binary_metrics, load_binary
 from baselines.binary_boundary_wfm import score_semantic_boundary_wfm, aggregate_binary_boundary_wfm
 from tools import rsunivlm_paper_protocol as data
-from baselines.ovcd.backends import REVISIONS, NAMES
+from baselines.ovcd.backends import REVISIONS, NAMES, official_support_pairs
 
 SPLIT_SHA = "eed4dc3956022e18f426ba9efd30fd0927cd4fa0c065b7058e86e439624ed346"
 EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
@@ -71,11 +71,7 @@ def sources(args, dataset):
         support = root / "support_set" / ("SECOND" if dataset == "second" else "LEVIR-CD")
         classes = NAMES if dataset == "second" else ("background", "building")
         for category in classes:
-            folder, masks = support / category, Path(str(support) + "_mask") / category
-            pairs = [(path, masks / (path.stem + ".png")) for path in sorted(folder.iterdir())
-                     if path.suffix.lower() in {".png", ".jpg", ".jpeg"}] if folder.is_dir() else []
-            if len(pairs) < 3 or any(not target.is_file() for _, target in pairs):
-                raise ValueError(f"Incomplete official OpenDPR support image/mask pairs: {category}")
+            pairs = official_support_pairs(support, category)
             for pair in pairs:
                 for path in pair:
                     files[str(path)] = sha(path)
@@ -138,6 +134,7 @@ def plan(args, dataset):
         tile_size=args.tile_size, stride=args.tile_size, padding="black right/bottom; native stitching/crop",
         whole_image_official_equivalence="SECOND native512 unchanged; LEVIR tile512 is an explicit adapter",
         prediction="single ordered pair; six independent memberships on SECOND; no reversed inference",
+        support_policy="official collector skips support images without supplied masks; at least three matched pairs per class",
         levir_gt="Vistar PIL grayscale >0, including original intermediate nonzero values",
         second_gt="sparse original label1/label2 class unions, unchanged remains0",
         boundary="whole dense labels; ascending class1..6, last-positive wins for prediction and GT; LoveDA WFm",

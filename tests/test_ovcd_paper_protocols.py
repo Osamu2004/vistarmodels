@@ -8,13 +8,29 @@ from PIL import Image
 import pytest
 
 from baselines.ovcd import evaluate as evaluation
-from baselines.ovcd.backends import union_masks
+from baselines.ovcd.backends import union_masks, official_support_pairs
 
 
 class DummyBackend:
     def predict(self, first, second):
         # The condition order must survive edge padding and reconstruction.
         return [(first[...,0]>second[...,0]).astype(np.uint8)]
+
+
+def test_official_support_accepts_unmatched_images_without_fabricating_masks(tmp_path):
+    support = tmp_path / "LEVIR-CD"
+    images = support / "building"
+    masks = tmp_path / "LEVIR-CD_mask/building"
+    images.mkdir(parents=True); masks.mkdir(parents=True)
+    for name in ("one", "two", "three", "unmatched"):
+        (images / (name + ".png")).write_bytes(b"image")
+    for name in ("one", "two", "three"):
+        (masks / (name + ".png")).write_bytes(b"mask")
+    pairs = official_support_pairs(support, "building")
+    assert {image.stem for image, mask in pairs} == {"one", "two", "three"}
+    assert not (masks / "unmatched.png").exists()
+    with pytest.raises(ValueError, match="three"):
+        official_support_pairs(support, "background")
 
 
 def test_tiles_preserve_native_extent_and_order_without_overlap():
