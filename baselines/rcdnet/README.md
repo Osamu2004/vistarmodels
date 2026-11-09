@@ -71,3 +71,25 @@ VISTAR's LEVIR-CD evaluator. The prediction filenames are directly accepted by
 `vistar/tools/compute_saved_levircd_opendpr_metrics.py`. The output protocol is intentionally explicit:
 the model-internal tiling is not claimed to reproduce the paper's unpublished
 exact cross-domain preprocessing unless the authors release that detail.
+
+## Boundary WFm from saved predictions
+
+The CPU-only scorer `tools/score_rcdnet_boundary.py` reads this adapter's
+`pred_mask/<stem>_pred_mask.png`, `gt_mask/<stem>.png`, `metrics.json`, and
+`per_image_metrics.jsonl`. It applies the shared IDGBR-style 3px boundary WFm
+to each stitched, native-resolution mask. No model, Torch, or CUDA is used.
+Dependencies are NumPy, SciPy, and Pillow. The shared metric uses OpenCV when
+available and its existing SciPy fallback otherwise.
+
+```bash
+python tools/score_rcdnet_boundary.py --eval_dir /path/to/your/rcdnet_output
+```
+
+The default requires all 128 LEVIR-CD test masks at 1024x1024, matching sample
+names, original per-image/global counts, and the saved IoU/F1. Source SHA256
+values are checked before and after scoring. Outputs are separate files in
+`<eval_dir>/boundary_wfm_3px/{paper_summary.json,per_image_boundary.json}`;
+original predictions and metrics are retained. The paper value is
+`scores.wfm_3px_percent`. Dataset aggregation averages edge and non-edge
+scores separately over GT-present images before taking the smaller positive
+class mean; it is not an average of per-image minima or tile scores.

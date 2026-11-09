@@ -1487,3 +1487,19 @@ bash run_bash/rsunivlm_eval.bash
 
 该模式输出到单独根目录下 `loveda_val`、`levircd_test`，与步骤 2/3 的默认目录不同。
 选择一种模式完成全量即可，无需重复跑。没有自动占用校园 GPU 或启动远端进程。
+
+## RCDNET-SAVED-WFM（2026-11-09，评分代码已提供）
+
+- 范围：只读取已有RCDNet LEVIR-CD原图掩码，纯CPU，复用baselines/binary_boundary_wfm.py的3px WFm，不重新推理。新入口tools/score_rcdnet_boundary.py。
+- 依赖：Python、numpy/scipy/Pillow；OpenCV可复用。目录为/root/code/vistarmodels，使用包含这些CPU依赖的既有环境，无GPU需求。RCDNET_EVAL_DIR须设为原RCDNet输出根（包含pred_mask/gt_mask/metrics.json/per_image_metrics.jsonl），本轮未核验用户WSL实际目录。
+- 命令：
+
+```bash
+cd /root/code/vistarmodels
+python tools/score_rcdnet_boundary.py --eval_dir "$RCDNET_EVAL_DIR"
+```
+
+- 产物：<RCDNET_EVAL_DIR>/boundary_wfm_3px/{paper_summary.json,per_image_boundary.json}。原图/GT/预测/metrics不改。128对1024完整、逐图与全局原计数/IoU/F1一致、前后SHA一致才写complete；缺图、非二值、尺度/来源/计数不符立即停止。
+- 状态：本机AST、CLI帮助及离线包CRC/SHA通过；本机缺SciPy，未跑数值或真实评分，无新分数、无远端部署。离线CPU代码包在外层output/rcdnet_wfm_20261109/rcdnet_boundary_wfm_cpu_20261109.zip。可与GPU任务并行，但避免共享盘大IO竞争。
+
+- Git交付：评分代码正式提交到vistarmodels/main；使用完整Git历史的离线包`vistarmodels_rcdnet_wfm_20261109.zip`同步，沿用/root/code/vistarmodels目标。解压后运行`python3 vistarmodels_rcdnet_wfm_20261109/install_update.py --repo /root/code/vistarmodels`；只校验与快进Git，不装依赖、不启动评分。代码包目标commit、SHA、快进演练和线上push核验见外层output/rcdnet_wfm_20261109/git_delivery/。
