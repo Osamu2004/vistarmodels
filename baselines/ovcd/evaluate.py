@@ -26,7 +26,7 @@ from tqdm import tqdm
 from baselines.levircd_common import binary_counts, binary_metrics, load_binary
 from baselines.binary_boundary_wfm import score_semantic_boundary_wfm, aggregate_binary_boundary_wfm
 from tools import rsunivlm_paper_protocol as data
-from baselines.ovcd.backends import REVISIONS, NAMES, official_support_pairs
+from baselines.ovcd.backends import REVISIONS, NAMES, official_support_pairs, dynamic_spec
 
 SPLIT_SHA = "eed4dc3956022e18f426ba9efd30fd0927cd4fa0c065b7058e86e439624ed346"
 EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
@@ -75,6 +75,7 @@ def sources(args, dataset):
             for pair in pairs:
                 for path in pair:
                     files[str(path)] = sha(path)
+    if args.method == "opendpr" or dynamic_spec(args)["comparator"] == "DINOv2":
         checkpoint_dir = Path(args.dinov2_dir)
         for name in ("config.json", "preprocessor_config.json"):
             files[str(checkpoint_dir / name)] = sha(checkpoint_dir / name)
@@ -85,17 +86,19 @@ def sources(args, dataset):
         files[str(weights[0])] = sha(weights[0])
         config = json.loads((checkpoint_dir / "config.json").read_text())
         if config.get("hidden_size") != 768 or config.get("patch_size") != 14:
-            raise ValueError("OpenDPR requires the published DINOv2-B/14 encoder")
-    else:
-        files[args.dynamic_config] = sha(args.dynamic_config)
+            raise ValueError("Require the published DINOv2-B/14 encoder")
+    if args.method == "dynamicearth":
+        spec = dynamic_spec(args)
+        files[spec["config"]] = sha(spec["config"])
         if getattr(args, "clip_cache_dir", None):
             clip = Path(args.clip_cache_dir) / "ViT-B-16.pt"
             files[str(clip)] = sha(clip)
-        for name in (args.dino_checkpoint, args.segearth_weight):
-            files[name] = sha(name)
-        repo = Path(args.dino_repo)
-        for name in ("hubconf.py", "vision_transformer.py", "utils.py"):
-            files[str(repo / name)] = sha(repo / name)
+        files[args.segearth_weight] = sha(args.segearth_weight)
+        if spec["comparator"] == "DINO":
+            files[args.dino_checkpoint] = sha(args.dino_checkpoint)
+            repo = Path(args.dino_repo)
+            for name in ("hubconf.py", "vision_transformer.py", "utils.py"):
+                files[str(repo / name)] = sha(repo / name)
     if Path(args.sam_checkpoint).stat().st_size < 1_000_000_000:
         raise ValueError("SAM ViT-H checkpoint is missing/truncated or the wrong variant")
     files[args.sam_checkpoint] = sha(args.sam_checkpoint)
@@ -128,6 +131,9 @@ def plan(args, dataset):
         try:versions[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:versions[name] = "unavailable"
     return selected, dict(schema="ovcd_paper_val593_v1", method=args.method, dataset=dataset,
+        dynamic_model=(dict(framework="M-C-I", sam="ViT-H", identifier="SegEarth-OV CLIP-B/16 + SimFeatUp",
+                           **{key: value for key, value in dynamic_spec(args).items() if key != "classes"})
+                       if args.method == "dynamicearth" else None),
         source_revision=revision,expected_source_revision=REVISIONS[args.method],upstream_files_sha256=sources(args, dataset),
         population=population, expected_samples=data.spec(dataset)["expected"],
         selected_samples=len(selected), samples=[asdict(sample) for sample in selected], input_sha256=sealed,
@@ -313,7 +319,9 @@ def parser():
     p.add_argument("--dino_checkpoint",default="/root/data/weight/dynamicearth/dino_vitbase16_pretrain.pth")
     p.add_argument("--segearth_weight",default="/root/data/weight/dynamicearth/xclip_jbu_one_million_aid.ckpt")
     p.add_argument("--clip_cache_dir",help="Existing official CLIP cache; same OpenAI ViT-B/16 weights")
-    p.add_argument("--dynamic_config",default=str(ROOT/"configs/ovcd/dynamicearth_second_mci.json"))
+    p.add_argument("--dynamic_comparator", choices=("DINO", "DINOv2"), default="DINO",
+                   help="One M-C-I model for every selected dataset; default preserves the historical DINO run")
+    p.add_argument("--dynamic_config", help="Optional matching official class configuration; selected by comparator by default")
     p.add_argument("--output_dir",required=True)
     p.add_argument("--tile_size",type=int,choices=(0,512),default=512)
     p.add_argument("--max_samples",type=int,default=0)

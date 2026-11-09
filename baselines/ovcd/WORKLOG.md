@@ -24,3 +24,7 @@ WSL用户回执表明`vistar_dynamicearth`不存在，且OVCD Bash未导入。�
 用户要求目标为vistarmodels，采用Git离线同步。本次将已审查OVCD树按范围纳入主仓库main，并保留此前OVCD交付历史祖先，以兼容旧main/b11/aa5恢复包的fast-forward。根README/RUN_QUEUE仅按OVCD段落分块提交；InstructPix2Pix、SyntheticGen、RCDGen等其他工作区改动保持原样。新的直接Git bundle入口和用户命令见根RUN_QUEUE的OVCD-GIT-OFFLINE-SYNC。
 
 本次仅Git集成、AST/Bash、标准库导入验证及本地隔离仓库的bundle重放；没有新数值实现、WSL环境安装、CUDA模型前向或指标。代码离线同步与后续环境/权重联网准备分开，WSL是否完成仍需实际回执。
+
+## 统一DINOv2 M-C-I（2026-11-09）
+
+用户纠正按数据集选择最高配置的方案，要求两集统一一个模型。新增显式DYNAMIC_COMPARATOR=DINOv2，使用同一SAM-H/DINOv2-B14/SegEarth-OV＋SimFeatUp；仅沿用类别相关官方词组/阈值。ground在DINOv2官方脚本为145，与DINO的135不同；配置脚本SHA均已本机静态核对。保持LEVIR四512块拼回、SECOND原512和历史评分。原DINO/OpenDPR结果及数值实现保留；新结果必须独立完成真实2例、全量128/593与归档审计，运行状态见唯一RUN_QUEUE。

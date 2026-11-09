@@ -8,7 +8,7 @@ from PIL import Image
 import pytest
 
 from baselines.ovcd import evaluate as evaluation
-from baselines.ovcd.backends import union_masks, official_support_pairs
+from baselines.ovcd.backends import union_masks, official_support_pairs, dynamic_spec
 
 
 class DummyBackend:
@@ -86,3 +86,19 @@ def test_second_class_specific_official_settings_are_not_levir_defaults():
 
 def test_second_sample_list_is_the_same_bytes_as_alters():
     assert evaluation.sha(evaluation.data.SPLIT_FILE)==evaluation.SPLIT_SHA
+
+
+def test_dinov2_selects_its_official_thresholds_and_token_geometry():
+    dino = dynamic_spec(SimpleNamespace(dynamic_comparator="DINO"))
+    dinov2 = dynamic_spec(SimpleNamespace(dynamic_comparator="DINOv2"))
+    assert dino["patch_size"] == 16 and dinov2["patch_size"] == 14
+    assert dino["classes"][1]["change_threshold"] == 135
+    assert dinov2["classes"][1]["change_threshold"] == 145
+    assert dinov2["classes"][0]["sam"]["points_per_side"] == 16
+    assert all("sam_dinov2_" in c["source"] for c in dinov2["classes"])
+
+
+def test_mismatched_dynamic_variant_is_rejected_before_loading_models():
+    with pytest.raises(ValueError, match="comparator and class settings"):
+        dynamic_spec(SimpleNamespace(dynamic_comparator="DINOv2", dynamic_config=str(
+            Path(__file__).resolve().parents[1]/"configs/ovcd/dynamicearth_second_mci.json")))

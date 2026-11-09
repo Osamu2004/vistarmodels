@@ -1,0 +1,179 @@
+{
+  "upstream": "likyoo/DynamicEarth",
+  "revision": "c9ffd90cafbd791cd75a48a5717a902966c2436c",
+  "variant": "SAM-DINOv2-SegEarth-OV M-C-I",
+  "classes": [
+    {
+      "class_id": 1,
+      "name": "water",
+      "background": [
+        "background",
+        "cropland",
+        "ground",
+        "tree",
+        "forest",
+        "bareland",
+        "barren",
+        "pavement",
+        "road",
+        "parking lot",
+        "soil",
+        "building",
+        "sports field",
+        "non-vegetated ground surface"
+      ],
+      "foreground": [
+        "water",
+        "river",
+        "pond",
+        "sea"
+      ],
+      "source": "eval/second/sam_dinov2_segearth-ov_water.py",
+      "source_sha256": "f34c22d7fc5608ec236e476f10698f2c38868c47ad70ecf3c37acd202a4687e3",
+      "sam": {
+        "points_per_side": 16,
+        "points_per_batch": 64,
+        "pred_iou_thresh": 0.5,
+        "stability_score_thresh": 0.95,
+        "stability_score_offset": 0.9,
+        "box_nms_thresh": 0.7,
+        "min_mask_region_area": 0
+      },
+      "change_threshold": 135,
+      "is_instance_class": false
+    },
+    {
+      "class_id": 2,
+      "name": "non-veg-ground-surface",
+      "background": [
+        "background",
+        "cropland",
+        "grass",
+        "tree",
+        "forest",
+        "building",
+        "sports field",
+        "water"
+      ],
+      "foreground": [
+        "ground"
+      ],
+      "source": "eval/second/sam_dinov2_segearth-ov_non-veg-ground-surface.py",
+      "source_sha256": "281a2743f2248345c7d48375fb5481dac7d1d1f57bf281b364d578e1b3734f24",
+      "sam": {
+        "points_per_side": 32,
+        "points_per_batch": 64,
+        "pred_iou_thresh": 0.5,
+        "stability_score_thresh": 0.95,
+        "stability_score_offset": 0.9,
+        "box_nms_thresh": 0.7,
+        "min_mask_region_area": 0
+      },
+      "change_threshold": 145,
+      "is_instance_class": false
+    },
+    {
+      "class_id": 3,
+      "name": "low-vegetation",
+      "background": [
+        "background",
+        "tree",
+        "forest"
+      ],
+      "foreground": [
+        "low vegetation"
+      ],
+      "source": "eval/second/sam_dinov2_segearth-ov_low-vegetation.py",
+      "source_sha256": "dabdcde690753028365e5e5ec27bfb414530f1ac7012e625e2ab0f9a821a57df",
+      "sam": {
+        "points_per_side": 32,
+        "points_per_batch": 64,
+        "pred_iou_thresh": 0.5,
+        "stability_score_thresh": 0.95,
+        "stability_score_offset": 0.9,
+        "box_nms_thresh": 0.7,
+        "min_mask_region_area": 0
+      },
+      "change_threshold": 145,
+      "is_instance_class": false
+    },
+    {
+      "class_id": 4,
+      "name": "tree",
+      "background": [
+        "background",
+        "ground",
+        "bareland",
+        "water",
+        "cropland",
+        "building",
+        "sports field",
+        "grass"
+      ],
+      "foreground": [
+        "tree",
+        "forest"
+      ],
+      "source": "eval/second/sam_dinov2_segearth-ov_tree.py",
+      "source_sha256": "ae261b8074922950861555249bdb687528eaeaf0aeb062c60d68a834ffc45076",
+      "sam": {
+        "points_per_side": 32,
+        "points_per_batch": 64,
+        "pred_iou_thresh": 0.5,
+        "stability_score_thresh": 0.95,
+        "stability_score_offset": 0.9,
+        "box_nms_thresh": 0.7,
+        "min_mask_region_area": 0
+      },
+      "change_threshold": 145,
+      "is_instance_class": false
+    },
+    {
+      "class_id": 5,
+      "name": "building",
+      "background": [
+        "background"
+      ],
+      "foreground": [
+        "building"
+      ],
+      "source": "eval/second/sam_dinov2_segearth-ov_building.py",
+      "source_sha256": "41b57619055ae097a58baf08cae2581a8c9bc8cd110763fc8e581c9b59377595",
+      "sam": {
+        "points_per_side": 32,
+        "points_per_batch": 64,
+        "pred_iou_thresh": 0.5,
+        "stability_score_thresh": 0.95,
+        "stability_score_offset": 0.9,
+        "box_nms_thresh": 0.7,
+        "min_mask_region_area": 0
+      },
+      "change_threshold": 135,
+      "is_instance_class": false
+    },
+    {
+      "class_id": 6,
+      "name": "playground",
+      "background": [
+        "background",
+        "ground"
+      ],
+      "foreground": [
+        "sports field"
+      ],
+      "source": "eval/second/sam_dinov2_segearth-ov_playground.py",
+      "source_sha256": "b75be5611e0d1c2146b0f5a6119c3c4d9c056bf1fe4c4d67ed885138cb32da99",
+      "sam": {
+        "points_per_side": 32,
+        "points_per_batch": 64,
+        "pred_iou_thresh": 0.5,
+        "stability_score_thresh": 0.95,
+        "stability_score_offset": 0.9,
+        "box_nms_thresh": 0.7,
+        "min_mask_region_area": 0
+      },
+      "change_threshold": 135,
+      "is_instance_class": false
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # 论文变化检测：DynamicEarth 与 OpenDPR
 
+2026-11-09新增统一DINOv2 M-C-I入口：`METHOD=dynamicearth DYNAMIC_COMPARATOR=DINOv2 TILE_SIZE=512`。LEVIR与SECOND都使用SAM ViT-H＋DINOv2-B/14＋SegEarth-OV，保留完整SimFeatUp；不按数据集切换APE/不同框架。DINO默认入口保留。新配置`configs/ovcd/dynamicearth_second_mci_dinov2.json`逐项取自同一官方提交的DINOv2脚本，ground阈值145，不沿用DINO的135。配置/比较器不匹配时在加载权重前失败，DINOv2权重与14像素patch设置写入协议指纹。使用独立输出目录；校园真实验证进度见根RUN_QUEUE，新增代码静态检查不等于GPU运行完成。
+
 2026-11-08交付修复：用户WSL确认环境`vistar_dynamicearth`不存在且`run_bash/ovcd_paper.bash`未同步。先导入本次离线代码包，再执行`BASE_ENV=vistar_longcat GPU_IDS=0,1 bash run_bash/ovcd_paper_ready.bash`。入口依次创建/复用两个独立环境、按快照约束保留各自Torch/torchvision/可选torchaudio、准备公开源码/权重及导入检查、全人口预检、每方法/集2对真实CUDA前向、完整128+593评分；任一步失败不进入后续阶段。`SETUP_ONLY=1`只准备；环境已经完整可用时`SKIP_SETUP=1`复用环境并续跑。离线包仅含代码，首次环境/源码/权重准备仍需联网，已有完整权重复用。本机未运行依赖安装或CUDA前向。
 
 本节点在现有vistarmodels内接入两个公开方法，不做训练。当前完成代码与来源核对，**尚未取得WSL依赖、权重加载、CUDA前向或完整基准回执**。以前表中的DynamicEarth/OpenDPR数值不是本次运行结果。现有DynamicEarth的LEVIR整图入口继续保留。

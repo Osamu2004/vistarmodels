@@ -16,6 +16,23 @@ REVISIONS = dict(dynamicearth="c9ffd90cafbd791cd75a48a5717a902966c2436c",
 NAMES = ("water", "ground", "low vegetation", "tree", "building", "playground")
 
 
+def dynamic_spec(args):
+    """Select one published M-C-I comparator consistently across datasets."""
+    comparator = getattr(args, "dynamic_comparator", "DINO")
+    if comparator not in ("DINO", "DINOv2"):
+        raise ValueError(f"Unsupported DynamicEarth comparator: {comparator}")
+    filename = ("dynamicearth_second_mci_dinov2.json" if comparator == "DINOv2"
+                else "dynamicearth_second_mci.json")
+    config = Path(getattr(args, "dynamic_config", None) or
+                  Path(__file__).resolve().parents[2] / "configs/ovcd" / filename)
+    settings = json.loads(config.read_text())
+    if settings["variant"] != f"SAM-{comparator}-SegEarth-OV M-C-I":
+        raise ValueError("DynamicEarth comparator and class settings differ")
+    return dict(comparator=comparator, feature_dim=768,
+                patch_size=14 if comparator == "DINOv2" else 16,
+                config=str(config), classes=settings["classes"])
+
+
 def official_support_pairs(support, category):
     """Match the official collector: skip images without a supplied mask."""
     support = Path(support)
@@ -119,17 +136,27 @@ class DynamicEarth:
         from dynamic_earth.identifier.utils import identify
         import dynamic_earth.identifier.segearth_ov_ext as segmentation
         self.args, self.dataset = args, dataset
-        settings = json.loads(Path(args.dynamic_config).read_text())["classes"]
+        spec = dynamic_spec(args)
+        settings = spec["classes"]
+        self.comparator_config = dict(model_type=spec["comparator"],
+            feature_dim=spec["feature_dim"], patch_size=spec["patch_size"])
         self.classes = settings if dataset == "second" else [dict(class_id=1,
             background=["background"], foreground=["building"], sam=dict(SAM_DEFAULTS),
             change_threshold=145, is_instance_class=True)]
         self.sam, self.proposer = sam_proposer(args, sam_ext)
-        self.comparator = torch.hub.load(args.dino_repo, "dino_vitb16", source="local", pretrained=False)
-        state = torch.load(args.dino_checkpoint, map_location="cpu", weights_only=True)
-        self.comparator.load_state_dict(state, strict=True)
-        self.comparator = self.comparator.to(args.device).eval()
-        self.comparator_processor = transforms.Compose([transforms.ToTensor(),
-            transforms.Normalize((0.485,0.456,0.406),(0.229,0.224,0.225))])
+        if spec["comparator"] == "DINOv2":
+            from transformers import AutoImageProcessor, AutoModel
+            self.comparator = AutoModel.from_pretrained(
+                args.dinov2_dir, local_files_only=True).to(args.device).eval()
+            self.comparator_processor = AutoImageProcessor.from_pretrained(
+                args.dinov2_dir, local_files_only=True, do_resize=False, do_center_crop=False)
+        else:
+            self.comparator = torch.hub.load(args.dino_repo, "dino_vitb16", source="local", pretrained=False)
+            state = torch.load(args.dino_checkpoint, map_location="cpu", weights_only=True)
+            self.comparator.load_state_dict(state, strict=True)
+            self.comparator = self.comparator.to(args.device).eval()
+            self.comparator_processor = transforms.Compose([transforms.ToTensor(),
+                transforms.Normalize((0.485,0.456,0.406),(0.229,0.224,0.225))])
         self.processor = transforms.Compose([transforms.ToTensor(),
             transforms.Normalize((0.48145466,0.4578275,0.40821073),(0.26862954,0.26130258,0.27577711)),
             transforms.Resize((448,448))])
@@ -194,7 +221,7 @@ class DynamicEarth:
             if comparison_key not in comparisons:
                 comparisons[comparison_key] = self.match(first, second, masks, self.comparator,
                     self.comparator_processor, first_count, change_confidence_threshold=entry["change_threshold"],
-                    device=self.args.device, model_config=dict(model_type="DINO",feature_dim=768,patch_size=16))
+                    device=self.args.device, model_config=self.comparator_config)
             changed, changed_first = comparisons[comparison_key]
             if not len(changed):
                 predictions.append(np.zeros(first.shape[:2], np.uint8))
