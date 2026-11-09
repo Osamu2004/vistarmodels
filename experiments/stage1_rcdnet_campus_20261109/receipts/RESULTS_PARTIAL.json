@@ -1,0 +1,22 @@
+[
+  {
+    "protocol": "whole_resize512",
+    "samples": 128,
+    "num_failed": 0,
+    "input_grid512_iou_percent": 40.076555694750176,
+    "iou_change_percent": 40.11776533277222,
+    "wfm_3px_percent": 16.586877422020883,
+    "artifact_sha256": "aa4c8d24d8348624c28c30121662c1c357f84fd7518809c20fa4e0e2adf1f17e",
+    "artifact_bytes": 3471360
+  },
+  {
+    "protocol": "native_tile512",
+    "samples": 128,
+    "num_failed": 0,
+    "input_grid512_iou_percent": null,
+    "iou_change_percent": 46.03533651703412,
+    "wfm_3px_percent": 28.453592525324883,
+    "artifact_sha256": "bb8b8e7da8739cc36b5f721f7e606b4e4b1a983792371104bc7665138d55da82",
+    "artifact_bytes": 2457600
+  }
+]

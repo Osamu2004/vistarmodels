@@ -1,0 +1,7 @@
+{
+  "phase": "native_tile512",
+  "reservation_id": "70e9ccce591b4aaa953b6a75b475ae84",
+  "gpu_uuid": "GPU-473c4e4e-7ad0-ec2d-a477-121920ff7a2c",
+  "created_epoch": 1794219872.8882995,
+  "runtime_manifest_sha256": "1c9fb4c1ea54781468753f1343bbdd78684d1a99a1aa9c6b5f8a9770e8bafc00"
+}

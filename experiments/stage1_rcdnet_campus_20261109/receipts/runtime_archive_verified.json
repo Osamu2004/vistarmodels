@@ -1,0 +1,22 @@
+{
+  "identity": {
+    "st_dev": 52,
+    "st_ino": 979459727,
+    "st_size": 4171948704,
+    "st_mtime_ns": 1794151483761942032,
+    "st_ctime_ns": 1794151483761942032
+  },
+  "sha256": "c6d83f2b23ee97a9a2dfde356f464a8ce12e07bddcb8d6cab767c2c715141447",
+  "evidence": "Owned worker3073645 passed full SHA guard before emitting EXTRACT; immutable archive ctime predates worker launch",
+  "recorded_epoch": 1794214641.100436,
+  "identity_gpu2": {
+    "st_dev": 54,
+    "st_ino": 979459727,
+    "st_size": 4171948704,
+    "st_mtime_ns": 1794151483761942032,
+    "st_ctime_ns": 1794151483761942032
+  },
+  "node": "gpu5",
+  "storage_source": "istor2:/mnt/default/data",
+  "reuse_basis": "Same immutable NFS export, inode, size, mtime_ns, ctime_ns; only client st_dev differs"
+}

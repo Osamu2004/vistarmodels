@@ -1,0 +1,25 @@
+test_chunk_deletion_crash_recovers_without_double_counting (test_node_cache.CacheTests) ... ok
+test_copy_failure_preserves_unique_local_output (test_node_cache.CacheTests) ... ok
+test_disk_floor_blocks_new_production (test_node_cache.CacheTests) ... ok
+test_failed_worker_keeps_true_exit_and_still_cleans_verified_results (test_node_cache.CacheTests) ... ok
+test_final_deletion_crash_is_recoverable (test_node_cache.CacheTests) ... ok
+test_idempotent_request_and_no_repeated_chunk_producer (test_node_cache.CacheTests) ... ok
+test_live_or_unreadable_consumer_prevents_cleanup (test_node_cache.CacheTests) ... ok
+test_node_budget_is_atomic_across_independent_managers (test_node_cache.CacheTests) ... ok
+test_partial_copy_resumes_only_an_exact_prefix (test_node_cache.CacheTests) ... ok
+test_pending_count_backpressure_and_released_chunk_capacity (test_node_cache.CacheTests) ... ok
+test_per_run_budget_includes_scratch_and_pre_reserves_payload (test_node_cache.CacheTests) ... ok
+test_retained_failure_still_counts_against_node_budget (test_node_cache.CacheTests) ... ok
+test_stream_writer_rejects_overflow_before_bytes_are_written (test_node_cache.CacheTests) ... ok
+test_success_reclaims_cache_keeps_exact_result_and_receipts (test_node_cache.CacheTests) ... ok
+test_supervisor_records_real_child_exit_and_watcher_cleans (test_node_cache.CacheTests) ... ok
+test_unfinished_building_chunk_is_retained (test_node_cache.CacheTests) ... ok
+test_unknown_exit_never_becomes_success (test_node_cache.CacheTests) ... ok
+test_wrong_token_symlink_and_inode_replacement_are_preserved (test_node_cache.CacheTests) ... ok
+test_existing_runtime_links_do_not_bypass_logical_budget (test_symlink_alloc.SymlinkAccounting) ... ok
+test_link_targets_are_not_traversed_or_charged_twice (test_symlink_alloc.SymlinkAccounting) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 1.780s
+
+OK

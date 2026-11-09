@@ -1,0 +1,46 @@
+{
+  "campus_controller.py": {
+    "bytes": 5405,
+    "sha256": "d0bc6c09fbf0076d7742fb58d571e7241f507d2fa7527ab595754695a0ca9da2"
+  },
+  "campus_prepare.py": {
+    "bytes": 7687,
+    "sha256": "5cde832bc986917ecb8e45fa500d1a0d43b556135faae3aca63a1675f545a247"
+  },
+  "campus_infer.py": {
+    "bytes": 752,
+    "sha256": "c2e991e0385e6705d717352362e9c93ec7d615550bb4e9058e35f2efde7cf7a8"
+  },
+  "baselines/levircd_common.py": {
+    "bytes": 8581,
+    "sha256": "f40e3ca5c7d33caab1ca63421b63c74484075dfe7fddc6937d0518ebafbbeb84"
+  },
+  "baselines/binary_boundary_wfm.py": {
+    "bytes": 15147,
+    "sha256": "838044f7b0b5f5446e343cef55f31a1f8c11391a7212afd455b6d999b33edd5b"
+  },
+  "baselines/rcdnet/eval_rcdnet_levircd.py": {
+    "bytes": 18012,
+    "sha256": "5bb2f58eb92e9b41820ff9968745184814ff894914e6ada418c9acb6599d3c9f"
+  },
+  "tools/score_rcdnet_boundary.py": {
+    "bytes": 6937,
+    "sha256": "cfd149b20ebc86c69850f5fa6abec1cfcccf9b9e9ea6ae7765d9947bfff51b1d"
+  },
+  "node_cache.py": {
+    "bytes": 35793,
+    "sha256": "cc7e87fdfd0983620693e05a5554408c6cf966e8a9c1ce0f5547f05ed6e4d6f4"
+  },
+  "experiment_local_cache.py": {
+    "bytes": 21747,
+    "sha256": "2f9383991db80558f741e9d635a3e5fd9a04f9290f6fb2d24a83c4299969786d"
+  },
+  "README.md": {
+    "bytes": 811,
+    "sha256": "0917ea6322464fbc439624ec8170b6c206e30a907777e7ebd5e956e8ac39569a"
+  },
+  "WORKLOG.md": {
+    "bytes": 658,
+    "sha256": "6d10a03af5c66db4064662c24d169797f2ffc3eec34d39687734443f4336e140"
+  }
+}

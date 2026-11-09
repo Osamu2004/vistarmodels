@@ -1503,3 +1503,16 @@ python tools/score_rcdnet_boundary.py --eval_dir /root/data/experiment/rcdnet_le
 - 最新完成回执（2026-11-09）：用户在rcdnet环境执行，128/128、complete=true；IoU46.03432144395981%、WFm28.45222020216903%。原逐图/全局计数、IoU/F1和源SHA一致性守卫已通过。原始结果/root/data/experiment/rcdnet_levircd_test_native1024_tile512/boundary_wfm_3px/paper_summary.json；转录归档baselines/rcdnet/receipts/wsl_levircd_wfm_20261109.json。未独立读取WSL原JSON或重算。本机先前仅静态检查的状态由本回执取代；Git代码仍为c47b96f。
 
 - Git交付：评分代码正式提交到vistarmodels/main；使用完整Git历史的离线包`vistarmodels_rcdnet_wfm_20261109.zip`同步，沿用/root/code/vistarmodels目标。解压后运行`python3 vistarmodels_rcdnet_wfm_20261109/install_update.py --repo /root/code/vistarmodels`；只校验与快进Git，不装依赖、不启动评分。代码包目标commit、SHA、快进演练和线上push核验见外层output/rcdnet_wfm_20261109/git_delivery/。
+
+## RCDNET-CAMPUS-RERUN（2026-11-09，校园运行完成）
+
+- 范围：校园重新推理官方LEVIR-CD test128，优先最强可获取官方checkpoint；不训练，不按test GT挑阈值/版本。
+- 版本：官方0966e96ff7075476d77442bbf6623ed5086d52da，公开SECOND real-data（含building）；官方Drive仅两份真实数据模型，合成预训练checkpoint未找到。权重SHA f4b772d1a22334a25d9435f4f32a0e0c3db18111e9454bd92586e55535f24a4e；CLIP官方固定3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268，全部已转入校园并核验。
+- 环境/目录：/data1/zzy26，任务/data1/zzy26/outputs/vistar_rcdnet_campus_20261109；Py39/Torch2.1cu121/Transformers4.30.2独立缓存，官方selective-scan已编译并通过导入；本地experiments/stage1_rcdnet_campus_20261109。
+- 协议：主whole resize512，输出概率回原图1024再阈值0.5，另存同forward512网格IoU；次native tile512复核旧协议；同权重FP32、building单向，预先固定主次，分别报告原图IoU/F1/WFm。
+- GPU/终端：现用GPU5 tmux vistar-rcdnet-20261109。逐阶段自动prepare/启动复查/写LAUNCH_phase.json；分块实际PID登记成功，完成后新扫描确认退出并释放，无需用户手动操作。
+- 缓存：8GiB总上限。当前9058c567af724d29a7e7c54b13571c2a；旧GPU2/v3缓存均已标准回收。仅本任务私有缓存助手修复lstat符号链接计数，20项校园检查通过，未改全局工具/其他缓存/配额。
+- 入口：node_cache.py run包装campus_controller.py，在runtime_code部署目录执行；控制器等待AWAITING_GPU后才能由持有本对话预留的SSH调用写45秒内授权，禁止直接绕过门禁。
+- 产物：evaluations/{whole_resize512,native_tile512}/{metrics.json,per_image_metrics.jsonl,boundary_wfm_3px/*,predictions_and_gt.tar}及顶层RESULT.json；主方案归档还包含512网格预测/GT。
+- 通过条件：128/128、0失败、全部活跃参数完整加载、权重/代码来源SHA、逐图/全局计数IoU/F1一致、3px WFm完成、256原图GT/预测及可选256网格掩码的二值/尺寸/归档SHA、真实退出0及缓存收尾。
+- 实际状态：两套128/128、0失败、推理/评分退出0。主整图IoU40.11776533277222%、WFm16.586877422020883%；对照分块IoU46.03533651703412%、WFm28.453592525324883%。分块复现旧WSL结果（两位小数一致），未取得明显提升。RESULT.complete=true，二值/尺寸/归档SHA核验通过，缓存deleted=true，GPU新扫描退出后已释放。源码/权重身份及回执见本任务SUMMARY.md和receipts/。

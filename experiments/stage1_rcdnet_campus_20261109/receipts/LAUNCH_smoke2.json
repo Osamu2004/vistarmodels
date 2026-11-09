@@ -1,0 +1,7 @@
+{
+  "phase": "smoke2",
+  "reservation_id": "7757035a77a24cca853f5e8d1ad48456",
+  "gpu_uuid": "GPU-473c4e4e-7ad0-ec2d-a477-121920ff7a2c",
+  "created_epoch": 1794219594.070363,
+  "runtime_manifest_sha256": "1c9fb4c1ea54781468753f1343bbdd78684d1a99a1aa9c6b5f8a9770e8bafc00"
+}

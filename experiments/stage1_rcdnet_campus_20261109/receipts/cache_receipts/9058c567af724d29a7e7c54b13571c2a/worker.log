@@ -1,0 +1,19 @@
+VERIFY portable runtime /data1/zzy26/outputs/vistar_ovcd_remote_20261108/validated_runtime_10d2a7e.tar.gz
+REUSE full SHA verification of the unchanged immutable archive
+EXTRACT selected Python runtime and LEVIR original bytes
+/usr/lib64/python3.9/tarfile.py:2288: RuntimeWarning: The default behavior of tarfile extraction has been changed to disallow common exploits (including CVE-2007-4559). By default, absolute/parent paths are disallowed and some mode bits are cleared. See https://access.redhat.com/articles/7004769 for more details.
+  warnings.warn(
+runtime extracted bytes 5043359825
+RUN /tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch/ovcd-env/bin/python -m pip install --no-compile transformers==4.30.2 easydict==1.13 gdown==5.2.0 ninja wheel setuptools<70
+RUN /tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch/ovcd-env/bin/python -m pip install --no-deps --no-build-isolation --no-compile -e /tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch/vendor/referring_change_detection/RCDNet/models/encoders/selective_scan
+RUN /tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch/ovcd-env/bin/python -u -c from transformers import CLIPTextModel,CLIPTokenizer; import sys; p=sys.argv[1]; kw=dict(revision='3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268',local_files_only=True); CLIPTokenizer.from_pretrained('openai/clip-vit-base-patch32',**kw).save_pretrained(p); CLIPTextModel.from_pretrained('openai/clip-vit-base-patch32',**kw).save_pretrained(p) /data1/zzy26/weights/rcdnet/clip-vit-base-patch32
+MODEL INPUT CACHE True bytes 606839102
+READY for coordinated CUDA launch
+START cpu_model_dependencies 2613182
+START cpu_extension_imports 2614129
+START smoke2 2633010
+START whole_resize512 2640714
+START whole_resize512_boundary 2645830
+START native_tile512 2655717
+START native_tile512_boundary 2664975
+COMPLETE [{"protocol": "whole_resize512", "samples": 128, "num_failed": 0, "input_grid512_iou_percent": 40.076555694750176, "iou_change_percent": 40.11776533277222, "wfm_3px_percent": 16.586877422020883, "artifact_sha256": "aa4c8d24d8348624c28c30121662c1c357f84fd7518809c20fa4e0e2adf1f17e", "artifact_bytes": 3471360}, {"protocol": "native_tile512", "samples": 128, "num_failed": 0, "input_grid512_iou_percent": null, "iou_change_percent": 46.03533651703412, "wfm_3px_percent": 28.453592525324883, "artifact_sha256": "bb8b8e7da8739cc36b5f721f7e606b4e4b1a983792371104bc7665138d55da82", "artifact_bytes": 2457600}]

@@ -1,0 +1,162 @@
+{
+  "native_live_scan": [
+    {
+      "node": "gpu5",
+      "checked_at": "2026-11-09T10:25:01.213147+00:00",
+      "boot_id": "a2e42f1d-33d3-43c6-b395-0c1d4d906865",
+      "process": [
+        {
+          "pid": 2655717,
+          "uid": 1115,
+          "start_ticks": 355773802,
+          "gpu_uuid": "GPU-473c4e4e-7ad0-ec2d-a477-121920ff7a2c",
+          "user": "zzy26",
+          "process_name": "python",
+          "cwd": "/data1/zzy26",
+          "is_mine": true,
+          "memory_used_mib": 506,
+          "runtime": {
+            "status": "ok",
+            "cpu_percent": 46.65,
+            "interval_seconds": 0.6,
+            "rss_mib": 729.5625,
+            "read_bytes_per_second": 0,
+            "write_bytes_per_second": 0,
+            "threads": 5,
+            "allowed_cpus": 88,
+            "state": "D",
+            "wait_channel": "rpc_wait_bit_killable"
+          }
+        }
+      ],
+      "watched": []
+    }
+  ],
+  "native_track": {
+    "reservation": {
+      "reservation_id": "70e9ccce591b4aaa953b6a75b475ae84",
+      "owner_id": "01a1be18-75f2-7e51-b064-06f800b353c6",
+      "project": "Vistar-RCDNet",
+      "task": "Official SECOND RCDNet native_tile512 full128 verified actual process",
+      "node": "gpu5",
+      "gpu_uuids": [
+        "GPU-473c4e4e-7ad0-ec2d-a477-121920ff7a2c"
+      ],
+      "indices_at_reservation": [
+        0
+      ],
+      "state": "running",
+      "created_at": "2026-11-09T10:24:09.638579+00:00",
+      "expires_epoch": 1794221049.638588,
+      "processes": [
+        {
+          "pid": 2655717,
+          "uid": 1115,
+          "start_ticks": 355773802,
+          "boot_id": "a2e42f1d-33d3-43c6-b395-0c1d4d906865"
+        }
+      ],
+      "request_id": "rcdnet-campus-levir128-20261109-v5-native",
+      "request_parameters": {
+        "project": "Vistar-RCDNet",
+        "task": "Official SECOND RCDNet native_tile512 full128 paired control",
+        "count": 1,
+        "min_free_mib": 10240,
+        "node": "gpu5",
+        "gpu_uuids": null,
+        "ttl_seconds": 1200
+      },
+      "verification": "account_pid_start_boot_verified",
+      "selection_kinds": {
+        "GPU-473c4e4e-7ad0-ec2d-a477-121920ff7a2c": "idle"
+      },
+      "shared_use": false,
+      "last_launch_at": "2026-11-09T10:24:32.261118+00:00",
+      "ssh_session_id": "b1256c5bc91e456b8bb96d235d0a3f1f",
+      "last_verified_at": "2026-11-09T10:25:01.213147+00:00",
+      "expires_at": "2026-11-09T10:44:09.638588+00:00",
+      "advisory_only": true
+    },
+    "remote_process_modified": false
+  },
+  "native_post_scan": [
+    {
+      "node": "gpu5",
+      "checked_at": "2026-11-09T10:27:34.452755+00:00",
+      "boot_id": "a2e42f1d-33d3-43c6-b395-0c1d4d906865",
+      "process": [],
+      "watched": [
+        {
+          "pid": 2655717,
+          "presence": "gone",
+          "uid": null,
+          "start_ticks": null,
+          "runtime": {
+            "status": "not_sampled"
+          },
+          "is_mine": null,
+          "user": null,
+          "process_name": null,
+          "cwd": null
+        }
+      ]
+    }
+  ],
+  "native_release": {
+    "reservation": {
+      "reservation_id": "70e9ccce591b4aaa953b6a75b475ae84",
+      "owner_id": "01a1be18-75f2-7e51-b064-06f800b353c6",
+      "project": "Vistar-RCDNet",
+      "task": "Official SECOND RCDNet native_tile512 full128 verified actual process",
+      "node": "gpu5",
+      "gpu_uuids": [
+        "GPU-473c4e4e-7ad0-ec2d-a477-121920ff7a2c"
+      ],
+      "indices_at_reservation": [
+        0
+      ],
+      "state": "completed",
+      "created_at": "2026-11-09T10:24:09.638579+00:00",
+      "expires_epoch": 1794221049.638588,
+      "processes": [
+        {
+          "pid": 2655717,
+          "uid": 1115,
+          "start_ticks": 355773802,
+          "boot_id": "a2e42f1d-33d3-43c6-b395-0c1d4d906865"
+        }
+      ],
+      "request_id": "rcdnet-campus-levir128-20261109-v5-native",
+      "request_parameters": {
+        "project": "Vistar-RCDNet",
+        "task": "Official SECOND RCDNet native_tile512 full128 paired control",
+        "count": 1,
+        "min_free_mib": 10240,
+        "node": "gpu5",
+        "gpu_uuids": null,
+        "ttl_seconds": 1200
+      },
+      "verification": "account_pid_start_boot_verified",
+      "selection_kinds": {
+        "GPU-473c4e4e-7ad0-ec2d-a477-121920ff7a2c": "idle"
+      },
+      "shared_use": false,
+      "last_launch_at": "2026-11-09T10:24:32.261118+00:00",
+      "ssh_session_id": "b1256c5bc91e456b8bb96d235d0a3f1f",
+      "last_verified_at": "2026-11-09T10:25:01.213147+00:00",
+      "ended_at": "2026-11-09T10:28:25.633139+00:00",
+      "expires_at": "2026-11-09T10:44:09.638588+00:00",
+      "advisory_only": true
+    },
+    "remote_process_modified": false
+  },
+  "whole_post_scan": [
+    {
+      "node": "gpu5",
+      "checked_at": "2026-11-09T10:23:08.124872+00:00",
+      "boot_id": "a2e42f1d-33d3-43c6-b395-0c1d4d906865",
+      "process": [],
+      "watched": []
+    }
+  ]
+}

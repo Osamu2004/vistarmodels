@@ -1,0 +1,7 @@
+{
+  "phase": "whole_resize512",
+  "reservation_id": "f3dcb94af0764680a3d550142f8c0458",
+  "gpu_uuid": "GPU-473c4e4e-7ad0-ec2d-a477-121920ff7a2c",
+  "created_epoch": 1794219691.702462,
+  "runtime_manifest_sha256": "1c9fb4c1ea54781468753f1343bbdd78684d1a99a1aa9c6b5f8a9770e8bafc00"
+}

@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "categories": {
+    "status": [
+      "active_execution.json"
+    ],
+    "sources": [
+      "campus_prepare.py",
+      "campus_controller.py",
+      "campus_infer.py",
+      "serve_checkpoint.py",
+      "authorize_phase.py",
+      "receive_clip_assets.py",
+      "serve_clip_assets.py",
+      "runtime_helpers"
+    ],
+    "deployment": [
+      "deployment_manifest.json",
+      "deployment.tar.gz"
+    ],
+    "vendor": [
+      "SECOND-model.safetensors",
+      "official_source.tar.gz",
+      "official_drive_folder.html",
+      "clip_assets"
+    ],
+    "archive": [],
+    "results": [
+      "receipts"
+    ]
+  },
+  "ignored": [
+    "__pycache__",
+    ".gitignore",
+    ".research-workspace-node",
+    ".research-workspace-manifest.json"
+  ],
+  "allowed_root_files": [
+    "README.md",
+    "WORKLOG.md",
+    "SUMMARY.md",
+    "checkpoint_acquisition.json",
+    "checkpoint_transfer.json",
+    "release_inventory.json",
+    "SECOND-model.safetensors",
+    "active_execution.json",
+    "campus_controller.py",
+    "campus_infer.py",
+    "campus_prepare.py",
+    "deployment.tar.gz",
+    "deployment_manifest.json",
+    "official_drive_folder.html",
+    "official_source.tar.gz",
+    "serve_checkpoint.py",
+    "receive_clip_assets.py",
+    "serve_clip_assets.py",
+    "clip_transfer.json",
+    "clip_acquisition.json",
+    "authorize_phase.py",
+    "STATUS_NEXT_STEPS.md"
+  ],
+  "aliases": {}
+}

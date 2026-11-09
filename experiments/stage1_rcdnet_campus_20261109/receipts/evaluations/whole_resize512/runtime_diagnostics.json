@@ -1,0 +1,11 @@
+{
+  "python": "/tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch/ovcd-env/bin/python",
+  "torch": "2.1.0+cu121",
+  "cuda": "12.1",
+  "gpu": "NVIDIA GeForce RTX 3090",
+  "elapsed_seconds": 63.84127148287371,
+  "peak_allocated_mib": 1199.966796875,
+  "peak_reserved_mib": 1582.0,
+  "matmul_tf32": false,
+  "cudnn_tf32": true
+}

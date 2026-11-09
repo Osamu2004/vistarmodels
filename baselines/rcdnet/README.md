@@ -99,3 +99,9 @@ class mean; it is not an average of per-image minima or tile scores.
 The user completed all 128 native LEVIR-CD test masks in the `rcdnet` environment, from `/root/data/experiment/rcdnet_levircd_test_native1024_tile512`. The saved-mask scorer reported changed-class IoU **46.03432144395981%** and 3px WFm **28.45222020216903%**, with all source-count, IoU/F1, and SHA gates passing. The terminal receipt is [archived here](receipts/wsl_levircd_wfm_20261109.json); the underlying WSL JSON and predictions were not independently read or rescored on this Mac.
 
 These are adapter results. Original-paper Table 1 reports LEVIR-CD IoU 53.98 for real-data training and 60.21 for synthetic pretraining; it does not report this WFm. The manuscript uses the matched measured pair 46.03/28.45 rather than combining published IoU with this saved-mask WFm.
+
+## Campus rerun
+
+The separately authorized November9 campus rerun is tracked in [the experiment node](../../experiments/stage1_rcdnet_campus_20261109/README.md). Its preparation state and later measured results remain separate from the saved WSL receipt above.
+
+校园本次结果：整图缩放512 IoU40.117765%/WFm16.586877%；原图512分块 IoU46.035337%/WFm28.453593%，各128/128、0失败、退出0。分块与旧WSL回执几乎一致，完整证据见[校园总结](../../experiments/stage1_rcdnet_campus_20261109/SUMMARY.md)。

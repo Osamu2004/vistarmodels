@@ -1,0 +1,32 @@
+{
+  "python": "/tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch/ovcd-env/bin/python",
+  "vendor": "/tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch/vendor/referring_change_detection",
+  "checkpoint": "/tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch/model_inputs/SECOND-model.safetensors",
+  "checkpoint_sha256": "f4b772d1a22334a25d9435f4f32a0e0c3db18111e9454bd92586e55535f24a4e",
+  "clip": "/tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch/model_inputs/clip-vit-base-patch32",
+  "data_root": "/tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/payload/evaluation_view/LEVIR-CD",
+  "original_data_root": "/data1/zzy26/data/LEVIR-CD",
+  "official_revision": "0966e96ff7075476d77442bbf6623ed5086d52da",
+  "source_archive_sha256": "62b5c8ead30183449a189818525272fc8b48042d23a3a8b99bfd424a903bd8a0",
+  "restored_bytes": 5043359825,
+  "cached_model_inputs": true,
+  "model_input_cache_bytes": 606839102,
+  "created_epoch": 1794219367.0746386,
+  "env": {
+    "TMPDIR": "/tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch",
+    "PIP_CACHE_DIR": "/data1/zzy26/outputs/vistar_rcdnet_campus_20261109/pip_cache",
+    "CUDA_HOME": "/usr/local/cuda-12.9",
+    "PATH": "/usr/local/cuda-12.9/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin",
+    "CC": "/data1/zzy26/envs/direct3d-python/bin/x86_64-conda-linux-gnu-gcc",
+    "CXX": "/data1/zzy26/envs/direct3d-python/bin/x86_64-conda-linux-gnu-g++",
+    "MAX_JOBS": "2",
+    "CPATH": "/tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a/scratch/python_headers/usr/include/python3.9",
+    "HF_HOME": "/data1/zzy26/cache/vistar_rcdnet_20261109/huggingface",
+    "HF_ENDPOINT": "https://hf-mirror.com",
+    "TOKENIZERS_PARALLELISM": "false",
+    "OMP_NUM_THREADS": "2",
+    "MKL_NUM_THREADS": "2",
+    "OPENBLAS_NUM_THREADS": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  }
+}

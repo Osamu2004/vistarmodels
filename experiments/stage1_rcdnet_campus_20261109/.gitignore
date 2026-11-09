@@ -1,0 +1,8 @@
+SECOND-model.*
+official_drive_folder.html
+deployment.tar.gz
+checkpoint_transfer.json
+*.part
+clip_assets/
+official_source.tar.gz
+clip_transfer.json

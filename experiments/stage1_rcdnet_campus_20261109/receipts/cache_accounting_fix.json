@@ -1,0 +1,7 @@
+{
+  "scope": "Only this task runtime_code/node_cache.py; global tool and other cache contents unchanged",
+  "original_sha256": "cc7e87fdfd0983620693e05a5554408c6cf966e8a9c1ce0f5547f05ed6e4d6f4",
+  "patched_sha256": "0b7d6afddcb1f52c8e50b999f3c569099e4bf133c580e8e8ff932ebd6abd9967",
+  "change": "allocated uses lstat and os.walk(followlinks=False); preserve8GiB logical and64GiB node budgets, disk floor, ownership, lifecycle and path protections",
+  "tests_exit": 0
+}

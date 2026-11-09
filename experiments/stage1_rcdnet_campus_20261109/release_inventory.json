@@ -1,0 +1,13 @@
+{
+  "official_commit": "0966e96ff7075476d77442bbf6623ed5086d52da",
+  "google_drive_url": "https://drive.google.com/drive/folders/1foXpLPz3jtaQN7l6UdlDFVSgakgm6RXP",
+  "names": [
+    "CNAM-CD-model.safetensors",
+    "SECOND-model.safetensors"
+  ],
+  "synthetic_checkpoint_found": false,
+  "selected": "SECOND-model.safetensors",
+  "selection_reason": "Released real SECOND model includes building; CNAM-CD taxonomy lacks building. No compatible synthetic-pretrained checkpoint found in official release.",
+  "clip_source": "openai/clip-vit-base-patch32",
+  "clip_revision": "3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268"
+}

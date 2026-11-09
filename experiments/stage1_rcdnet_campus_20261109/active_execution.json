@@ -1,0 +1,56 @@
+{
+  "ssh_session": "b1256c5bc91e456b8bb96d235d0a3f1f",
+  "owner_id": "01a1be18-75f2-7e51-b064-06f800b353c6",
+  "node": "gpu5",
+  "reservation_id": null,
+  "gpu_uuid": "GPU-473c4e4e-7ad0-ec2d-a477-121920ff7a2c",
+  "task_root": "/data1/zzy26/outputs/vistar_rcdnet_campus_20261109",
+  "cache_id": "9058c567af724d29a7e7c54b13571c2a",
+  "cache_path": "/tmp/campus-gpu-cache-1115/9058c567af724d29a7e7c54b13571c2a",
+  "tmux": "vistar-rcdnet-20261109",
+  "phase": "complete",
+  "cache_budget_bytes": 8589934592,
+  "controller_pid": null,
+  "remote_cache_worker_log": "/data1/zzy26/outputs/vistar_rcdnet_campus_20261109/cache_receipts/9058c567af724d29a7e7c54b13571c2a/worker.log",
+  "local_clip_download_session": null,
+  "local_clip_server_session": null,
+  "gpu_started": true,
+  "checkpoint_sha256": "f4b772d1a22334a25d9435f4f32a0e0c3db18111e9454bd92586e55535f24a4e",
+  "official_source_archive_sha256": "62b5c8ead30183449a189818525272fc8b48042d23a3a8b99bfd424a903bd8a0",
+  "gpu_reservation_expires": "2026-11-09 18:16:04 +08:00",
+  "next_gate": null,
+  "old_cache_state": "079d90af8e7d4c1ca0282e340a90ed29 reclaimed; CPU exit -15",
+  "clip_assets_on_campus_verified": true,
+  "clip_sha256": "a63082132ba4f97a80bea76823f544493bffa8082296d62d71581a4feff1576f",
+  "old_gpu2_cache_reclaimed": true,
+  "local_temporary_cache_bytes": "within one managed8GiB budget; oldGPU2 caches reclaimed",
+  "setup_probes": {
+    "gzip64mib_seconds": 5.509343144018203
+  },
+  "gpu_reservation_status": "completed; fresh scan confirms owned native PID2655717 gone; GPU released",
+  "cache_state": "reclaimed",
+  "cache_deleted": true,
+  "results": [
+    {
+      "protocol": "whole_resize512",
+      "samples": 128,
+      "num_failed": 0,
+      "input_grid512_iou_percent": 40.076555694750176,
+      "iou_change_percent": 40.11776533277222,
+      "wfm_3px_percent": 16.586877422020883,
+      "artifact_sha256": "aa4c8d24d8348624c28c30121662c1c357f84fd7518809c20fa4e0e2adf1f17e",
+      "artifact_bytes": 3471360
+    },
+    {
+      "protocol": "native_tile512",
+      "samples": 128,
+      "num_failed": 0,
+      "input_grid512_iou_percent": null,
+      "iou_change_percent": 46.03533651703412,
+      "wfm_3px_percent": 28.453592525324883,
+      "artifact_sha256": "bb8b8e7da8739cc36b5f721f7e606b4e4b1a983792371104bc7665138d55da82",
+      "artifact_bytes": 2457600
+    }
+  ],
+  "complete": true
+}
