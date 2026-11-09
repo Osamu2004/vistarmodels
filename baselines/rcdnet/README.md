@@ -93,3 +93,9 @@ original predictions and metrics are retained. The paper value is
 `scores.wfm_3px_percent`. Dataset aggregation averages edge and non-edge
 scores separately over GT-present images before taking the smaller positive
 class mean; it is not an average of per-image minima or tile scores.
+
+## Recorded saved-mask result (2026-11-09)
+
+The user completed all 128 native LEVIR-CD test masks in the `rcdnet` environment, from `/root/data/experiment/rcdnet_levircd_test_native1024_tile512`. The saved-mask scorer reported changed-class IoU **46.03432144395981%** and 3px WFm **28.45222020216903%**, with all source-count, IoU/F1, and SHA gates passing. The terminal receipt is [archived here](receipts/wsl_levircd_wfm_20261109.json); the underlying WSL JSON and predictions were not independently read or rescored on this Mac.
+
+These are adapter results. Original-paper Table 1 reports LEVIR-CD IoU 53.98 for real-data training and 60.21 for synthetic pretraining; it does not report this WFm. The manuscript uses the matched measured pair 46.03/28.45 rather than combining published IoU with this saved-mask WFm.

@@ -1491,15 +1491,15 @@ bash run_bash/rsunivlm_eval.bash
 ## RCDNET-SAVED-WFM（2026-11-09，评分代码已提供）
 
 - 范围：只读取已有RCDNet LEVIR-CD原图掩码，纯CPU，复用baselines/binary_boundary_wfm.py的3px WFm，不重新推理。新入口tools/score_rcdnet_boundary.py。
-- 依赖：Python、numpy/scipy/Pillow；OpenCV可复用。目录为/root/code/vistarmodels，使用包含这些CPU依赖的既有环境，无GPU需求。RCDNET_EVAL_DIR须设为原RCDNet输出根（包含pred_mask/gt_mask/metrics.json/per_image_metrics.jsonl），本轮未核验用户WSL实际目录。
+- 依赖/实际环境：WSL的rcdnet环境；历史Python为/root/anaconda3/envs/rcdnet/bin/python。真实输出根已由用户成功评分回执绑定到/root/data/experiment/rcdnet_levircd_test_native1024_tile512，包含pred_mask/gt_mask/metrics.json/per_image_metrics.jsonl。边界仅CPU，需要numpy/scipy/Pillow；OpenCV可复用。
 - 命令：
 
 ```bash
 cd /root/code/vistarmodels
-python tools/score_rcdnet_boundary.py --eval_dir "$RCDNET_EVAL_DIR"
+python tools/score_rcdnet_boundary.py --eval_dir /root/data/experiment/rcdnet_levircd_test_native1024_tile512
 ```
 
 - 产物：<RCDNET_EVAL_DIR>/boundary_wfm_3px/{paper_summary.json,per_image_boundary.json}。原图/GT/预测/metrics不改。128对1024完整、逐图与全局原计数/IoU/F1一致、前后SHA一致才写complete；缺图、非二值、尺度/来源/计数不符立即停止。
-- 状态：本机AST、CLI帮助及离线包CRC/SHA通过；本机缺SciPy，未跑数值或真实评分，无新分数、无远端部署。离线CPU代码包在外层output/rcdnet_wfm_20261109/rcdnet_boundary_wfm_cpu_20261109.zip。可与GPU任务并行，但避免共享盘大IO竞争。
+- 最新完成回执（2026-11-09）：用户在rcdnet环境执行，128/128、complete=true；IoU46.03432144395981%、WFm28.45222020216903%。原逐图/全局计数、IoU/F1和源SHA一致性守卫已通过。原始结果/root/data/experiment/rcdnet_levircd_test_native1024_tile512/boundary_wfm_3px/paper_summary.json；转录归档baselines/rcdnet/receipts/wsl_levircd_wfm_20261109.json。未独立读取WSL原JSON或重算。本机先前仅静态检查的状态由本回执取代；Git代码仍为c47b96f。
 
 - Git交付：评分代码正式提交到vistarmodels/main；使用完整Git历史的离线包`vistarmodels_rcdnet_wfm_20261109.zip`同步，沿用/root/code/vistarmodels目标。解压后运行`python3 vistarmodels_rcdnet_wfm_20261109/install_update.py --repo /root/code/vistarmodels`；只校验与快进Git，不装依赖、不启动评分。代码包目标commit、SHA、快进演练和线上push核验见外层output/rcdnet_wfm_20261109/git_delivery/。

@@ -1,0 +1,43 @@
+{
+  "schema": "rcdnet_levircd_wfm_user_terminal_v1",
+  "date_local": "2026-11-09",
+  "timezone": "Asia/Shanghai",
+  "evidence_type": "user_pasted_WSL_terminal",
+  "host": "PC-20250412AZHP",
+  "environment": "rcdnet",
+  "source_run": "/root/data/experiment/rcdnet_levircd_test_native1024_tile512",
+  "command": "python tools/score_rcdnet_boundary.py --eval_dir /root/data/experiment/rcdnet_levircd_test_native1024_tile512",
+  "code_commit_from_prior_import": "c47b96f4daea198e81bfcbc0c75063ac44a2225b",
+  "complete": true,
+  "processed_samples": 128,
+  "iou_change_percent": 46.03432144395981,
+  "wfm_3px_percent": 28.45222020216903,
+  "paper_summary": "/root/data/experiment/rcdnet_levircd_test_native1024_tile512/boundary_wfm_3px/paper_summary.json",
+  "independently_read_from_WSL": false,
+  "source_metrics_and_full_per_image_json_received": false,
+  "gate_evidence": "complete=true is emitted only after sample names, native size, per-image/global counts, original IoU/F1 and before/after source SHA checks pass",
+  "checkpoint_provenance": {
+    "evidence": "historical July22 launch log for the same output path",
+    "source": "/Users/zhouziyu/.codex/attachments/e0d3e7f8-9d83-40c3-ac74-6dc92bb4f067/pasted-text.txt",
+    "lines": [
+      34,
+      58
+    ],
+    "release": "official SECOND real-data checkpoint",
+    "checkpoint_path": "/root/data/weight/rcdnet/SECOND-model.safetensors",
+    "checkpoint_hash_independently_verified": false
+  },
+  "previous_paper_iou_percent": 60.21,
+  "previous_value_kind": "published synthetic-pretrained result; not the source of this saved-mask WFm",
+  "new_model_inference_started_this_turn": false,
+  "published_comparison": {
+    "primary_source": "https://openaccess.thecvf.com/content/WACV2026/papers/Korkmaz_Referring_Change_Detection_in_Remote_Sensing_Imagery_WACV_2026_paper.pdf",
+    "table": "Table 1, LEVIR-CD cross-domain",
+    "real_data_iou_percent": 53.98,
+    "synthetic_pretrained_iou_percent": 60.21,
+    "delta_to_real_pp": -7.9456785560401855,
+    "delta_to_synthetic_pp": -14.17567855604019,
+    "paper_reports_wfm": false,
+    "strict_paper_reproduction_established": false
+  }
+}
